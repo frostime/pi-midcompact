@@ -11,6 +11,8 @@ import { buildAtoms, formatLocatedAtom, locateAtoms } from "./atoms.js";
 import { messageText } from "./messages.js";
 import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, updateDraftRange } from "./plan.js";
 import { projectMessages } from "./projection.js";
+import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
+import { showReviewUi } from "./review-ui.js";
 import {
   DRAFT_ENTRY,
   STATE_ENTRY,
@@ -19,8 +21,10 @@ import {
   restoreCompressionState,
   restoreTransaction,
 } from "./state.js";
+import { draftTelemetry, formatPercent, formatTelemetry, formatTokenCount, snapshotContextUsage } from "./telemetry.js";
 import type {
   Atom,
+  CommitStats,
   CompressionBlock,
   CompressionState,
   DraftPlan,
@@ -30,6 +34,7 @@ import type {
 
 const TOOL_NAME = "midcompact";
 const TOOL_DESCRIPTION = "Locate, draft, or recall mid-context compression. Use the `midcompact` skill for workflow guidance.";
+const STATUS_KEY = "midcompact";
 
 const Params = Type.Object({
   action: Type.Union([
@@ -67,17 +72,21 @@ export default function (pi: ExtensionAPI) {
   let transaction: TransactionState | undefined;
   let draft: DraftPlan | undefined;
 
-  function restoreRuntime(sm: ExtensionContext["sessionManager"]): void {
-    const branch = sm.getBranch() as SessionEntry[];
+  registerStateRenderer(pi);
+
+  function restoreRuntime(ctx: ExtensionContext): void {
+    const branch = ctx.sessionManager.getBranch() as SessionEntry[];
     activeState = restoreCompressionState(branch) ?? undefined;
     const restored = restoreTransaction(branch);
     transaction = restored.transaction;
     draft = restored.draft ?? (transaction ? emptyDraft(transaction.id) : undefined);
+    updateStatus(ctx, activeState, transaction, draft);
   }
 
-  pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx.sessionManager));
-  pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx.sessionManager));
-  pi.on("session_shutdown", async () => {
+  pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
+  pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
+  pi.on("session_shutdown", async (_event: unknown, ctx: ExtensionContext) => {
+    ctx.ui.setStatus(STATUS_KEY, undefined);
     activeState = undefined;
     transaction = undefined;
     draft = undefined;
@@ -89,10 +98,11 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("midcompact", {
-    description: "Start, commit, inspect, or abort a branch-isolated mid-context compression transaction",
+    description: "Start, review, commit, inspect, or abort a branch-isolated mid-context compression transaction",
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       const sub = args.trim().toLowerCase();
+
       if (sub === "abort") {
         const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
         const currentTx = restored.transaction ?? transaction;
@@ -107,9 +117,11 @@ export default function (pi: ExtensionAPI) {
         }
         transaction = undefined;
         draft = undefined;
+        updateStatus(ctx, activeState, transaction, draft);
         ctx.ui.notify("Midcompact transaction aborted; returned to anchor.", "info");
         return;
       }
+
       if (sub === "commit") {
         const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
         const currentTx = restored.transaction ?? transaction;
@@ -123,30 +135,50 @@ export default function (pi: ExtensionAPI) {
           return;
         }
         const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
-        const nextState = mergeDraftIntoState(snapshot.anchorState, currentDraft);
+        const telemetry = draftTelemetry(currentTx, currentDraft);
+        const nextState = mergeDraftIntoState(snapshot.anchorState, currentDraft, currentTx, telemetry);
         const result = await ctx.navigateTree(currentTx.anchorEntryId, { summarize: false });
         if (result.cancelled) {
           ctx.ui.notify("Midcompact commit cancelled by tree navigation.", "warning");
           return;
         }
         pi.appendEntry(STATE_ENTRY, nextState);
+        const stateEntryId = ctx.sessionManager.getLeafId();
+        if (stateEntryId) pi.setLabel(stateEntryId, stateTreeLabel(nextState));
         activeState = nextState;
         transaction = undefined;
         draft = undefined;
-        ctx.ui.notify(
-          `Midcompact committed: ${currentDraft.ranges.length} new range(s), ${nextState.blocks.length} active compressed block(s).`,
-          "info",
-        );
+        updateStatus(ctx, activeState, transaction, draft);
+        ctx.ui.notify(commitNotice(nextState), "info");
         return;
       }
+
+      if (sub === "review") {
+        await reviewTransaction(ctx);
+        return;
+      }
+
       if (sub === "status") {
-        if (!transaction) {
-          ctx.ui.notify(`No active transaction. Active compressed blocks: ${activeState?.blocks.length ?? 0}.`, "info");
+        const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
+        const currentTx = restored.transaction ?? transaction;
+        const currentDraft = restored.draft ?? draft;
+        if (currentTx) {
+          ctx.ui.notify(formatDraft(currentDraft ?? emptyDraft(currentTx.id), draftTelemetry(currentTx, currentDraft)), "info");
           return;
         }
-        ctx.ui.notify(`Transaction ${transaction.id} at ${transaction.anchorEntryId}; ${draft?.ranges.length ?? 0} draft range(s).`, "info");
+        if (!activeState?.blocks.length) {
+          ctx.ui.notify("No active transaction and no active midcompact blocks on this branch.", "info");
+          return;
+        }
+        ctx.ui.notify(activeStateStatus(activeState), "info");
         return;
       }
+
+      if (sub) {
+        ctx.ui.notify("Usage: /midcompact | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort", "warning");
+        return;
+      }
+
       if (transaction) {
         ctx.ui.notify("A midcompact transaction is already active on this branch.", "warning");
         return;
@@ -162,15 +194,20 @@ export default function (pi: ExtensionAPI) {
         id: `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         anchorEntryId,
         startedAt: new Date().toISOString(),
+        anchorUsage: snapshotContextUsage(ctx.getContextUsage()),
       };
       draft = emptyDraft(transaction.id);
       pi.appendEntry(TXN_ENTRY, transaction);
       pi.appendEntry(DRAFT_ENTRY, draft);
-      ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId}.`, "info");
-      await pi.sendUserMessage([
+      updateStatus(ctx, activeState, transaction, draft);
+      const awareness = formatTelemetry(draftTelemetry(transaction, draft));
+      ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId}. ${compactUsage(transaction)}`, "info");
+      pi.sendUserMessage([
         "A mid-compaction transaction is active on a frozen anchor snapshot.",
+        awareness,
+        "These numbers are context awareness, not a target or optimization constraint. Use them to judge the scale of proposed compression while preserving semantic value.",
         "Load the `midcompact` skill, use the `midcompact` tool to locate and draft compression ranges, and present the draft for user review.",
-        "The Agent cannot commit. After review, ask the user to run `/midcompact commit`; that explicit command is the commit gate.",
+        "The Agent cannot commit. The user can inspect `/midcompact review`, then explicitly run `/midcompact commit` when satisfied.",
       ].join("\n"));
     },
   });
@@ -180,7 +217,7 @@ export default function (pi: ExtensionAPI) {
     label: "Midcompact",
     description: TOOL_DESCRIPTION,
     parameters: Params,
-    async execute(_id: string, params: ParamsType, _signal: AbortSignal, _onUpdate: unknown, ctx: ExtensionContext) {
+    async execute(_id: string, params: ParamsType, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
       try {
         if (params.action === "recall") return toolResult(handleRecall(params, ctx));
         if (!transaction) return toolResult("No active midcompact transaction. Ask the user to run `/midcompact` first.");
@@ -190,7 +227,8 @@ export default function (pi: ExtensionAPI) {
           draft ??= emptyDraft(transaction.id);
           draft = handlePlan(params, draft, snapshot.atoms);
           pi.appendEntry(DRAFT_ENTRY, draft);
-          return toolResult(formatDraft(draft));
+          updateStatus(ctx, activeState, transaction, draft);
+          return toolResult(formatDraft(draft, draftTelemetry(transaction, draft)));
         }
         return toolResult("Unknown action.");
       } catch (error) {
@@ -199,7 +237,52 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  async function reviewTransaction(ctx: ExtensionCommandContext): Promise<void> {
+    while (true) {
+      const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
+      const currentTx = restored.transaction ?? transaction;
+      const currentDraft = restored.draft ?? draft;
+      if (!currentTx) {
+        ctx.ui.notify("No active midcompact transaction.", "warning");
+        return;
+      }
+      const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
+      const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
+      const telemetry = draftTelemetry(currentTx, currentPlan);
+      if (ctx.mode !== "tui") {
+        ctx.ui.notify(formatDraft(currentPlan, telemetry), "info");
+        return;
+      }
+      const action = await showReviewUi(ctx, snapshot.atoms, currentPlan, telemetry);
+      if (action.action === "close") return;
+      const range = currentPlan.ranges.find((candidate) => candidate.id === action.draftId);
+      if (!range) continue;
 
+      if (action.action === "edit-summary") {
+        const value = await ctx.ui.editor(`Edit ${range.id} summary`, range.summary);
+        if (value === undefined || !value.trim()) continue;
+        draft = updateDraftRange(currentPlan, range.id, { summary: value.trim() });
+        pi.appendEntry(DRAFT_ENTRY, draft);
+        updateStatus(ctx, activeState, currentTx, draft);
+        continue;
+      }
+      if (action.action === "edit-topic") {
+        const value = await ctx.ui.input(`Edit ${range.id} topic`, range.topic ?? "");
+        if (value === undefined) continue;
+        draft = updateDraftRange(currentPlan, range.id, { topic: value.trim() || undefined });
+        pi.appendEntry(DRAFT_ENTRY, draft);
+        updateStatus(ctx, activeState, currentTx, draft);
+        continue;
+      }
+      if (action.action === "remove") {
+        const approved = await ctx.ui.confirm("Remove compression range?", `${range.id}: ${range.startRef} → ${range.endRef}`);
+        if (!approved) continue;
+        draft = removeDraftRange(currentPlan, range.id);
+        pi.appendEntry(DRAFT_ENTRY, draft);
+        updateStatus(ctx, activeState, currentTx, draft);
+      }
+    }
+  }
 
   function handleRecall(params: ParamsType, ctx: ExtensionContext): string {
     const sm = ctx.sessionManager;
@@ -267,9 +350,15 @@ function handlePlan(params: ParamsType, current: DraftPlan, atoms: Atom[]): Draf
   return addDraftRange(current, atoms, { start: params.start, end: params.end, summary: params.summary, topic: params.topic });
 }
 
-function mergeDraftIntoState(base: CompressionState | undefined, draft: DraftPlan): CompressionState {
+function mergeDraftIntoState(
+  base: CompressionState | undefined,
+  draft: DraftPlan,
+  transaction: TransactionState,
+  telemetry: ReturnType<typeof draftTelemetry>,
+): CompressionState {
   const previous = base ?? emptyCompressionState();
   const blocks = [...previous.blocks];
+  const addedBlockIds: string[] = [];
   let next = nextBlockNumber(blocks);
   for (const range of draft.ranges) {
     const block: CompressionBlock = {
@@ -283,9 +372,23 @@ function mergeDraftIntoState(base: CompressionState | undefined, draft: DraftPla
       compressedApproxTokens: range.compressedApproxTokens,
     };
     blocks.push(block);
+    addedBlockIds.push(block.id);
     next += 1;
   }
-  return { version: 1, createdAt: new Date().toISOString(), blocks };
+  const committedAt = new Date().toISOString();
+  const lastCommit: CommitStats = {
+    transactionId: transaction.id,
+    committedAt,
+    addedBlockIds,
+    addedRangeCount: draft.ranges.length,
+    selectedOriginalApproxTokens: telemetry.selectedOriginalApproxTokens,
+    selectedCompressedApproxTokens: telemetry.selectedCompressedApproxTokens,
+    estimatedSavedTokens: telemetry.estimatedSavedTokens,
+    anchorUsage: transaction.anchorUsage,
+    projectedTokens: telemetry.projectedTokens,
+    projectedPercent: telemetry.projectedPercent,
+  };
+  return { version: 1, createdAt: committedAt, blocks, lastCommit };
 }
 
 function nextBlockNumber(blocks: CompressionBlock[]): number {
@@ -295,6 +398,56 @@ function nextBlockNumber(blocks: CompressionBlock[]): number {
     if (match) max = Math.max(max, Number(match[1]));
   }
   return max + 1;
+}
+
+function updateStatus(
+  ctx: ExtensionContext,
+  state: CompressionState | undefined,
+  tx: TransactionState | undefined,
+  currentDraft: DraftPlan | undefined,
+): void {
+  const theme = ctx.ui.theme;
+  if (tx) {
+    const telemetry = draftTelemetry(tx, currentDraft);
+    const projected = telemetry.projectedPercent === null ? "" : ` · projected ${formatPercent(telemetry.projectedPercent, true)}`;
+    ctx.ui.setStatus(
+      STATUS_KEY,
+      `${theme.fg("accent", "MC planning")} · ${currentDraft?.ranges.length ?? 0} ranges${projected}`,
+    );
+    return;
+  }
+  if (state?.blocks.length) {
+    const saved = state.blocks.reduce(
+      (sum, block) => sum + Math.max(0, block.originalApproxTokens - block.compressedApproxTokens),
+      0,
+    );
+    ctx.ui.setStatus(STATUS_KEY, `${theme.fg("success", "MC")} ${state.blocks.length} blocks · ~${formatTokenCount(saved)} saved`);
+    return;
+  }
+  ctx.ui.setStatus(STATUS_KEY, undefined);
+}
+
+function compactUsage(tx: TransactionState): string {
+  const usage = tx.anchorUsage;
+  if (!usage) return "Anchor context usage unavailable.";
+  return `Anchor context ${formatTokenCount(usage.tokens)}/${formatTokenCount(usage.contextWindow)} (${formatPercent(usage.percent)}).`;
+}
+
+function activeStateStatus(state: CompressionState): string {
+  const saved = state.blocks.reduce(
+    (sum, block) => sum + Math.max(0, block.originalApproxTokens - block.compressedApproxTokens),
+    0,
+  );
+  return `Midcompact active on this branch: ${state.blocks.length} block(s), ~${formatTokenCount(saved)} estimated tokens saved. Original history remains recallable.`;
+}
+
+function commitNotice(state: CompressionState): string {
+  const commit = state.lastCommit;
+  if (!commit) return `Midcompact committed: ${state.blocks.length} active compressed block(s).`;
+  const projection = commit.projectedPercent === null
+    ? ""
+    : ` Projected anchor context ${formatPercent(commit.anchorUsage?.percent ?? null)} → ${formatPercent(commit.projectedPercent, true)}.`;
+  return `Midcompact committed: ${commit.addedRangeCount} new range(s), ~${formatTokenCount(commit.estimatedSavedTokens)} estimated tokens saved.${projection}`;
 }
 
 function toolResult(text: string) {

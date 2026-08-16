@@ -7,3 +7,4 @@ await rm(target, { recursive: true, force: true });
 await mkdir(target, { recursive: true });
 await cp(resolve(root, "test/mocks/pi-ai"), resolve(target, "pi-ai"), { recursive: true });
 await cp(resolve(root, "test/mocks/pi-coding-agent"), resolve(target, "pi-coding-agent"), { recursive: true });
+await cp(resolve(root, "test/mocks/pi-tui"), resolve(target, "pi-tui"), { recursive: true });

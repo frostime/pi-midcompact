@@ -53,6 +53,13 @@ export interface Atom {
   compressedBlockId?: string;
 }
 
+export interface ContextUsageSnapshot {
+  tokens: number | null;
+  contextWindow: number;
+  percent: number | null;
+  capturedAt: string;
+}
+
 export interface CompressionBlock {
   id: string;
   topic?: string;
@@ -64,10 +71,25 @@ export interface CompressionBlock {
   compressedApproxTokens: number;
 }
 
+export interface CommitStats {
+  transactionId: string;
+  committedAt: string;
+  addedBlockIds: string[];
+  addedRangeCount: number;
+  selectedOriginalApproxTokens: number;
+  selectedCompressedApproxTokens: number;
+  estimatedSavedTokens: number;
+  anchorUsage?: ContextUsageSnapshot;
+  projectedTokens: number | null;
+  projectedPercent: number | null;
+}
+
 export interface CompressionState {
+  /** State format stays v1 for backward compatibility with v0.1.x sessions. */
   version: 1;
   createdAt: string;
   blocks: CompressionBlock[];
+  lastCommit?: CommitStats;
 }
 
 export interface DraftRange {
@@ -98,6 +120,19 @@ export interface TransactionState {
   id: string;
   anchorEntryId: string;
   startedAt: string;
+  /** Frozen awareness captured when /midcompact starts; informational, never a target. */
+  anchorUsage?: ContextUsageSnapshot;
+}
+
+export interface DraftTelemetry {
+  anchorTokens: number | null;
+  contextWindow: number | null;
+  anchorPercent: number | null;
+  selectedOriginalApproxTokens: number;
+  selectedCompressedApproxTokens: number;
+  estimatedSavedTokens: number;
+  projectedTokens: number | null;
+  projectedPercent: number | null;
 }
 
 export interface LocateQuery {
@@ -109,3 +144,9 @@ export interface LocateQuery {
   limit?: number;
   detail?: "brief" | "full";
 }
+
+export type ReviewAction =
+  | { action: "close" }
+  | { action: "edit-summary"; draftId: string }
+  | { action: "edit-topic"; draftId: string }
+  | { action: "remove"; draftId: string };

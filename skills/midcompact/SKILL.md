@@ -15,6 +15,19 @@ The extension handles session-tree mechanics and protocol safety. You decide sem
 
 Do not infer importance from a tool name. A user constraint, approval, correction, decision, or other critical fact may appear inside any message or tool exchange. Inspect actual content.
 
+## Context awareness
+
+The tool reports approximate context telemetry while planning:
+
+- anchor usage captured when `/midcompact` started;
+- approximate raw tokens selected by the current draft;
+- approximate summary tokens;
+- approximate whole-context usage if the draft were committed now.
+
+Treat these numbers as **awareness, not a target**. Do not maximize token reduction or keep adding ranges merely because more compression is possible. Use the scale information together with semantic value and the user's conversational guidance. If the user says they only want a modest reduction, preserve more context; if they want more headroom, look for additional stale regions.
+
+Projected values are estimates. Prefer semantic correctness over apparent numeric precision.
+
 ## Compression workflow
 
 1. Decide which completed or stale regions are candidates for compression.
@@ -23,10 +36,16 @@ Do not infer importance from a tool name. A user constraint, approval, correctio
    - Use multiple ranges for non-contiguous compression.
    - To preserve an important atom verbatim inside a broader phase, split the compression into ranges around that atom.
    - Prefer KEEP-by-omission when uncertain.
-4. Use `midcompact(action="plan", op="show")` and present the complete proposed plan to the user. Incorporate requested changes with `op="update"`, `op="remove"`, or additional ranges.
-5. After the user has reviewed the plan, present the final draft and ask the user to run `/midcompact commit`. The Agent cannot commit itself. The explicit user command is the commit gate and returns the session tree to the anchor before persisting the projection.
+   - After each meaningful draft change, use the returned context telemetry to understand its scale; do not treat it as a quota.
+4. Use `midcompact(action="plan", op="show")` and present the complete proposed plan to the user. Include what each range begins/ends with, not only atom IDs.
+5. Recommend `/midcompact review` when the user wants to inspect the linear anchor timeline, proposed ranges, summaries, and KEEP holes. Incorporate requested changes with `op="update"`, `op="remove"`, additional ranges, or the review UI.
+6. After the user is satisfied, ask them to run `/midcompact commit`. The Agent cannot commit itself. The explicit user command is the commit gate and returns the session tree to the anchor before persisting the projection.
 
 A good summary preserves what the next working Agent needs: user intent and constraints, decisions and rationale, relevant file paths/signatures/errors, validation state, rejected approaches when the reason matters, unresolved issues, and the next useful state. Remove repetitive exploration and process noise rather than merely shortening prose.
+
+## Repeated compression
+
+A session may be midcompacted multiple times. Existing compressed blocks remain active and protected; a later transaction can compress newly accumulated raw history around them. Do not attempt to recursively compress an already compressed block in the current version.
 
 ## Recall
 

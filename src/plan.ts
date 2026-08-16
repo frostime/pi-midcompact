@@ -1,5 +1,6 @@
-import type { Atom, DraftPlan, DraftRange } from "./types.js";
+import type { Atom, DraftPlan, DraftRange, DraftTelemetry } from "./types.js";
 import { estimateCompressedTokens } from "./projection.js";
+import { formatTelemetry } from "./telemetry.js";
 
 export function emptyDraft(transactionId: string): DraftPlan {
   return { version: 1, transactionId, revision: 0, ranges: [] };
@@ -71,11 +72,16 @@ function nextDraftId(draft: DraftPlan): string {
   return `d${max + 1}`;
 }
 
-export function formatDraft(draft: DraftPlan): string {
-  if (draft.ranges.length === 0) return `Draft v${draft.revision}: no compression ranges.`;
+export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry): string {
+  const lines: string[] = [];
+  if (telemetry) lines.push(formatTelemetry(telemetry), "");
+  if (draft.ranges.length === 0) {
+    lines.push(`Draft v${draft.revision}: no compression ranges.`);
+    return lines.join("\n");
+  }
   const before = draft.ranges.reduce((sum, range) => sum + range.originalApproxTokens, 0);
   const after = draft.ranges.reduce((sum, range) => sum + range.compressedApproxTokens, 0);
-  const lines = [`Draft v${draft.revision}: ${draft.ranges.length} range(s), ~${before} → ~${after} tokens`];
+  lines.push(`Draft v${draft.revision}: ${draft.ranges.length} range(s), ~${before} → ~${after} tokens`);
   for (const range of draft.ranges) {
     lines.push(`\n${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${range.topic}` : ""}`);
     lines.push(`~${range.originalApproxTokens} → ~${range.compressedApproxTokens} tokens`);

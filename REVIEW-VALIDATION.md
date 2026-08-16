@@ -28,3 +28,14 @@ This note records the independent re-check performed after receiving an external
 ## Additional implementation note
 
 The prototype now pins its peer/dev Pi dependencies to **0.84.1**. The v0.80.6 source was used only to verify that the fatal tool-vs-command context boundary was not a recent regression.
+
+## v0.2.0 follow-up
+
+The v0.2.0 UX layer does not change the corrected tool-vs-command boundary above. New behavior is additive:
+
+- context usage is snapshotted at transaction start and exposed as informational draft telemetry;
+- `/midcompact review` uses Pi's custom TUI surface for linear draft inspection/editing;
+- committed `midcompact-state` entries have a custom transcript renderer, branch-aware status text, and a tree label;
+- repeated transactions retain prior compressed blocks while protecting those summaries from recursive compression.
+
+These additions remain subject to real-runtime usability testing, especially custom TUI rendering across terminals and label presentation in the `/tree` selector.

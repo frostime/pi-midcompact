@@ -10,6 +10,33 @@ declare module "@earendil-works/pi-ai" {
   export type Static<T> = any;
 }
 
+declare module "@earendil-works/pi-tui" {
+  export interface Component {
+    render(width: number): string[];
+    invalidate(): void;
+    handleInput?(data: string): void;
+  }
+  export interface TUI extends Component {
+    terminal: { rows: number; columns?: number };
+    requestRender(force?: boolean): void;
+  }
+  export class Text implements Component {
+    constructor(text?: string, paddingX?: number, paddingY?: number, customBgFn?: (text: string) => string);
+    render(width: number): string[];
+    invalidate(): void;
+  }
+  export class Box implements Component {
+    constructor(paddingX?: number, paddingY?: number, bgFn?: (text: string) => string);
+    addChild(component: Component): void;
+    render(width: number): string[];
+    invalidate(): void;
+  }
+  export const Key: Record<string, string>;
+  export function matchesKey(data: string, key: string): boolean;
+  export function truncateToWidth(text: string, width: number, ellipsis?: string, preserveAnsi?: boolean): string;
+  export function wrapTextWithAnsi(text: string, width: number): string[];
+}
+
 declare module "@earendil-works/pi-coding-agent" {
   export interface SessionEntry {
     id: string;
@@ -26,15 +53,30 @@ declare module "@earendil-works/pi-coding-agent" {
     getLeafId(): string | null;
   }
 
+  export interface ThemeContract {
+    fg(color: string, text: string): string;
+    bg(color: string, text: string): string;
+    bold(text: string): string;
+  }
+
   export interface ExtensionUIContextContract {
     notify(message: string, type?: "info" | "warning" | "error"): void;
+    setStatus(key: string, text: string | undefined): void;
+    editor(title: string, prefill?: string): Promise<string | undefined>;
+    input(title: string, placeholder?: string): Promise<string | undefined>;
+    confirm(title: string, message: string): Promise<boolean>;
+    custom<T>(factory: (tui: import("@earendil-works/pi-tui").TUI, theme: ThemeContract, keybindings: unknown, done: (result: T) => void) => import("@earendil-works/pi-tui").Component | Promise<import("@earendil-works/pi-tui").Component>): Promise<T>;
+    readonly theme: ThemeContract;
   }
 
   export interface ExtensionContext {
     ui: ExtensionUIContextContract;
+    mode: "tui" | "rpc" | "json" | "print";
+    hasUI: boolean;
     sessionManager: ReadonlySessionManagerContract;
     isIdle(): boolean;
     abort(): void;
+    getContextUsage(): { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
   }
 
   export interface ExtensionCommandContext extends ExtensionContext {
@@ -61,7 +103,9 @@ declare module "@earendil-works/pi-coding-agent" {
         ctx: ExtensionContext,
       ): Promise<unknown>;
     }): void;
+    registerEntryRenderer<T = unknown>(customType: string, renderer: (entry: { data?: T }, options: { expanded: boolean }, theme: ThemeContract) => import("@earendil-works/pi-tui").Component): void;
     appendEntry<T = unknown>(customType: string, data?: T): void;
+    setLabel(entryId: string, label: string | undefined): void;
     sendUserMessage(content: string | unknown[], options?: { deliverAs?: "steer" | "followUp" }): void;
   }
 

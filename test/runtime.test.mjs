@@ -27,6 +27,8 @@ class FakePi {
     this.handlers = new Map();
     this.commands = new Map();
     this.tools = new Map();
+    this.entryRenderers = new Map();
+    this.labels = new Map();
     this.counter = 100;
   }
   on(name, handler) {
@@ -36,11 +38,18 @@ class FakePi {
   }
   registerCommand(name, def) { this.commands.set(name, def); }
   registerTool(def) { this.tools.set(def.name, def); }
+  registerEntryRenderer(type, renderer) { this.entryRenderers.set(type, renderer); }
   appendEntry(customType, data) {
     const id = `x${++this.counter}`;
     this.sm.entries.push({ type: "custom", id, parentId: this.sm.leafId, customType, data });
     this.sm.leafId = id;
     return id;
+  }
+  setLabel(entryId, label) {
+    this.labels.set(entryId, label);
+    const id = `x${++this.counter}`;
+    this.sm.entries.push({ type: "label_change", id, parentId: this.sm.leafId, targetId: entryId, label });
+    this.sm.leafId = id;
   }
   async sendUserMessage(content) {
     const id = `x${++this.counter}`;
@@ -60,12 +69,35 @@ class FakePi {
 function makeBaseCtx(sm) {
   return {
     sessionManager: sm,
+    mode: "tui",
+    hasUI: true,
     ui: {
       messages: [],
+      reviewFrames: [],
+      statuses: new Map(),
+      theme: {
+        fg(_color, text) { return text; },
+        bg(_color, text) { return text; },
+        bold(text) { return text; },
+      },
       notify(text, level) { this.messages.push({ text, level }); },
+      setStatus(key, text) { if (text === undefined) this.statuses.delete(key); else this.statuses.set(key, text); },
+      async editor(_title, prefill) { return prefill; },
+      async input(_title, placeholder) { return placeholder; },
+      async confirm() { return true; },
+      async custom(factory) {
+        let result = { action: "close" };
+        const tui = { terminal: { rows: 30, columns: 120 }, requestRender() {} };
+        const done = value => { result = value; };
+        const component = await factory(tui, this.theme, {}, done);
+        this.reviewFrames.push(component.render(120));
+        component.handleInput?.("enter");
+        return result;
+      },
     },
     isIdle() { return true; },
     abort() { this.aborted = true; },
+    getContextUsage() { return { tokens: 70000, contextWindow: 100000, percent: 70 }; },
   };
 }
 
@@ -111,15 +143,29 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
     action: "plan", op: "add", start: "a0001", end: "a0002", summary: "Old requirement and exploration summarized."
   }, null, null, toolCtx);
   assert.match(planned.content[0].text, /d1:/);
+  assert.match(planned.content[0].text, /Context awareness/);
+  assert.match(planned.content[0].text, /projected if committed now/);
+  assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);
+
+  await pi.commands.get("midcompact").handler("review", commandCtx);
+  assert.ok(toolCtx.ui.reviewFrames.length > 0);
+  assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /Midcompact Review/);
+  assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /d1/);
+  assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /KEEP/);
 
   assert.equal("navigateTree" in toolCtx, false, "tool context must not expose command-only session navigation");
   await pi.commands.get("midcompact").handler("commit", commandCtx);
 
-  const committedLeaf = sm.leafId;
-  const committedEntry = entries.find(e => e.id === committedLeaf);
-  assert.equal(committedEntry.customType, "midcompact-state");
+  const committedLeaf = sm.leafId; // setLabel appends a label-change entry after the state entry.
+  const committedEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
+  assert.ok(committedEntry);
   assert.equal(committedEntry.parentId, "e3");
   assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), false);
+  assert.match(pi.labels.get(committedEntry.id), /^midcompact/);
+  assert.match(toolCtx.ui.statuses.get("midcompact"), /^MC 1 blocks/);
+  assert.ok(pi.entryRenderers.has("midcompact-state"));
+  assert.equal(committedEntry.data.lastCommit.anchorUsage.percent, 70);
+  assert.equal(committedEntry.data.lastCommit.anchorUsage.contextWindow, 100000);
 
   const rawMessages = [user("old requirement", 1), assistant("old exploration", 2), user("current work", 3)];
   const projected = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
@@ -143,4 +189,28 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
 
   const afterRecall = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
   assert.equal(afterRecall.messages[0].customType, "midcompact-summary");
+
+  // A later transaction should retain c0001 and compress only newly accumulated raw history.
+  const newUserId = `x${++pi.counter}`;
+  entries.push({ type: "message", id: newUserId, parentId: sm.leafId, message: user("new phase request", pi.counter) });
+  sm.leafId = newUserId;
+  const newAssistantId = `x${++pi.counter}`;
+  entries.push({ type: "message", id: newAssistantId, parentId: sm.leafId, message: assistant("new phase exploration", pi.counter) });
+  sm.leafId = newAssistantId;
+
+  await pi.commands.get("midcompact").handler("", commandCtx);
+  const secondLocate = await tool.execute("tc6", { action: "locate", pattern: "new phase", source: "user" }, null, null, toolCtx);
+  assert.match(secondLocate.content[0].text, /a0003/);
+  const protectedOld = await tool.execute("tc7", { action: "locate", ref: "a0001", detail: "full" }, null, null, toolCtx);
+  assert.match(protectedOld.content[0].text, /compressed, protected/);
+  await tool.execute("tc8", {
+    action: "plan", op: "add", start: "a0003", end: "a0004", summary: "New phase summarized."
+  }, null, null, toolCtx);
+  await pi.commands.get("midcompact").handler("commit", commandCtx);
+
+  const latestStateEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
+  assert.ok(latestStateEntry);
+  assert.equal(latestStateEntry.data.blocks.length, 2);
+  assert.equal(latestStateEntry.data.blocks[0].id, "c0001");
+  assert.equal(latestStateEntry.data.blocks[1].id, "c0002");
 });

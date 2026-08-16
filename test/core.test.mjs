@@ -6,11 +6,15 @@ const atomsMod = await import(new URL("atoms.js", ROOT));
 const planMod = await import(new URL("plan.js", ROOT));
 const projectionMod = await import(new URL("projection.js", ROOT));
 const stateMod = await import(new URL("state.js", ROOT));
+const telemetryMod = await import(new URL("telemetry.js", ROOT));
+const reviewMod = await import(new URL("review-ui.js", ROOT));
 
 const { buildAtoms, locateAtoms } = atomsMod;
 const { addDraftRange, emptyDraft } = planMod;
 const { projectMessages } = projectionMod;
 const { restoreCompressionState, STATE_ENTRY } = stateMod;
+const { draftTelemetry } = telemetryMod;
+const { buildReviewText } = reviewMod;
 
 function entry(id, message, parentId = null) {
   return { type: "message", id, parentId, message };
@@ -134,4 +138,55 @@ test("multiple compressed ranges preserve raw holes between them", () => {
   assert.equal(projected[1].content, "critical constraint: keep API compatible");
   assert.equal(projected[2].customType, "midcompact-summary");
   assert.equal(projected[3].content, "current work");
+});
+
+
+test("draft telemetry gives context awareness without defining a target", () => {
+  const tx = {
+    version: 1,
+    id: "tx-awareness",
+    anchorEntryId: "e3",
+    startedAt: "now",
+    anchorUsage: { tokens: 70000, contextWindow: 100000, percent: 70, capturedAt: "now" },
+  };
+  const draft = {
+    version: 1,
+    transactionId: tx.id,
+    revision: 1,
+    ranges: [{
+      id: "d1", startRef: "a0001", endRef: "a0002", startIndex: 0, endIndex: 1,
+      summary: "short summary", entryIds: ["e1", "e2"], messageKeys: ["k1", "k2"],
+      originalApproxTokens: 22000, compressedApproxTokens: 1000, startPreview: "start", endPreview: "end",
+    }],
+  };
+  const telemetry = draftTelemetry(tx, draft);
+  assert.equal(telemetry.anchorTokens, 70000);
+  assert.equal(telemetry.estimatedSavedTokens, 21000);
+  assert.equal(telemetry.projectedTokens, 49000);
+  assert.equal(telemetry.projectedPercent, 49);
+  assert.equal("target" in telemetry, false);
+});
+
+test("review text maps the linear atom stream to draft ranges and visible KEEP holes", () => {
+  const messages = [
+    user("phase one", 1),
+    assistant([{ type: "text", text: "old exploration" }], 2),
+    user("critical keep", 3),
+    assistant([{ type: "text", text: "more old work" }], 4),
+  ];
+  const branch = messages.map((m, i) => entry(`e${i + 1}`, m));
+  const atoms = buildAtoms(messages, branch);
+  let draft = emptyDraft("tx-review");
+  draft = addDraftRange(draft, atoms, { start: "a0001", end: "a0002", summary: "phase one summarized" });
+  draft = addDraftRange(draft, atoms, { start: "a0004", end: "a0004", summary: "more old work summarized" });
+  const telemetry = draftTelemetry({
+    version: 1, id: "tx-review", anchorEntryId: "e4", startedAt: "now",
+    anchorUsage: { tokens: 40000, contextWindow: 100000, percent: 40, capturedAt: "now" },
+  }, draft);
+  const text = buildReviewText(atoms, draft, telemetry);
+  assert.match(text, /d1 a0001/);
+  assert.match(text, /KEEP a0003 \[user\].*critical keep/);
+  assert.match(text, /d2 a0004/);
+  assert.match(text, /awareness, not a target/i);
+  assert.match(text, /Projected/);
 });
