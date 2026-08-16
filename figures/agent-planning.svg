@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="450" viewBox="0 0 1300 450" role="img" aria-labelledby="title desc">
+  <title id="title">How the Agent creates a compression draft from a conversation slice</title>
+  <desc id="desc">A continuous frozen conversation is shown without IDs on its units. The agent identifies a start and end landmark, locate returns temporary references for both, and plan combines those references, the slice between them, and a summary into a draft ready for human review.</desc>
+
+  <defs>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1300" height="450" fill="#ffffff"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="40" y="43" font-size="28" font-weight="700" fill="#172033">How the Agent creates a compression draft</text>
+    <text x="40" y="70" font-size="16" fill="#526176">Conversation units stay readable. Temporary references appear only after the Agent has located the two boundaries of a candidate slice.</text>
+    <line x1="40" y1="92" x2="1260" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
+
+    <text x="40" y="120" font-size="14" font-weight="700" fill="#526176">FROZEN CONVERSATION SNAPSHOT</text>
+
+    <g id="conversation-units">
+      <rect x="40" y="135" width="195" height="67" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.7"/>
+      <text x="58" y="159" font-size="12.5" font-weight="700" fill="#047857">KEEP  USER</text>
+      <text x="58" y="183" font-size="15" fill="#172033">Project constraints</text>
+
+      <rect x="245" y="135" width="195" height="67" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.2"/>
+      <text x="263" y="159" font-size="12.5" font-weight="700" fill="#a16207">ASSISTANT</text>
+      <text x="263" y="183" font-size="15" fill="#172033">Source exploration</text>
+
+      <rect x="450" y="135" width="195" height="67" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.2"/>
+      <text x="468" y="159" font-size="12.5" font-weight="700" fill="#a16207">TOOL EXCHANGE</text>
+      <text x="468" y="183" font-size="15" fill="#172033">read, rg, test output</text>
+
+      <rect x="655" y="135" width="195" height="67" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.2"/>
+      <text x="673" y="159" font-size="12.5" font-weight="700" fill="#a16207">ASSISTANT</text>
+      <text x="673" y="183" font-size="15" fill="#172033">Compare approaches</text>
+
+      <rect x="860" y="135" width="195" height="67" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.2"/>
+      <text x="878" y="159" font-size="12.5" font-weight="700" fill="#a16207">ASSISTANT</text>
+      <text x="878" y="183" font-size="15" fill="#172033">Decision + validation</text>
+
+      <rect x="1065" y="135" width="195" height="67" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.7"/>
+      <text x="1083" y="159" font-size="12.5" font-weight="700" fill="#047857">KEEP  USER</text>
+      <text x="1083" y="183" font-size="15" fill="#172033">Implement the change</text>
+    </g>
+
+    <g id="slice-boundaries">
+      <line x1="342" y1="202" x2="342" y2="221" stroke="#d97706" stroke-width="2"/>
+      <rect x="276" y="221" width="132" height="22" rx="11" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"/>
+      <text x="342" y="237" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">start boundary</text>
+
+      <line x1="957" y1="202" x2="957" y2="221" stroke="#d97706" stroke-width="2"/>
+      <rect x="891" y="221" width="132" height="22" rx="11" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"/>
+      <text x="957" y="237" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">end boundary</text>
+
+      <path d="M 245 250 L 245 260 L 1055 260 L 1055 250" fill="none" stroke="#d97706" stroke-width="2"/>
+      <text x="650" y="281" text-anchor="middle" font-size="14" fill="#8a5808">candidate slice: every conversation atom from the start boundary through the end boundary</text>
+    </g>
+
+    <g id="planning-process">
+      <g id="choose-start">
+        <circle cx="54" cy="316" r="13" fill="#2563eb"/>
+        <text x="54" y="321" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">1</text>
+        <text x="76" y="321" font-size="16" font-weight="700" fill="#173b7a">Choose a start landmark</text>
+        <text x="40" y="346" font-size="13.5" fill="#526176">Marks this phase stale.</text>
+        <text x="40" y="366" font-size="13.5" fill="#526176">Its start can be a user message,</text>
+        <text x="40" y="385" font-size="13.5" fill="#526176">assistant reply, or tool exchange.</text>
+      </g>
+
+      <line x1="236" y1="347" x2="269" y2="347" stroke="#64748b" stroke-width="2.3" marker-end="url(#arrow-slate)"/>
+
+      <g id="locate-start">
+        <circle cx="290" cy="316" r="13" fill="#d97706"/>
+        <text x="290" y="321" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">2</text>
+        <text x="312" y="321" font-size="16" font-weight="700" fill="#7c4400">locate finds the node</text>
+        <text x="276" y="346" font-size="13.5" fill="#526176">locate("source exploration")</text>
+        <rect x="276" y="357" width="176" height="32" rx="5" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+        <text x="290" y="379" font-size="14" fill="#172033"><tspan font-weight="700">start ref:</tspan><tspan fill="#9a3412"> a0007</tspan></text>
+      </g>
+
+      <line x1="462" y1="347" x2="495" y2="347" stroke="#64748b" stroke-width="2.3" marker-end="url(#arrow-slate)"/>
+
+      <g id="locate-end">
+        <circle cx="516" cy="316" r="13" fill="#d97706"/>
+        <text x="516" y="321" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">3</text>
+        <text x="538" y="321" font-size="16" font-weight="700" fill="#7c4400">Repeat for the end</text>
+        <text x="502" y="346" font-size="13.5" fill="#526176">locate("decision")</text>
+        <rect x="502" y="357" width="176" height="32" rx="5" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+        <text x="516" y="379" font-size="14" fill="#172033"><tspan font-weight="700">end ref:</tspan><tspan fill="#9a3412"> a0012</tspan></text>
+      </g>
+
+      <line x1="688" y1="347" x2="721" y2="347" stroke="#64748b" stroke-width="2.3" marker-end="url(#arrow-slate)"/>
+
+      <g id="plan-draft">
+        <rect x="731" y="301" width="286" height="96" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+        <circle cx="757" cy="321" r="13" fill="#ea580c"/>
+        <text x="757" y="326" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">4</text>
+        <text x="780" y="326" font-size="16" font-weight="700" fill="#9a3412">plan submits the slice</text>
+        <text x="748" y="350" font-size="13.5" fill="#526176">start: a0007   end: a0012</text>
+        <text x="748" y="371" font-size="13.5" fill="#526176">slice: every atom in between</text>
+        <text x="748" y="390" font-size="13.5" fill="#526176">summary: reviewed phase in concise form</text>
+      </g>
+
+      <line x1="1017" y1="349" x2="1040" y2="349" stroke="#64748b" stroke-width="2.3" marker-end="url(#arrow-slate)"/>
+
+      <g id="complete-draft">
+        <rect x="1050" y="301" width="210" height="96" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+        <circle cx="1076" cy="321" r="13" fill="#059669"/>
+        <text x="1076" y="326" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">5</text>
+        <text x="1099" y="326" font-size="16" font-weight="700" fill="#065f46">Draft d1 is ready</text>
+        <text x="1067" y="352" font-size="13.5" fill="#047857">a0007 -&gt; a0012</text>
+        <text x="1067" y="373" font-size="13.5" fill="#047857">summary attached</text>
+        <text x="1067" y="390" font-size="13" fill="#047857">review before commit</text>
+      </g>
+    </g>
+
+    <line x1="40" y1="416" x2="1260" y2="416" stroke="#d8dee8" stroke-width="1.5"/>
+    <text x="40" y="440" font-size="14" fill="#8a5808">Temporary refs identify nodes only within this frozen planning snapshot; they are never inserted into normal conversation messages.</text>
+  </g>
+</svg>

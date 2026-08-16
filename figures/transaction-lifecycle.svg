@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">A pi-midcompact transaction stays separate until a human commits it</title>
+  <desc id="desc">A working branch reaches a frozen anchor. The agent plans on a temporary lower branch, the user reviews and commits, then a compression state is saved on the working branch before work continues.</desc>
+
+  <defs>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="420" fill="#ffffff"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="40" y="43" font-size="27" font-weight="700" fill="#172033">A compression transaction stays separate until you commit it</text>
+    <text x="40" y="70" font-size="16" fill="#526176">The anchor freezes a reviewable snapshot. Planning is temporary; only the reviewed state joins the working branch.</text>
+    <line x1="40" y1="92" x2="1160" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
+
+    <text x="40" y="159" font-size="15" font-weight="700" fill="#526176">WORKING BRANCH</text>
+    <text x="40" y="284" font-size="15" font-weight="700" fill="#a16207">TEMPORARY PLANNING BRANCH</text>
+
+    <g id="working-branch">
+      <rect x="170" y="130" width="190" height="66" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+      <text x="265" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#172033">Earlier work</text>
+      <text x="265" y="179" text-anchor="middle" font-size="14" fill="#526176">raw history remains stored</text>
+
+      <line x1="360" y1="163" x2="405" y2="163" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+
+      <rect x="415" y="120" width="170" height="86" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+      <circle cx="447" cy="146" r="13" fill="#2563eb"/>
+      <text x="447" y="151" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">1</text>
+      <text x="500" y="153" text-anchor="middle" font-size="18" font-weight="700" fill="#173b7a">Anchor</text>
+      <text x="500" y="178" text-anchor="middle" font-size="14" fill="#2859a8">/midcompact freezes</text>
+      <text x="500" y="195" text-anchor="middle" font-size="14" fill="#2859a8">this checkpoint</text>
+
+      <line x1="585" y1="163" x2="825" y2="163" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+
+      <rect x="835" y="130" width="170" height="66" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2.5"/>
+      <text x="920" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#065f46">Compression state</text>
+      <text x="920" y="179" text-anchor="middle" font-size="14" fill="#047857">reviewed summaries saved</text>
+
+      <line x1="1005" y1="163" x2="1042" y2="163" stroke="#059669" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+
+      <rect x="1050" y="130" width="110" height="66" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+      <text x="1105" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#172033">Continue</text>
+      <text x="1105" y="179" text-anchor="middle" font-size="14" fill="#526176">new work</text>
+    </g>
+
+    <g id="planning-branch">
+      <line x1="500" y1="206" x2="500" y2="239" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#arrow-blue)"/>
+
+      <rect x="405" y="249" width="238" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5"/>
+      <circle cx="432" cy="273" r="13" fill="#d97706"/>
+      <text x="432" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">2</text>
+      <text x="524" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#7c4400">Plan with the Agent</text>
+      <text x="524" y="301" text-anchor="middle" font-size="14" fill="#8a5808">locate, draft, revise summaries</text>
+
+      <line x1="643" y1="284" x2="683" y2="284" stroke="#d97706" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+      <rect x="693" y="249" width="148" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5"/>
+      <circle cx="720" cy="273" r="13" fill="#d97706"/>
+      <text x="720" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">3</text>
+      <text x="777" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#7c4400">Review</text>
+      <text x="777" y="301" text-anchor="middle" font-size="14" fill="#8a5808">boundaries + text</text>
+
+      <line x1="841" y1="284" x2="881" y2="284" stroke="#d97706" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+      <rect x="891" y="249" width="215" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+      <circle cx="918" cy="273" r="13" fill="#2563eb"/>
+      <text x="918" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">4</text>
+      <text x="1000" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#173b7a">You commit</text>
+      <text x="1000" y="301" text-anchor="middle" font-size="14" fill="#2859a8">/midcompact commit</text>
+
+      <line x1="920" y1="249" x2="920" y2="207" stroke="#059669" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+    </g>
+
+    <line x1="40" y1="349" x2="1160" y2="349" stroke="#d8dee8" stroke-width="1.5"/>
+    <text x="40" y="379" font-size="16" fill="#526176">After commit, the dashed planning branch is abandoned. Use <tspan font-weight="700" fill="#172033">/midcompact abort</tspan> instead to return to the anchor without saving a compression state.</text>
+  </g>
+</svg>

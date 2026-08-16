@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">Compression changes the model request, not the stored Pi session</title>
+  <desc id="desc">Raw Pi history appears on the left. A reviewed middle range is kept in storage but represented as one summary in the later context request shown on the right. Other messages remain unchanged.</desc>
+
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="390" fill="#ffffff"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="40" y="43" font-size="27" font-weight="700" fill="#172033">Compression changes the model request, not the stored Pi session</text>
+    <text x="40" y="70" font-size="16" fill="#526176">A reviewed range becomes one summary only when Pi prepares later context for the model.</text>
+    <line x1="40" y1="92" x2="1160" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
+
+    <g id="stored-history">
+      <rect x="40" y="116" width="450" height="218" rx="10" fill="#fbfcfe" stroke="#94a3b8" stroke-width="2"/>
+      <text x="64" y="146" font-size="18" font-weight="700" fill="#172033">Stored Pi session history</text>
+      <text x="466" y="146" text-anchor="end" font-size="14" fill="#526176">unchanged</text>
+
+      <rect x="65" y="164" width="400" height="31" rx="5" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
+      <text x="82" y="185" font-size="14" fill="#172033"><tspan font-weight="700">User</tspan><tspan fill="#526176">  project requirements</tspan></text>
+
+      <rect x="57" y="207" width="416" height="91" rx="7" fill="#fffbeb" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="72" y="225" font-size="12" font-weight="700" fill="#a16207">REVIEWED RANGE: RAW ENTRIES STAY HERE</text>
+      <rect x="65" y="232" width="400" height="24" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="1.4"/>
+      <text x="82" y="249" font-size="13" fill="#172033"><tspan font-weight="700">Assistant</tspan><tspan fill="#526176">  source exploration</tspan></text>
+      <rect x="65" y="263" width="400" height="24" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="1.4"/>
+      <text x="82" y="280" font-size="13" fill="#172033"><tspan font-weight="700">Tools</tspan><tspan fill="#526176">  commands and output</tspan></text>
+
+      <rect x="65" y="304" width="400" height="18" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+      <text x="82" y="318" font-size="12.5" fill="#172033"><tspan font-weight="700">Assistant</tspan><tspan fill="#526176">  final decision remains verbatim</tspan></text>
+    </g>
+
+    <g id="projection-arrow">
+      <line x1="515" y1="226" x2="680" y2="226" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow-blue)"/>
+      <rect x="535" y="184" width="122" height="28" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="596" y="203" text-anchor="middle" font-size="13" font-weight="700" fill="#1d4ed8">context hook</text>
+      <text x="596" y="254" text-anchor="middle" font-size="13" fill="#526176">exact range match</text>
+      <text x="596" y="274" text-anchor="middle" font-size="13" fill="#526176">before a request</text>
+    </g>
+
+    <g id="projected-context">
+      <rect x="710" y="116" width="450" height="218" rx="10" fill="#fbfcfe" stroke="#94a3b8" stroke-width="2"/>
+      <text x="734" y="146" font-size="18" font-weight="700" fill="#172033">Context sent to the model</text>
+      <text x="1136" y="146" text-anchor="end" font-size="14" fill="#047857">smaller request</text>
+
+      <rect x="735" y="164" width="400" height="31" rx="5" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
+      <text x="752" y="185" font-size="14" fill="#172033"><tspan font-weight="700">User</tspan><tspan fill="#526176">  project requirements</tspan></text>
+
+      <rect x="735" y="207" width="400" height="76" rx="7" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+      <text x="752" y="232" font-size="15" font-weight="700" fill="#7c4400">Summary c0001</text>
+      <text x="752" y="254" font-size="13.5" fill="#8a5808">key findings, decisions, validation state</text>
+      <text x="752" y="273" font-size="13.5" fill="#8a5808">from the reviewed exploration</text>
+
+      <rect x="735" y="296" width="400" height="26" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+      <text x="752" y="314" font-size="12.5" fill="#172033"><tspan font-weight="700">Assistant</tspan><tspan fill="#526176">  final decision remains verbatim</tspan></text>
+    </g>
+
+    <line x1="40" y1="354" x2="1160" y2="354" stroke="#d8dee8" stroke-width="1.5"/>
+    <text x="40" y="380" font-size="15.5" fill="#526176">If the extension cannot find the exact reviewed sequence, it sends the raw history unchanged instead of removing uncertain content.</text>
+  </g>
+</svg>

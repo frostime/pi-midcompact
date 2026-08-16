@@ -108,13 +108,12 @@ A Web UI is a possible later enhancement, not part of v0.2.0.
 
 ### Committed-state visibility
 
-A committed state is visible to the human through three independent surfaces:
+A committed state is visible to the human through two independent surfaces:
 
 1. a `registerEntryRenderer` transcript card for the `midcompact-state` custom entry;
-2. a branch-aware `setStatus` indicator (`MC ...`), which disappears when tree navigation moves before the state and reappears when returning;
-3. a persistent label attached to the state entry for Pi's `/tree` selector.
+2. a persistent label attached to the state entry for Pi's `/tree` selector.
 
-These are human-facing only; they do not add normal LLM prompt metadata.
+While a transaction is active, a separate `setStatus` indicator shows draft planning progress. It is cleared after commit or abort. These surfaces are human-facing only; they do not add normal LLM prompt metadata.
 
 ## Persistence and tree behavior
 

@@ -1,78 +1,15 @@
 # pi-midcompact
 
-Branch-aware, reversible mid-context compression for the Pi coding agent.
+**Compress stale parts of a long Pi session without deleting the original history.**
 
-`pi-midcompact` lets a human and Agent selectively summarize stale middle regions of a long session without permanently injecting message IDs into normal prompts and without deleting original session history.
+Long-running work accumulates exploration, command output, rejected approaches, and completed phases. `pi-midcompact` lets you and the Agent replace only the parts you have reviewed with concise summaries, leaving the current task and important decisions in full context.
 
+- Choose exactly which conversation ranges to compress.
+- Review the proposed boundaries and summaries before anything changes.
+- Keep the original Pi session entries available for later recall.
+- Keep compression local to the current session-tree branch.
 
-## Workflow
-
-1. The human runs `/midcompact` at a clean point. This freezes an anchor and captures context-usage awareness.
-2. A maintenance branch is created after the anchor. The Agent loads the packaged skill and uses the thin `midcompact` tool:
-   - `locate` — find readable protocol atoms in the frozen anchor snapshot;
-   - `plan` — add/update/remove/show proposed compression ranges;
-   - `recall` — search or temporarily recover original content from already compressed blocks.
-3. The Agent and human discuss the plan normally. Planning chatter stays on the maintenance branch.
-4. The human can run `/midcompact review` for a linear TUI view of exactly which atoms are proposed for compression and which remain verbatim.
-5. When satisfied, the human runs `/midcompact commit`. The command waits for idle, navigates back to the anchor with `summarize:false`, and appends a branch-local compression state.
-6. Future `context` calls project matching raw ranges into summary messages. The original session entries remain untouched and recallable.
-
-## Commands
-
-```text
-/midcompact          start a transaction at the current leaf
-/midcompact review   inspect/edit the draft in the TUI
-/midcompact status   show current draft or active compression state
-/midcompact commit   commit the reviewed draft
-/midcompact abort    return to the anchor without committing
-```
-
-`/midcompact` intentionally has no percentage or token-budget parameter. If the user wants a particular rough degree of reduction, they tell the Agent conversationally; the telemetry gives the Agent enough scale information to reason about that request.
-
-## Review TUI
-
-The review screen shows a linear representation of the frozen anchor context. Each atom is visibly marked either `KEEP` or with the draft range that owns it.
-
-Controls:
-
-```text
-n/p or ←/→    select proposed range
-↑/↓, j/k      scroll
-PgUp/PgDn     page
-x             expand selected range atoms
-e             edit selected summary
-t             edit selected topic
-d             remove selected range
-Enter/Esc/q   close
-```
-
-This is the default human-review surface. A browser/Web review UI is intentionally deferred until the native TUI has been exercised in real workflows.
-
-## Context telemetry
-
-At transaction start, the extension snapshots Pi's reported context usage. While drafting it reports approximately:
-
-```text
-anchor:                   143k / 200k (71.5%)
-draft selection:           57k -> 1.2k
-estimated saving:          55.8k
-projected if committed:   ~87k / 200k (~43.5%)
-```
-
-The selected-range and projected values are estimates, because a hypothetical projection has not been provider-tokenized yet. The purpose is perception: the Agent should understand whether a proposed draft is small, moderate, or aggressive relative to the whole context.
-
-## Important semantics
-
-- **Branch-local state.** `/tree` to a point before a compression commit restores raw history; returning to a descendant of the committed state restores the projection.
-- **Non-destructive.** Original session entries are never deleted.
-- **No permanent message-ID injection.** Transaction-local atom refs are only exposed on demand during maintenance.
-- **Protocol-safe atoms.** Tool call/result exchanges are kept structurally closed. Unknown or incomplete exchanges fail closed and cannot be compressed.
-- **Semantic policy belongs to the Agent/skill.** No tool name is hard-coded as important or disposable.
-- **Human gate.** The Agent cannot commit; `/midcompact commit` is a user command.
-- **Recall is temporary.** Reading original compressed content does not expand the active projection.
-- **Repeated transactions are supported.** Existing compressed blocks stay protected; later raw context can be compressed incrementally.
-
-## Installation
+## Install
 
 For a local checkout:
 
@@ -80,22 +17,135 @@ For a local checkout:
 pi install /absolute/path/to/pi-midcompact
 ```
 
-Then restart Pi or run `/reload`.
+Restart Pi or run `/reload` after installation. The extension is built for Pi `0.84.x`.
 
-## Compatibility baseline
+## Use It
 
-This version targets Pi **0.84.1** exactly. The registered tool uses only ordinary `ExtensionContext`; tree navigation remains confined to slash-command handlers where Pi exposes `ExtensionCommandContext`.
+Start a transaction at a natural breakpoint: the current work is complete enough to summarize, and Pi is idle. The current point becomes a frozen **anchor**. The Agent plans against that snapshot, so later planning discussion cannot accidentally become part of the compressed working context.
 
-## Known limitations / validation targets
+### 1. Set the compression checkpoint
 
-- Native/automatic Pi `/compact` interoperability still needs broader real-session testing.
-- Atom construction is intentionally conservative, especially for unusual parallel/multi-tool message shapes.
-- Exact message-fingerprint projection can fail open if another `context` extension rewrites the same messages before `pi-midcompact`.
-- Review is TUI-only in v0.2.0; there is no Web UI yet.
-- Locator matching is deterministic text/source/tool-name matching, not embeddings.
-- Existing compressed blocks cannot yet be recursively re-compressed or consolidated.
-- Token sizing uses approximate message estimates for hypothetical draft reductions.
+Run:
 
-## Design references
+```text
+/midcompact
+```
 
-The implementation borrows mechanisms rather than complete architectures from `ttttmr/pi-context`, `Reindeer-AI/pi-context-curator`, `championswimmer/pi-context-prune`, and the separately reviewed `session-prune` prototype.
+Pi creates a temporary transaction after the anchor and tells the Agent how to plan the compression. No conversation is changed yet.
+
+### 2. Discuss what to compress with the Agent
+
+Describe the goal in normal language. For example:
+
+```text
+Compress the early repository exploration and routine command output.
+Keep the user's requirements, the rejected database decision, and the final validation errors verbatim.
+Aim for a moderate reduction, not the smallest possible context.
+```
+
+The Agent locates relevant parts of the frozen conversation, proposes one or more ranges, and writes a summary for each range. You can ask it to preserve a specific message, split a range, or revise a summary.
+
+### 3. Review the proposal
+
+Run:
+
+```text
+/midcompact review
+```
+
+The native TUI displays the frozen conversation as a linear timeline. Each item is marked either `KEEP` or as belonging to a proposed range. Review the range boundaries and the summary that will replace each range.
+
+You can edit a selected summary or topic in the TUI. To change range boundaries or leave an important hole uncompressed, tell the Agent what to keep and ask it to revise the plan, then review it again.
+
+### 4. Commit the reviewed compression
+
+When the plan is correct, run:
+
+```text
+/midcompact commit
+```
+
+This is deliberately a human command. The Agent cannot commit compression itself.
+
+Pi returns to the anchor, discards the temporary planning branch, stores the reviewed compression state, and resumes work from the committed branch. Future model requests receive the selected old ranges as summaries instead of raw messages.
+
+![A compression transaction keeps planning separate from the working branch.](./figures/transaction-lifecycle.svg)
+
+### 5. Continue working or abort
+
+Keep working normally after committing. If you decide not to compress, run:
+
+```text
+/midcompact abort
+```
+
+This returns to the anchor and discards the transaction without changing the active context.
+
+## What the Agent Does
+
+During an active transaction, the Agent uses the `midcompact` tool against the frozen anchor snapshot:
+
+![How the Agent turns semantic judgment into a reviewed compression plan.](./figures/agent-planning.svg)
+
+| Action | Purpose |
+| --- | --- |
+| `locate` | Finds likely conversation landmarks and shows readable previews. |
+| `plan` | Adds, revises, removes, or displays proposed compression ranges and summaries. |
+| `recall` | Searches committed summaries or temporarily retrieves original content from a compressed block. |
+
+The Agent makes semantic decisions: which exploration is stale, which user requirements and decisions must stay visible, and what a useful summary needs to retain. The extension enforces the mechanical rules: ranges cannot overlap, incomplete tool exchanges cannot be compressed, and the Agent cannot bypass the human commit gate.
+
+Temporary references such as `a0007` exist only during planning. They are not inserted into normal prompts or retained as permanent message identifiers.
+
+## What Happens Behind the Scenes
+
+A committed compression does not rewrite or delete the Pi session.
+
+![Compression replaces a reviewed range only in later model requests.](./figures/context-projection.svg)
+
+1. `/midcompact` freezes the current session-tree leaf as the anchor and starts a temporary maintenance branch.
+2. The Agent and you discuss a draft on that branch. This planning chatter is abandoned at commit.
+3. `/midcompact commit` returns to the anchor and saves a branch-local `midcompact-state` entry containing the reviewed ranges and summaries.
+4. Before later model requests, the extension finds the exact selected raw message sequences and projects them into summary messages.
+5. The underlying session entries remain unchanged. If an exact match cannot be found, the extension keeps the raw messages rather than removing uncertain content.
+
+This is why the process is both selective and reversible at the information-access level: a summary saves context, while the source history remains available through recall or the Pi session tree.
+
+## Review Controls
+
+Inside `/midcompact review`:
+
+```text
+n/p or Left/Right  select a proposed range
+Up/Down, j/k       scroll
+PgUp/PgDn          page
+x                  expand the selected range's atoms
+e                  edit the selected summary
+t                  edit the selected topic
+d                  remove the selected range
+Enter/Esc/q        close
+```
+
+## Commands
+
+| Command | Result |
+| --- | --- |
+| `/midcompact` | Starts a transaction at the current session-tree leaf. |
+| `/midcompact review` | Opens the draft review timeline. |
+| `/midcompact commit` | Commits the reviewed draft. Human only. |
+| `/midcompact abort` | Abandons the transaction and returns to the anchor. |
+| `/midcompact status` | Displays the current draft, or the committed compression state on this branch. |
+
+The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
+
+## Guarantees and Limits
+
+- **Original history is retained.** Compression changes what later model requests see, not the stored Pi messages.
+- **State is branch-local.** Navigating with `/tree` to a point before a committed state restores raw history; returning to its descendant restores the projection.
+- **Human review is required.** The Agent can propose a plan but cannot execute `/midcompact commit`.
+- **Tool protocol is protected.** Unknown, incomplete, or orphaned tool exchanges are not compressible.
+- **Repeated transactions work.** Later transactions can compress newly accumulated raw context; existing summaries remain protected.
+- **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
+- **Review is TUI-only.** There is no browser review interface in this version.
+
+For implementation invariants and architecture details, see [DESIGN.md](./DESIGN.md).
