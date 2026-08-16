@@ -1,57 +1,117 @@
 ---
 name: midcompact
-description: Use during an active /midcompact transaction to selectively compress stale middle sections of a long Pi conversation, or later to recall exact details from compressed blocks.
+description: Use during an active /midcompact transaction to plan and draft selective compression of stale middle sections of a long Pi conversation, or independently to retrieve details from previously compressed blocks. Covers how to choose compression ranges, how to negotiate compression depth with the user, and the midcompact tool interface.
 ---
 
 # Midcompact
 
-Use this skill only when a `/midcompact` transaction is active, or when exact information must be recovered from a previously compressed block.
+Use this skill when a `/midcompact start` transaction is active, or when information must be retrieved from a previously compressed block.
 
-## Mental model
+## What compression does
 
-The transaction is based on a frozen anchor snapshot. Maintenance discussion, locator calls, draft revisions, and review happen on a temporary branch. A successful commit returns to the anchor without summarizing that maintenance branch, then stores only the reviewed compression projection.
+Mid-context compaction is **selective replacement** inside one linear conversation, not a restart:
 
-The extension handles session-tree mechanics and protocol safety. You decide semantic value.
+```
+A → B → C → ... → NOW
+      └─ selected slices become summaries; everything else stays verbatim
+```
 
-Do not infer importance from a tool name. A user constraint, approval, correction, decision, or other critical fact may appear inside any message or tool exchange. Inspect actual content.
+Three mechanical facts shape how you work:
 
-## Context awareness
+- **KEEP by omission.** Anything outside a draft range stays verbatim. You declare only what to compress, never what to preserve.
+- **Originals survive.** Session entries stay on disk, and `action="recall"` brings an active committed block back into view. Compression is reversible at the information-access level, not a deletion — but recall returns a readable rendering, not a byte-exact replay, so it is no substitute for keeping something verbatim.
+- **Projection is layered.** Compression applies to what future models see, not to stored history.
 
-The tool reports approximate context telemetry while planning:
+## Who decides what
 
-- anchor usage captured when `/midcompact` started;
-- approximate raw tokens selected by the current draft;
-- approximate summary tokens;
-- approximate whole-context usage if the draft were committed now.
+| Actor | Owns |
+|-------|------|
+| Extension | Session-tree mechanics, projection, protocol safety |
+| You | Semantic judgment: which content may yield to a summary, and what each summary must carry |
+| User | Compression scope and depth; the only actor that can commit |
 
-Treat these numbers as **awareness, not a target**. Do not maximize token reduction or keep adding ranges merely because more compression is possible. Use the scale information together with semantic value and the user's conversational guidance. If the user says they only want a modest reduction, preserve more context; if they want more headroom, look for additional stale regions.
+You cannot commit. `/midcompact commit` is the user's gate. Your output is a proposal.
 
-Projected values are estimates. Prefer semantic correctness over apparent numeric precision.
+## What may be compressed
 
-## Compression workflow
+One conservation law decides every case:
 
-1. Decide which completed or stale regions are candidates for compression.
-2. Use `midcompact(action="locate", ...)` to resolve semantic landmarks to atom refs. Locator results include readable previews; request `detail="full"` when a boundary is ambiguous.
-3. Build a draft with `midcompact(action="plan", op="add", start=..., end=..., summary=...)`.
-   - Use multiple ranges for non-contiguous compression.
-   - To preserve an important atom verbatim inside a broader phase, split the compression into ranges around that atom.
-   - Prefer KEEP-by-omission when uncertain.
-   - After each meaningful draft change, use the returned context telemetry to understand its scale; do not treat it as a quota.
-4. Use `midcompact(action="plan", op="show")` and present the complete proposed plan to the user. Include what each range begins/ends with, not only atom IDs.
-5. Recommend `/midcompact review` when the user wants to inspect the linear anchor timeline, proposed ranges, summaries, and KEEP holes. Incorporate requested changes with `op="update"`, `op="remove"`, additional ranges, or the review UI.
-6. After the user is satisfied, ask them to run `/midcompact commit`. The Agent cannot commit itself. The explicit user command is the commit gate and returns the session tree to the anchor before persisting the projection.
+> Compression must conserve every fact that can still affect the work **in the projected context**. After a range is replaced, each such fact must remain available with sufficient fidelity, either in text left verbatim outside the ranges or in the replacement summary.
 
-A good summary preserves what the next working Agent needs: user intent and constraints, decisions and rationale, relevant file paths/signatures/errors, validation state, rejected approaches when the reason matters, unresolved issues, and the next useful state. Remove repetitive exploration and process noise rather than merely shortening prose.
+Not age. Not token count. Not whether it is a tool call or prose. Two consequences follow:
+
+- **The summary is load-bearing.** When a fact lives only inside a compressed range, omitting it from the summary removes it from the projected context. Recall is a recovery path, not a default carrier.
+- **Some information must not be entrusted to paraphrase.** Exact requirement wording, literal error text, decision-critical evidence, protocol structure. When exact form or provenance matters, keep the source verbatim unless the replacement preserves it with equivalent fidelity.
+
+Illustrative cases, derived from the law:
+
+- Work that reached a conclusion or resolved result, with nothing downstream depending on how it got there → the summary states the outcome, or the concluding atom stays outside the range → compressible.
+- Tool output fully absorbed into the answer that follows it → the answer sits outside the range → a thin summary suffices.
+- A constraint, correction, or approval the user stated once → if the wording itself carries the constraint, keep it verbatim; otherwise the summary must state it explicitly.
+- A rejected approach whose rejection reason still constrains current work → the summary must carry the reason; the exploration around it can go.
+
+**Reverse failure.** Some content looks stale but is the only record of an environment quirk, a version-specific behavior, or a failure mode that will resurface. If you cannot state faithfully what a segment established, you cannot summarize it conservingly — keep it verbatim.
+
+**Your summary becomes the successor.** The next working Agent — likely you, after commit — sees only your summary. Write what it needs to avoid redoing or breaking work: user intent and constraints, decisions and their rationale, file paths and signatures, validation state, unresolved issues, and the next useful state. Cutting repetitive exploration is the goal; shortening prose is not.
+
+## Phase 1 — read, segment, propose, align
+
+**Do not call `plan` until you have presented the semantic candidates and the user has confirmed or adjusted the direction**, unless the user explicitly instructs you to skip the proposal.
+
+1. Read back over the conversation in your current context and segment it semantically — by phase of work, not by message count.
+2. Judge each segment against the conservation law. For each candidate, be able to say where its load-bearing facts would end up.
+3. Present candidates: where each begins and ends, roughly how large it is, and what its summary would carry. Name segments you deliberately excluded when the exclusion is non-obvious.
+4. If scope or depth is still unresolved, ask how deep to go and which regions matter. Depth is the user's decision, not a number you optimize.
+
+`locate` is read-only and may be used sparingly here to confirm a boundary you are about to propose, but not to scan exploratorily. A session that has reached compression is already near its limit: speculative calls, and a plan rebuilt after review, both consume what you are trying to reclaim.
+
+If `/midcompact start` carried an instruction (it arrives as `User focus: ...`), treat it as guidance for whichever of scope and depth it specifies. Still propose, but briefly; ask only what the instruction leaves open.
+
+## Phase 2 — locate, draft, review
+
+1. `action="locate"` to resolve the landmarks you agreed on into atom refs. Results include previews; request `detail="full"` when a boundary is ambiguous.
+2. `action="plan", op="add"` per range — several ranges for non-contiguous compression. To keep one important atom verbatim inside a broader phase, add ranges around it; that is KEEP by omission in practice.
+3. `action="plan", op="show"`, then present the complete plan described by content rather than atom IDs.
+4. Recommend `/midcompact review` when the user wants to inspect the anchor timeline, ranges, summaries, and KEEP holes visually. Apply changes with `op="update"`, `op="remove"`, or new ranges.
+5. Ask the user to run `/midcompact commit` when satisfied.
+
+## Tool interface
+
+**Atoms are not messages.** An atom is the smallest compressible unit. One assistant message containing one or more tool calls, plus its immediately following matching results, forms a single `tool_exchange` atom; you cannot compress half of one.
+
+**Two ref namespaces.** `a0001` is an atom ref, valid only within the current transaction's anchor snapshot — indices shift after every commit, so never reuse one across transactions; re-run `locate`. `c0001` is a compressed block id, stable while that block stays active on the current branch, used by `recall`.
+
+`action="locate"` — pass either `ref` for a direct lookup, or at least one real filter: `pattern`, `tool_name`, or a `source` other than `any`. With none it returns nothing rather than an error. Optional: `direction` (`oldest`/`newest`), `limit` (default 5, max 20), `detail` (`brief`/`full`).
+
+`action="plan"` — `op` defaults to `show`.
+
+| op | Requires |
+|----|----------|
+| `show` | — |
+| `add` | `start`, `end`, `summary`; `topic` optional |
+| `update` | `draft_id` and at least one of `summary`, `topic` |
+| `remove` | `draft_id` |
+
+`op="add"` rejects a range when any of the following holds. These are mechanical constraints, independent of semantic value — a range must satisfy both.
+
+| Condition | Meaning |
+|-----------|---------|
+| Range crosses a protected atom | Split the plan around it. An atom is protected when its tool-call protocol is still open (an incomplete `tool_exchange`, or an orphaned tool result), when it is an existing compressed block, when its message kind is not one the extension can compress, or when its messages have no persistent session entry to anchor to. |
+| Range overlaps an existing draft range | Remove or update that range instead. |
+| `start` occurs after `end` | Refs are positional; order them. |
+| Unknown atom ref | Usually a typo or a ref carried over from an earlier transaction. Re-run `locate` against the current snapshot. |
+
+**Telemetry** accompanies every `plan` result: anchor usage at start, approximate raw and summary tokens for the draft, and projected whole-context usage if committed now. Use it to check the draft against the depth agreed in Phase 1. It is awareness, not a target, and the projections are estimates.
 
 ## Repeated compression
 
-A session may be midcompacted multiple times. Existing compressed blocks remain active and protected; a later transaction can compress newly accumulated raw history around them. Do not attempt to recursively compress an already compressed block in the current version.
+A session may be compacted multiple times. Committed blocks stay active and appear as protected atoms in later snapshots, so they cannot be recompressed. A later transaction compresses raw history accumulated around them.
 
 ## Recall
 
-Compression is reversible at the information-access level. Original session entries remain stored.
+`action="recall"` works whether or not a transaction is active, does not change the projection, and reads blocks active on the current branch.
 
-- `midcompact(action="recall", pattern="...")` searches active compressed block summaries/topics.
-- `midcompact(action="recall", ref="c0001")` temporarily returns the original content for that block.
+- `pattern="..."` searches topics and summaries of active blocks (`limit` default 8, max 20).
+- `ref="c0001"` returns a readable, structure-flattened rendering of that block's messages, truncated if long. On a truncation marker, retry the same ref with `detail="full"`; if that still truncates, inspect the session tree. There is no paging.
 
-Recall does not change the compression projection. Use it when a summary lacks a detail needed for current work.
+Every summary in context states its own block id and the exact recall call for it. Use recall when a summary lacks a detail the current work needs.

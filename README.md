@@ -34,10 +34,14 @@ Start a transaction at a natural breakpoint: the current work is complete enough
 Run:
 
 ```text
-/midcompact
+/midcompact start
 ```
 
-Pi creates a temporary transaction after the anchor and tells the Agent how to plan the compression. No conversation is changed yet.
+Pi asks for confirmation, then creates a temporary transaction after the anchor and tells the Agent how to plan the compression. No conversation is changed yet. You can include the initial scope in the same command:
+
+```text
+/midcompact start Compress the early repository exploration, but keep user requirements verbatim.
+```
 
 ### 2. Discuss what to compress with the Agent
 
@@ -109,7 +113,7 @@ A committed compression does not rewrite or delete the Pi session.
 
 ![Compression replaces a reviewed range only in later model requests.](./figures/context-projection.svg)
 
-1. `/midcompact` freezes the current session-tree leaf as the anchor and starts a temporary maintenance branch.
+1. `/midcompact start [instructions]` freezes the current session-tree leaf as the anchor and starts a temporary maintenance branch.
 2. The Agent and you discuss a draft on that branch. This planning chatter is abandoned at commit.
 3. `/midcompact commit` returns to the anchor and saves a branch-local `midcompact-state` entry containing the reviewed ranges and summaries.
 4. Before later model requests, the extension finds the exact selected raw message sequences and projects them into summary messages.
@@ -136,7 +140,7 @@ Enter/Esc/q        close
 
 | Command | Result |
 | --- | --- |
-| `/midcompact` | Starts a transaction at the current session-tree leaf. |
+| `/midcompact start [instructions]` | Confirms and starts a transaction at the current session-tree leaf, optionally with an initial compression focus. |
 | `/midcompact review` | Opens the draft review timeline. |
 | `/midcompact commit` | Commits the reviewed draft. Human only. |
 | `/midcompact abort` | Abandons the transaction and returns to the anchor. |
@@ -152,4 +156,6 @@ The extension shows planning status in Pi's footer only while a transaction is a
 - **Tool protocol is protected.** Unknown, incomplete, or orphaned tool exchanges are not compressible.
 - **Repeated transactions work.** Later transactions can compress newly accumulated raw context; existing summaries remain protected.
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
+- **Provider and extension interoperability needs more real-session validation.** Unusual message shapes, third-party context-transform ordering, and long-lived exact message fingerprints have not been broadly exercised.
+- **Very long sessions are not stress-tested.** Large review snapshots and repeated block accumulation may eventually require consolidation.
 - **Review is TUI-only.** There is no browser review interface in this version.

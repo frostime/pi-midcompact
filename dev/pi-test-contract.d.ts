@@ -12,6 +12,12 @@ declare module "@earendil-works/pi-ai" {
 }
 
 declare module "@earendil-works/pi-tui" {
+  export interface AutocompleteItem {
+    value: string;
+    label: string;
+    description?: string;
+  }
+
   export interface Component {
     render(width: number): string[];
     invalidate(): void;
@@ -89,6 +95,7 @@ declare module "@earendil-works/pi-coding-agent" {
     on(name: string, handler: (...args: any[]) => unknown): void;
     registerCommand(name: string, def: {
       description?: string;
+      getArgumentCompletions?(prefix: string): import("@earendil-works/pi-tui").AutocompleteItem[] | null | Promise<import("@earendil-works/pi-tui").AutocompleteItem[] | null>;
       handler(args: string, ctx: ExtensionCommandContext): Promise<void>;
     }): void;
     registerTool(def: {
