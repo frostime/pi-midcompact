@@ -2,7 +2,27 @@
   "name": "pi-midcompact",
   "version": "0.2.1",
   "description": "Branch-aware mid-context compression for the Pi coding agent",
+  "author": "frostime",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frostime/pi-midcompact.git"
+  },
+  "homepage": "https://github.com/frostime/pi-midcompact#readme",
+  "bugs": {
+    "url": "https://github.com/frostime/pi-midcompact/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "context",
+    "compression",
+    "session"
+  ],
   "files": [
     "src",
     "skills",
@@ -12,7 +32,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/core.test.mjs test/runtime.test.mjs",
-    "typecheck:contract": "tsc -p tsconfig.test.json --noEmit"
+    "typecheck:contract": "tsc -p tsconfig.test.json --noEmit",
+    "pack:check": "npm pack --dry-run"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "^0.84.1",
@@ -32,6 +53,5 @@
     "skills": [
       "./skills"
     ]
-  },
-  "private": true
+  }
 }

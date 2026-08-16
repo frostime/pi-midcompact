@@ -82,9 +82,9 @@ export default function (pi: ExtensionAPI) {
     draft = undefined;
   });
 
-  pi.on("context", async (event: { messages: MessageLike[] }) => {
+  pi.on("context", async (event) => {
     if (!activeState?.blocks.length) return;
-    return { messages: projectMessages(event.messages, activeState) };
+    return { messages: projectMessages(event.messages as MessageLike[], activeState) as typeof event.messages };
   });
 
   pi.registerCommand("midcompact", {
@@ -432,5 +432,5 @@ function commitNotice(state: CompressionState): string {
 }
 
 function toolResult(text: string) {
-  return { content: [{ type: "text", text }], details: {} };
+  return { content: [{ type: "text" as const, text }], details: {} };
 }

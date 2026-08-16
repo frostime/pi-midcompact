@@ -11,10 +11,16 @@ Long-running work accumulates exploration, command output, rejected approaches, 
 
 ## Install
 
-For a local checkout:
+From npm:
 
 ```bash
 pi install npm:pi-midcompact
+```
+
+From GitHub:
+
+```bash
+pi install git:github.com/frostime/pi-midcompact
 ```
 
 Restart Pi or run `/reload` after installation. The extension is built for Pi `0.84.x`.
