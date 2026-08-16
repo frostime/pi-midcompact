@@ -1,84 +1,117 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
-  <title id="title">A pi-midcompact transaction stays separate until a human commits it</title>
-  <desc id="desc">A working branch reaches a frozen anchor. The agent plans on a temporary lower branch, the user reviews and commits, then a compression state is saved on the working branch before work continues.</desc>
-
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Midcompact transaction lifecycle in the Pi session tree</title>
+  <desc id="desc">A main Pi session tree reaches an anchor. A temporary maintenance branch is used for locate, plan, and human review. On commit the maintenance branch is abandoned, the session returns to the anchor, and a branch-local midcompact-state entry is appended. Earlier raw history remains stored while selected spans are projected as compressed blocks.</desc>
   <defs>
-    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
-    </marker>
-    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
-    </marker>
-    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
-    </marker>
+    <style><![CDATA[
+      text { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .title { font-size: 32px; font-weight: 800; fill: #0f172a; }
+      .subtitle { font-size: 17px; fill: #475569; }
+      .section { font-size: 13px; font-weight: 800; letter-spacing: .08em; fill: #64748b; }
+      .label { font-size: 18px; font-weight: 700; fill: #0f172a; }
+      .label-sm { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .body { font-size: 15px; fill: #334155; }
+      .small { font-size: 13px; fill: #64748b; }
+      .blue { fill:#2563eb; }
+      .green { fill:#047857; }
+      .orange { fill:#c2410c; }
+      .main { stroke:#1e293b; stroke-width:4; fill:none; }
+      .dash { stroke:#94a3b8; stroke-width:3; stroke-dasharray:9 8; fill:none; }
+      .node { fill:#fff; stroke:#334155; stroke-width:3; }
+      .anchor { fill:#eff6ff; stroke:#2563eb; stroke-width:4; }
+      .state { fill:#ecfdf5; stroke:#10b981; stroke-width:3; }
+      .maint { fill:#f8fafc; stroke:#94a3b8; stroke-width:2.5; stroke-dasharray:10 8; }
+      .step { fill:#fff; stroke:#cbd5e1; stroke-width:2; }
+      .orangeBox { fill:#fff7ed; stroke:#fb923c; stroke-width:2; }
+      .blueBox { fill:#eff6ff; stroke:#93c5fd; stroke-width:2; }
+      .greenBox { fill:#ecfdf5; stroke:#86efac; stroke-width:2; }
+      .legend { fill:#f8fafc; stroke:#cbd5e1; stroke-width:1.5; }
+    ]]></style>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#10b981"/></marker>
   </defs>
 
-  <rect width="1200" height="420" fill="#ffffff"/>
-  <g font-family="Arial, Helvetica, sans-serif">
-    <text x="40" y="43" font-size="27" font-weight="700" fill="#172033">A compression transaction stays separate until you commit it</text>
-    <text x="40" y="70" font-size="16" fill="#526176">The anchor freezes a reviewable snapshot. Planning is temporary; only the reviewed state joins the working branch.</text>
-    <line x1="40" y1="92" x2="1160" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
+  <rect width="1400" height="900" fill="#fff"/>
+  <text x="55" y="62" class="title">A midcompact transaction lives in the session tree</text>
+  <text x="55" y="92" class="subtitle">Planning happens on a temporary branch. Commit returns to the anchor and saves only branch-local compression state.</text>
+  <line x1="55" y1="114" x2="1345" y2="114" stroke="#e2e8f0" stroke-width="1.5"/>
 
-    <text x="40" y="159" font-size="15" font-weight="700" fill="#526176">WORKING BRANCH</text>
-    <text x="40" y="284" font-size="15" font-weight="700" fill="#a16207">TEMPORARY PLANNING BRANCH</text>
+  <!-- Main tree -->
+  <text x="70" y="150" class="section">MAIN SESSION TREE</text>
+  <line x1="245" y1="190" x2="245" y2="785" class="main"/>
+  <line x1="245" y1="230" x2="245" y2="305" class="dash"/>
 
-    <g id="working-branch">
-      <rect x="170" y="130" width="190" height="66" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
-      <text x="265" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#172033">Earlier work</text>
-      <text x="265" y="179" text-anchor="middle" font-size="14" fill="#526176">raw history remains stored</text>
+  <circle cx="245" cy="190" r="16" class="node"/>
+  <text x="285" y="196" class="label">T1 · session start</text>
 
-      <line x1="360" y1="163" x2="405" y2="163" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <circle cx="245" cy="320" r="16" class="node"/>
+  <text x="285" y="326" class="label">T20 · earlier work</text>
 
-      <rect x="415" y="120" width="170" height="86" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
-      <circle cx="447" cy="146" r="13" fill="#2563eb"/>
-      <text x="447" y="151" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">1</text>
-      <text x="500" y="153" text-anchor="middle" font-size="18" font-weight="700" fill="#173b7a">Anchor</text>
-      <text x="500" y="178" text-anchor="middle" font-size="14" fill="#2859a8">/midcompact freezes</text>
-      <text x="500" y="195" text-anchor="middle" font-size="14" fill="#2859a8">this checkpoint</text>
+  <circle cx="245" cy="405" r="16" class="node"/>
+  <text x="285" y="411" class="label">T35 · more work</text>
 
-      <line x1="585" y1="163" x2="825" y2="163" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <circle cx="245" cy="505" r="23" class="anchor"/>
+  <polygon points="245,489 249,499 260,499 251,506 255,517 245,511 235,517 239,506 230,499 241,499" fill="#2563eb"/>
+  <text x="290" y="512" class="label blue">T50 · anchor</text>
+  <text x="290" y="537" class="small blue">/midcompact freezes the snapshot here</text>
 
-      <rect x="835" y="130" width="170" height="66" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2.5"/>
-      <text x="920" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#065f46">Compression state</text>
-      <text x="920" y="179" text-anchor="middle" font-size="14" fill="#047857">reviewed summaries saved</text>
+  <!-- maintenance branch -->
+  <path d="M268 505 H 575" class="dash"/>
+  <rect x="575" y="205" width="725" height="430" rx="24" class="maint"/>
+  <text x="610" y="242" class="label">Temporary maintenance branch</text>
+  <text x="610" y="268" class="body">The Agent can discuss, locate, revise, and ask you to review without polluting the future working context.</text>
 
-      <line x1="1005" y1="163" x2="1042" y2="163" stroke="#059669" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <rect x="615" y="315" width="180" height="82" rx="16" class="step"/>
+  <circle cx="646" cy="343" r="14" fill="#2563eb"/><text x="646" y="348" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">1</text>
+  <text x="676" y="350" class="label-sm">locate</text>
+  <text x="635" y="378" class="small">resolve semantic landmarks</text>
+  <text x="635" y="397" class="small">to temporary refs</text>
 
-      <rect x="1050" y="130" width="110" height="66" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
-      <text x="1105" y="157" text-anchor="middle" font-size="17" font-weight="700" fill="#172033">Continue</text>
-      <text x="1105" y="179" text-anchor="middle" font-size="14" fill="#526176">new work</text>
-    </g>
+  <line x1="795" y1="356" x2="840" y2="356" stroke="#64748b" stroke-width="3" marker-end="url(#arrow-slate)"/>
 
-    <g id="planning-branch">
-      <line x1="500" y1="206" x2="500" y2="239" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#arrow-blue)"/>
+  <rect x="850" y="315" width="180" height="82" rx="16" class="step"/>
+  <circle cx="881" cy="343" r="14" fill="#d97706"/><text x="881" y="348" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">2</text>
+  <text x="911" y="350" class="label-sm">plan</text>
+  <text x="870" y="378" class="small">select ranges + KEEP holes</text>
+  <text x="870" y="397" class="small">write summaries</text>
 
-      <rect x="405" y="249" width="238" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5"/>
-      <circle cx="432" cy="273" r="13" fill="#d97706"/>
-      <text x="432" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">2</text>
-      <text x="524" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#7c4400">Plan with the Agent</text>
-      <text x="524" y="301" text-anchor="middle" font-size="14" fill="#8a5808">locate, draft, revise summaries</text>
+  <line x1="1030" y1="356" x2="1075" y2="356" stroke="#64748b" stroke-width="3" marker-end="url(#arrow-slate)"/>
 
-      <line x1="643" y1="284" x2="683" y2="284" stroke="#d97706" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <rect x="1085" y="315" width="180" height="82" rx="16" class="orangeBox"/>
+  <circle cx="1116" cy="343" r="14" fill="#ea580c"/><text x="1116" y="348" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">3</text>
+  <text x="1146" y="350" class="label-sm">human review</text>
+  <text x="1105" y="378" class="small">inspect ranges + summaries</text>
+  <text x="1105" y="397" class="small">revise before commit</text>
 
-      <rect x="693" y="249" width="148" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5"/>
-      <circle cx="720" cy="273" r="13" fill="#d97706"/>
-      <text x="720" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">3</text>
-      <text x="777" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#7c4400">Review</text>
-      <text x="777" y="301" text-anchor="middle" font-size="14" fill="#8a5808">boundaries + text</text>
+  <rect x="615" y="445" width="650" height="120" rx="18" class="blueBox"/>
+  <text x="640" y="477" class="label-sm blue">Commit semantics</text>
+  <text x="640" y="507" class="body">/midcompact commit waits for idle, navigates back to T50 with summarize=false,</text>
+  <text x="640" y="533" class="body">then appends one midcompact-state entry on the main branch.</text>
+  <text x="640" y="559" class="small">The maintenance conversation remains in the session file as an abandoned branch, but never enters future model context.</text>
 
-      <line x1="841" y1="284" x2="881" y2="284" stroke="#d97706" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <!-- commit back -->
+  <path d="M940 635 V 680 H 310" class="dash" marker-end="url(#arrow-green)"/>
+  <text x="805" y="670" class="small green">commit only the state</text>
 
-      <rect x="891" y="249" width="215" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
-      <circle cx="918" cy="273" r="13" fill="#2563eb"/>
-      <text x="918" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">4</text>
-      <text x="1000" y="278" text-anchor="middle" font-size="17" font-weight="700" fill="#173b7a">You commit</text>
-      <text x="1000" y="301" text-anchor="middle" font-size="14" fill="#2859a8">/midcompact commit</text>
+  <!-- state entry -->
+  <rect x="95" y="650" width="150" height="64" rx="16" class="state"/>
+  <text x="170" y="688" text-anchor="middle" class="label-sm green">state entry</text>
+  <line x1="245" y1="682" x2="270" y2="682" stroke="#10b981" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <text x="285" y="677" class="label-sm green">midcompact-state</text>
+  <text x="285" y="701" class="small green">controls the projected view of earlier history</text>
 
-      <line x1="920" y1="249" x2="920" y2="207" stroke="#059669" stroke-width="2.5" marker-end="url(#arrow-green)"/>
-    </g>
+  <circle cx="245" cy="760" r="16" class="node"/>
+  <text x="285" y="766" class="label">T80 · new work continues</text>
 
-    <line x1="40" y1="349" x2="1160" y2="349" stroke="#d8dee8" stroke-width="1.5"/>
-    <text x="40" y="379" font-size="16" fill="#526176">After commit, the dashed planning branch is abandoned. Use <tspan font-weight="700" fill="#172033">/midcompact abort</tspan> instead to return to the anchor without saving a compression state.</text>
-  </g>
+  <!-- compressed span annotations: state controls these earlier spans -->
+  <path d="M170 216 h-18 v92 h18" stroke="#f59e0b" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <text x="62" y="255" class="label-sm orange">c0001</text><text x="52" y="278" class="small orange">projected summary</text>
+  <path d="M170 337 h-18 v54 h18" stroke="#f59e0b" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <text x="62" y="365" class="label-sm orange">c0002</text>
+  <path d="M170 422 h-18 v54 h18" stroke="#f59e0b" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <text x="62" y="450" class="label-sm orange">c0003</text>
+
+  <rect x="70" y="805" width="1260" height="62" rx="16" class="legend"/>
+  <text x="95" y="833" class="label-sm">Important:</text>
+  <text x="185" y="833" class="body">the orange blocks are projection rules, not replacements in the stored tree.</text>
+  <text x="185" y="857" class="body">Rollback to a point before the state entry and the original uncompressed history is visible again.</text>
 </svg>

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
-  <title id="title">Compression changes the model request, not the stored Pi session</title>
+  <title id="title">Midcompact changes the projected model context, not the stored Pi session</title>
   <desc id="desc">Raw Pi history appears on the left. A reviewed middle range is kept in storage but represented as one summary in the later context request shown on the right. Other messages remain unchanged.</desc>
 
   <defs>
@@ -10,8 +10,8 @@
 
   <rect width="1200" height="390" fill="#ffffff"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <text x="40" y="43" font-size="27" font-weight="700" fill="#172033">Compression changes the model request, not the stored Pi session</text>
-    <text x="40" y="70" font-size="16" fill="#526176">A reviewed range becomes one summary only when Pi prepares later context for the model.</text>
+    <text x="40" y="43" font-size="27" font-weight="700" fill="#172033">Midcompact changes the projected model context, not the stored Pi session</text>
+    <text x="40" y="70" font-size="16" fill="#526176">Raw session history stays intact. Reviewed ranges are replaced by summaries only in the projected context sent to the model.</text>
     <line x1="40" y1="92" x2="1160" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
 
     <g id="stored-history">

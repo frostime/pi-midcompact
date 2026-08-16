@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1300" height="450" viewBox="0 0 1300 450" role="img" aria-labelledby="title desc">
-  <title id="title">How the Agent creates a compression draft from a conversation slice</title>
+  <title id="title">How the Agent locates a slice without injecting message IDs</title>
   <desc id="desc">A continuous frozen conversation is shown without IDs on its units. The agent identifies a start and end landmark, locate returns temporary references for both, and plan combines those references, the slice between them, and a summary into a draft ready for human review.</desc>
 
   <defs>
@@ -10,8 +10,8 @@
 
   <rect width="1300" height="450" fill="#ffffff"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <text x="40" y="43" font-size="28" font-weight="700" fill="#172033">How the Agent creates a compression draft</text>
-    <text x="40" y="70" font-size="16" fill="#526176">Conversation units stay readable. Temporary references appear only after the Agent has located the two boundaries of a candidate slice.</text>
+    <text x="40" y="43" font-size="28" font-weight="700" fill="#172033">How the Agent locates a slice without injecting message IDs</text>
+    <text x="40" y="70" font-size="16" fill="#526176">Normal conversation stays untouched. The Agent describes a semantic landmark, locate resolves it to a temporary ref, and only those refs are used to define a candidate slice.</text>
     <line x1="40" y1="92" x2="1260" y2="92" stroke="#d8dee8" stroke-width="1.5"/>
 
     <text x="40" y="120" font-size="14" font-weight="700" fill="#526176">FROZEN CONVERSATION SNAPSHOT</text>
@@ -113,6 +113,6 @@
     </g>
 
     <line x1="40" y1="416" x2="1260" y2="416" stroke="#d8dee8" stroke-width="1.5"/>
-    <text x="40" y="440" font-size="14" fill="#8a5808">Temporary refs identify nodes only within this frozen planning snapshot; they are never inserted into normal conversation messages.</text>
+    <text x="40" y="440" font-size="14" fill="#8a5808">No message IDs are injected into normal conversation. Temporary refs exist only inside this frozen planning transaction and disappear with the maintenance branch.</text>
   </g>
 </svg>

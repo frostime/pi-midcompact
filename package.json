@@ -7,9 +7,7 @@
     "src",
     "skills",
     "README.md",
-    "figures",
-    "DESIGN.md",
-    "REVIEW-VALIDATION.md"
+    "figures"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

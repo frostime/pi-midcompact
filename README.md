@@ -14,7 +14,7 @@ Long-running work accumulates exploration, command output, rejected approaches, 
 For a local checkout:
 
 ```bash
-pi install /absolute/path/to/pi-midcompact
+pi install npm:pi-midcompact
 ```
 
 Restart Pi or run `/reload` after installation. The extension is built for Pi `0.84.x`.
@@ -147,5 +147,3 @@ The extension shows planning status in Pi's footer only while a transaction is a
 - **Repeated transactions work.** Later transactions can compress newly accumulated raw context; existing summaries remain protected.
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
 - **Review is TUI-only.** There is no browser review interface in this version.
-
-For implementation invariants and architecture details, see [DESIGN.md](./DESIGN.md).
