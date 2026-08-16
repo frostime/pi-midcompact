@@ -29,6 +29,7 @@ class FakePi {
     this.tools = new Map();
     this.entryRenderers = new Map();
     this.labels = new Map();
+    this.sentUserMessages = [];
     this.counter = 100;
   }
   on(name, handler) {
@@ -52,6 +53,7 @@ class FakePi {
     this.sm.leafId = id;
   }
   async sendUserMessage(content) {
+    this.sentUserMessages.push(content);
     const id = `x${++this.counter}`;
     this.sm.entries.push({ type: "message", id, parentId: this.sm.leafId, message: { role: "user", content, timestamp: this.counter } });
     this.sm.leafId = id;
@@ -74,6 +76,8 @@ function makeBaseCtx(sm) {
     ui: {
       messages: [],
       reviewFrames: [],
+      confirmations: [],
+      confirmResult: true,
       statuses: new Map(),
       theme: {
         fg(_color, text) { return text; },
@@ -84,7 +88,10 @@ function makeBaseCtx(sm) {
       setStatus(key, text) { if (text === undefined) this.statuses.delete(key); else this.statuses.set(key, text); },
       async editor(_title, prefill) { return prefill; },
       async input(_title, placeholder) { return placeholder; },
-      async confirm() { return true; },
+      async confirm(title, message) {
+        this.confirmations.push({ title, message });
+        return this.confirmResult;
+      },
       async custom(factory) {
         let result = { action: "close" };
         const tui = { terminal: { rows: 30, columns: 120 }, requestRender() {} };
@@ -118,6 +125,50 @@ function makeCommandCtx(pi, sm, base) {
 const user = (text, timestamp) => ({ role: "user", content: text, timestamp });
 const assistant = (text, timestamp) => ({ role: "assistant", content: [{ type: "text", text }], timestamp });
 
+function setupRuntime(entries) {
+  const sm = new FakeSessionManager(entries, entries.at(-1)?.id ?? null);
+  const pi = new FakePi(sm);
+  const toolCtx = makeBaseCtx(sm);
+  const commandCtx = makeCommandCtx(pi, sm, toolCtx);
+  extensionFactory(pi);
+  return { sm, pi, toolCtx, commandCtx };
+}
+
+test("/midcompact start confirms and forwards an initial focus", async () => {
+  const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start Compress old exploration only", commandCtx);
+
+  assert.equal(toolCtx.ui.confirmations.length, 1);
+  assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
+  assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
+});
+
+test("/midcompact start cancellation leaves the session at its anchor", async () => {
+  const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
+  const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
+  toolCtx.ui.confirmResult = false;
+
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+
+  assert.equal(sm.leafId, "e1");
+  assert.equal(entries.some(e => e.customType === "midcompact-transaction"), false);
+  assert.equal(pi.sentUserMessages.length, 0);
+  assert.match(toolCtx.ui.messages.at(-1).text, /cancelled/);
+});
+
+test("/midcompact completes only the subcommand token", () => {
+  const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
+  const { pi } = setupRuntime(entries);
+  const command = pi.commands.get("midcompact");
+
+  assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review"]);
+  assert.equal(command.getArgumentCompletions("start "), null);
+});
+
 test("/midcompact transaction commits state at anchor and tree rollback restores raw history", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("old requirement", 1) },
@@ -131,7 +182,7 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   extensionFactory(pi);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
 
-  await pi.commands.get("midcompact").handler("", commandCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
   assert.notEqual(sm.leafId, "e3");
   assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), true);
 
@@ -198,7 +249,7 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   entries.push({ type: "message", id: newAssistantId, parentId: sm.leafId, message: assistant("new phase exploration", pi.counter) });
   sm.leafId = newAssistantId;
 
-  await pi.commands.get("midcompact").handler("", commandCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
   const secondLocate = await tool.execute("tc6", { action: "locate", pattern: "new phase", source: "user" }, null, null, toolCtx);
   assert.match(secondLocate.content[0].text, /a0003/);
   const protectedOld = await tool.execute("tc7", { action: "locate", ref: "a0001", detail: "full" }, null, null, toolCtx);

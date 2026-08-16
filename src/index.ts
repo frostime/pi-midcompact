@@ -6,6 +6,7 @@ import {
   type ExtensionContext,
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 import { buildAtoms, formatLocatedAtom, locateAtoms } from "./atoms.js";
 import { messageText } from "./messages.js";
@@ -89,9 +90,23 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("midcompact", {
     description: "Start, review, commit, inspect, or abort a branch-isolated mid-context compression transaction",
+    getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
+      const query = prefix.trimStart().toLowerCase();
+      if (/\s/.test(query)) return null;
+      const items: AutocompleteItem[] = [
+        { value: "start", label: "start — Start a new midcompact transaction at the current anchor" },
+        { value: "abort", label: "abort — Abort the active transaction and return to anchor" },
+        { value: "commit", label: "commit — Commit the current draft to the branch state" },
+        { value: "review", label: "review — Open interactive UI to inspect and edit the draft" },
+        { value: "status", label: "status — Show current transaction and draft status" },
+      ];
+      const filtered = items.filter((item) => item.value.startsWith(query));
+      return filtered.length > 0 ? filtered : null;
+    },
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
-      const sub = args.trim().toLowerCase();
+      const rawArgs = args.trim();
+      const sub = rawArgs.toLowerCase();
 
       if (sub === "abort") {
         const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
@@ -164,8 +179,12 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      if (sub) {
-        ctx.ui.notify("Usage: /midcompact | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort", "warning");
+      const startMatch = rawArgs.match(/^start\s+/i);
+      const isStart = sub === "start" || !!startMatch;
+      const customInstructions = startMatch ? rawArgs.slice(startMatch[0].length).trim() : undefined;
+
+      if (!isStart) {
+        ctx.ui.notify("Usage: /midcompact start [instructions] | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort", "warning");
         return;
       }
 
@@ -178,6 +197,16 @@ export default function (pi: ExtensionAPI) {
       if (!anchorEntryId) {
         ctx.ui.notify("Cannot start midcompact without a session leaf.", "error");
         return;
+      }
+      if (ctx.hasUI) {
+        const ok = await ctx.ui.confirm(
+          "Start midcompact transaction?",
+          "The current context snapshot will be frozen as an anchor. You will need to review and explicitly commit (/midcompact commit) or abort (/midcompact abort) later.",
+        );
+        if (!ok) {
+          ctx.ui.notify("Midcompact start cancelled.", "info");
+          return;
+        }
       }
       transaction = {
         version: 1,
@@ -192,13 +221,19 @@ export default function (pi: ExtensionAPI) {
       updateStatus(ctx, transaction, draft);
       const awareness = formatTelemetry(draftTelemetry(transaction, draft));
       ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId}. ${compactUsage(transaction)}`, "info");
-      pi.sendUserMessage([
+      const promptLines = [
         "A mid-compaction transaction is active on a frozen anchor snapshot.",
         awareness,
         "These numbers are context awareness, not a target or optimization constraint. Use them to judge the scale of proposed compression while preserving semantic value.",
+      ];
+      if (customInstructions) {
+        promptLines.push(`User focus: ${customInstructions}`);
+      }
+      promptLines.push(
         "Load the `midcompact` skill, use the `midcompact` tool to locate and draft compression ranges, and present the draft for user review.",
         "The Agent cannot commit. The user can inspect `/midcompact review`, then explicitly run `/midcompact commit` when satisfied.",
-      ].join("\n"));
+      );
+      pi.sendUserMessage(promptLines.join("\n"));
     },
   });
 
@@ -210,7 +245,7 @@ export default function (pi: ExtensionAPI) {
     async execute(_id: string, params: ParamsType, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
       try {
         if (params.action === "recall") return toolResult(handleRecall(params, ctx));
-        if (!transaction) return toolResult("No active midcompact transaction. Ask the user to run `/midcompact` first.");
+        if (!transaction) return toolResult("No active midcompact transaction. Ask the user to run `/midcompact start` first.");
         const snapshot = buildAnchorSnapshot(ctx.sessionManager, transaction);
         if (params.action === "locate") return toolResult(handleLocate(params, snapshot.atoms));
         if (params.action === "plan") {

@@ -52,7 +52,7 @@
   <circle cx="245" cy="505" r="23" class="anchor"/>
   <polygon points="245,489 249,499 260,499 251,506 255,517 245,511 235,517 239,506 230,499 241,499" fill="#2563eb"/>
   <text x="290" y="512" class="label blue">T50 · anchor</text>
-  <text x="290" y="537" class="small blue">/midcompact freezes the snapshot here</text>
+  <text x="290" y="537" class="small blue">/midcompact start freezes here</text>
 
   <!-- maintenance branch -->
   <path d="M268 505 H 575" class="dash"/>
