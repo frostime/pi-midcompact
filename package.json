@@ -1,0 +1,34 @@
+{
+  "name": "pi-midcompact",
+  "version": "0.1.1",
+  "description": "Branch-aware mid-context compression for the Pi coding agent",
+  "type": "module",
+  "files": [
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/core.test.mjs test/runtime.test.mjs",
+    "typecheck:contract": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "0.84.1",
+    "@earendil-works/pi-coding-agent": "0.84.1"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.84.1",
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "typescript": "^5.9.3"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "private": true
+}
