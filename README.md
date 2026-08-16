@@ -4,12 +4,6 @@ Branch-aware, reversible mid-context compression for the Pi coding agent.
 
 `pi-midcompact` lets a human and Agent selectively summarize stale middle regions of a long session without permanently injecting message IDs into normal prompts and without deleting original session history.
 
-## v0.2.0 highlights
-
-- **Context awareness, not quotas.** `/midcompact` freezes Pi's current context usage at the anchor. Every draft update reports approximate selected size, estimated savings, and projected whole-context usage if committed now. These numbers are informational; there is no target percentage or hard compression objective.
-- **Linear review TUI.** `/midcompact review` shows the anchor snapshot as a linear atom stream with `KEEP` and draft-range markings, plus the selected range's summary and token estimates. The user can edit the summary/topic or remove a range from the review screen.
-- **Visible committed state.** A committed `midcompact-state` gets a durable transcript renderer, a branch-aware status indicator, and a label for Pi's `/tree` selector.
-- **Incremental repeat compression.** A later `/midcompact` transaction preserves earlier compressed blocks and can compress newly accumulated raw regions. Existing compressed summaries remain protected from recursive compression.
 
 ## Workflow
 
