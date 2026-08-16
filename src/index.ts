@@ -1,4 +1,4 @@
-import { Type, type Static } from "@earendil-works/pi-ai";
+import { StringEnum, Type, type Static } from "@earendil-works/pi-ai";
 import {
   buildSessionContext,
   type ExtensionAPI,
@@ -37,25 +37,15 @@ const TOOL_DESCRIPTION = "Locate, draft, or recall mid-context compression. Use 
 const STATUS_KEY = "midcompact";
 
 const Params = Type.Object({
-  action: Type.Union([
-    Type.Literal("locate"),
-    Type.Literal("plan"),
-    Type.Literal("recall"),
-  ]),
+  action: StringEnum(["locate", "plan", "recall"] as const),
   ref: Type.Optional(Type.String()),
   pattern: Type.Optional(Type.String()),
-  source: Type.Optional(Type.Union([
-    Type.Literal("any"),
-    Type.Literal("user"),
-    Type.Literal("assistant"),
-    Type.Literal("tool_call"),
-    Type.Literal("tool_result"),
-  ])),
+  source: Type.Optional(StringEnum(["any", "user", "assistant", "tool_call", "tool_result"] as const)),
   tool_name: Type.Optional(Type.String()),
-  direction: Type.Optional(Type.Union([Type.Literal("oldest"), Type.Literal("newest")])),
+  direction: Type.Optional(StringEnum(["oldest", "newest"] as const)),
   limit: Type.Optional(Type.Number()),
-  detail: Type.Optional(Type.Union([Type.Literal("brief"), Type.Literal("full")])),
-  op: Type.Optional(Type.Union([Type.Literal("show"), Type.Literal("add"), Type.Literal("update"), Type.Literal("remove")])),
+  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
+  op: Type.Optional(StringEnum(["show", "add", "update", "remove"] as const)),
   start: Type.Optional(Type.String()),
   end: Type.Optional(Type.String()),
   draft_id: Type.Optional(Type.String()),
@@ -80,7 +70,7 @@ export default function (pi: ExtensionAPI) {
     const restored = restoreTransaction(branch);
     transaction = restored.transaction;
     draft = restored.draft ?? (transaction ? emptyDraft(transaction.id) : undefined);
-    updateStatus(ctx, activeState, transaction, draft);
+    updateStatus(ctx, transaction, draft);
   }
 
   pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
@@ -117,7 +107,7 @@ export default function (pi: ExtensionAPI) {
         }
         transaction = undefined;
         draft = undefined;
-        updateStatus(ctx, activeState, transaction, draft);
+        updateStatus(ctx, transaction, draft);
         ctx.ui.notify("Midcompact transaction aborted; returned to anchor.", "info");
         return;
       }
@@ -148,7 +138,7 @@ export default function (pi: ExtensionAPI) {
         activeState = nextState;
         transaction = undefined;
         draft = undefined;
-        updateStatus(ctx, activeState, transaction, draft);
+        updateStatus(ctx, transaction, draft);
         ctx.ui.notify(commitNotice(nextState), "info");
         return;
       }
@@ -199,7 +189,7 @@ export default function (pi: ExtensionAPI) {
       draft = emptyDraft(transaction.id);
       pi.appendEntry(TXN_ENTRY, transaction);
       pi.appendEntry(DRAFT_ENTRY, draft);
-      updateStatus(ctx, activeState, transaction, draft);
+      updateStatus(ctx, transaction, draft);
       const awareness = formatTelemetry(draftTelemetry(transaction, draft));
       ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId}. ${compactUsage(transaction)}`, "info");
       pi.sendUserMessage([
@@ -227,7 +217,7 @@ export default function (pi: ExtensionAPI) {
           draft ??= emptyDraft(transaction.id);
           draft = handlePlan(params, draft, snapshot.atoms);
           pi.appendEntry(DRAFT_ENTRY, draft);
-          updateStatus(ctx, activeState, transaction, draft);
+          updateStatus(ctx, transaction, draft);
           return toolResult(formatDraft(draft, draftTelemetry(transaction, draft)));
         }
         return toolResult("Unknown action.");
@@ -263,7 +253,7 @@ export default function (pi: ExtensionAPI) {
         if (value === undefined || !value.trim()) continue;
         draft = updateDraftRange(currentPlan, range.id, { summary: value.trim() });
         pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, activeState, currentTx, draft);
+        updateStatus(ctx, currentTx, draft);
         continue;
       }
       if (action.action === "edit-topic") {
@@ -271,7 +261,7 @@ export default function (pi: ExtensionAPI) {
         if (value === undefined) continue;
         draft = updateDraftRange(currentPlan, range.id, { topic: value.trim() || undefined });
         pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, activeState, currentTx, draft);
+        updateStatus(ctx, currentTx, draft);
         continue;
       }
       if (action.action === "remove") {
@@ -279,7 +269,7 @@ export default function (pi: ExtensionAPI) {
         if (!approved) continue;
         draft = removeDraftRange(currentPlan, range.id);
         pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, activeState, currentTx, draft);
+        updateStatus(ctx, currentTx, draft);
       }
     }
   }
@@ -402,7 +392,6 @@ function nextBlockNumber(blocks: CompressionBlock[]): number {
 
 function updateStatus(
   ctx: ExtensionContext,
-  state: CompressionState | undefined,
   tx: TransactionState | undefined,
   currentDraft: DraftPlan | undefined,
 ): void {
@@ -414,14 +403,6 @@ function updateStatus(
       STATUS_KEY,
       `${theme.fg("accent", "MC planning")} · ${currentDraft?.ranges.length ?? 0} ranges${projected}`,
     );
-    return;
-  }
-  if (state?.blocks.length) {
-    const saved = state.blocks.reduce(
-      (sum, block) => sum + Math.max(0, block.originalApproxTokens - block.compressedApproxTokens),
-      0,
-    );
-    ctx.ui.setStatus(STATUS_KEY, `${theme.fg("success", "MC")} ${state.blocks.length} blocks · ~${formatTokenCount(saved)} saved`);
     return;
   }
   ctx.ui.setStatus(STATUS_KEY, undefined);

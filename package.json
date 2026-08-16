@@ -16,15 +16,15 @@
     "typecheck:contract": "tsc -p tsconfig.test.json --noEmit"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "0.84.1",
-    "@earendil-works/pi-coding-agent": "0.84.1",
-    "@earendil-works/pi-tui": "0.84.1"
+    "@earendil-works/pi-ai": "^0.84.1",
+    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@earendil-works/pi-tui": "^0.84.1"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.84.1",
-    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@earendil-works/pi-ai": "^0.84.1",
+    "@earendil-works/pi-coding-agent": "^0.84.1",
     "typescript": "^5.9.3",
-    "@earendil-works/pi-tui": "0.84.1"
+    "@earendil-works/pi-tui": "^0.84.1"
   },
   "pi": {
     "extensions": [

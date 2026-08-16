@@ -7,3 +7,5 @@ export const Type = {
   String: (value = {}) => schema("string", value),
   Number: (value = {}) => schema("number", value),
 };
+
+export const StringEnum = (values, options = {}) => schema("string-enum", { values, ...options });

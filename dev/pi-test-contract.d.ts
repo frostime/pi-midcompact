@@ -7,6 +7,7 @@ declare module "@earendil-works/pi-ai" {
     String(): unknown;
     Number(): unknown;
   };
+  export function StringEnum<T extends readonly string[]>(values: T, options?: { description?: string; default?: T[number] }): unknown;
   export type Static<T> = any;
 }
 

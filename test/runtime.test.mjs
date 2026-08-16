@@ -162,7 +162,7 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   assert.equal(committedEntry.parentId, "e3");
   assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), false);
   assert.match(pi.labels.get(committedEntry.id), /^midcompact/);
-  assert.match(toolCtx.ui.statuses.get("midcompact"), /^MC 1 blocks/);
+  assert.equal(toolCtx.ui.statuses.has("midcompact"), false);
   assert.ok(pi.entryRenderers.has("midcompact-state"));
   assert.equal(committedEntry.data.lastCommit.anchorUsage.percent, 70);
   assert.equal(committedEntry.data.lastCommit.anchorUsage.contextWindow, 100000);
