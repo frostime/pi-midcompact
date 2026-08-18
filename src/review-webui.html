@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Midcompact Review</title>
+<script>
+  // Apply theme before first paint to avoid flash.
+  try {
+    var t = localStorage.getItem('midcompact-theme');
+    if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #11151f;
+    --panel-2: #161b28;
+    --elev: #1d2333;
+    --line: #232a3d;
+    --line-soft: #1a2032;
+    --fg: #e6e9f2;
+    --fg-dim: #8f9ab4;
+    --fg-mute: #5f6a84;
+    --accent: #7aa2f7;
+    --accent-2: #bb9af7;
+    --keep: #9ece6a;
+    --range: #7dcfff;
+    --warn: #e0af68;
+    --danger: #f7768e;
+    --mark: rgba(224,175,104,.28);
+    --shadow: 0 10px 34px rgba(0,0,0,.45);
+    --ring: rgba(122,162,247,.45);
+    --r: 10px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+  }
+  [data-theme="light"] {
+    --bg: #f3f5fa;
+    --panel: #ffffff;
+    --panel-2: #f7f9fc;
+    --elev: #eaeef6;
+    --line: #dbe1ee;
+    --line-soft: #e8ecf5;
+    --fg: #1a1f2b;
+    --fg-dim: #5b6479;
+    --fg-mute: #8a93a8;
+    --accent: #3b6ef6;
+    --accent-2: #7c3aed;
+    --keep: #17914f;
+    --range: #0d84c4;
+    --warn: #b45309;
+    --danger: #d43b52;
+    --mark: rgba(224,175,104,.42);
+    --shadow: 0 10px 30px rgba(31,41,55,.12);
+    --ring: rgba(59,110,246,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.55 var(--sans);
+    display: flex; flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  ::selection { background: var(--ring); }
+  .mono { font-family: var(--mono); }
+
+  /* ---------- header ---------- */
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 12px 18px 14px; flex: 0 0 auto;
+  }
+  .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .brand { font-size: 15px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+  .brand b { color: var(--accent); font-weight: 750; }
+  .chip {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-dim);
+    padding: 3px 9px; border-radius: 99px; font-size: 11px; font-family: var(--mono); white-space: nowrap;
+  }
+  .chip.dirty { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .spacer { flex: 1 1 auto; }
+
+  .btn {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    transition: background .13s, border-color .13s, transform .06s, opacity .13s;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover { background: var(--elev); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled] { opacity: .42; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #0b0e14; font-weight: 600; }
+  [data-theme="light"] .btn-primary { color: #fff; }
+  .btn-primary:hover { filter: brightness(1.07); background: var(--accent); }
+  .btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); color: var(--danger); }
+  .btn-danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: var(--danger); }
+  .btn-danger.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .btn-sm { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
+  .btn-icon { padding: 6px 9px; }
+
+  .metrics { display: grid; grid-template-columns: 2.1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .metric {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 12px 10px;
+  }
+  .metric > label {
+    display: block; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--fg-mute);
+  }
+  .metric .val { font-family: var(--mono); font-size: 14px; margin-top: 3px; }
+  .metric .val small { color: var(--fg-dim); font-size: 11px; }
+  .track {
+    position: relative; height: 7px; background: var(--elev); border-radius: 99px; margin-top: 8px; overflow: hidden;
+  }
+  .track i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; display: block; }
+  .track .anchor { background: color-mix(in srgb, var(--warn) 55%, transparent); }
+  .track .proj { background: var(--accent); }
+  .legend { display: flex; gap: 12px; margin-top: 6px; font-size: 10.5px; color: var(--fg-dim); flex-wrap: wrap; }
+  .legend b { font-weight: 500; font-family: var(--mono); color: var(--fg); }
+  .dotm { width: 7px; height: 7px; border-radius: 99px; display: inline-block; margin-right: 4px; vertical-align: baseline; }
+
+  /* ---------- layout ---------- */
+  main {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; gap: 1px; background: var(--line);
+    grid-template-columns: 276px minmax(0, 1fr) 388px;
+    grid-template-areas: "ranges timeline editor";
+  }
+  .pane { background: var(--bg); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .pane.ranges { grid-area: ranges; background: var(--panel); }
+  .pane.timeline { grid-area: timeline; }
+  .pane.editor { grid-area: editor; background: var(--panel); }
+  .pane-head {
+    flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .pane-title { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--fg-mute); }
+  .scroll { flex: 1 1 auto; overflow: auto; min-height: 0; scrollbar-width: thin; }
+  .scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--elev); border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
+  .scroll::-webkit-scrollbar-thumb:hover { background: var(--line); background-clip: content-box; }
+
+  .search { position: relative; flex: 1 1 140px; }
+  .search input {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 26px 6px 28px; font-size: 12px;
+  }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .search .ico { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--fg-mute); font-size: 12px; }
+  .search .clr {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    background: none; border: 0; color: var(--fg-mute); cursor: pointer; padding: 2px 5px; border-radius: 6px;
+  }
+  .search .clr:hover { color: var(--fg); background: var(--elev); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+  .seg button {
+    border: 0; background: none; color: var(--fg-dim); padding: 3px 9px; border-radius: 6px; cursor: pointer; font-size: 11.5px;
+  }
+  .seg button[aria-pressed="true"] { background: var(--elev); color: var(--fg); }
+
+  /* ---------- range list ---------- */
+  .rlist { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .ritem {
+    width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--line);
+    border-left: 3px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer;
+    display: grid; gap: 3px; transition: background .13s, border-color .13s;
+  }
+  .ritem:hover { background: var(--elev); }
+  .ritem[aria-selected="true"] { border-color: var(--range); border-left-color: var(--range); background: color-mix(in srgb, var(--range) 12%, var(--panel-2)); }
+  .ritem .r1 { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
+  .ritem .rid { color: var(--range); font-weight: 700; }
+  .ritem .refs { color: var(--fg-mute); font-size: 11px; }
+  .ritem .save { margin-left: auto; color: var(--keep); font-size: 11px; }
+  .ritem .rsum {
+    color: var(--fg-dim); font-size: 11.5px; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .ritem .meta { color: var(--fg-mute); font-size: 10.5px; font-family: var(--mono); }
+  .udot { width: 6px; height: 6px; border-radius: 99px; background: var(--warn); display: inline-block; }
+
+  /* ---------- timeline ---------- */
+  .tl { padding: 10px 12px 40px; display: flex; flex-direction: column; gap: 8px; }
+  .group { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--panel); }
+  .group.keepg { background: transparent; border-color: var(--line-soft); }
+  .ghead {
+    position: sticky; top: 0; z-index: 2; width: 100%; text-align: left; cursor: pointer;
+    display: grid; grid-template-columns: 18px auto 1fr auto; align-items: center; gap: 8px;
+    padding: 8px 10px; background: var(--panel-2); border: 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .ghead:hover { background: var(--elev); }
+  .group.sel { border-color: var(--range); box-shadow: 0 0 0 1px color-mix(in srgb, var(--range) 40%, transparent); }
+  .group.sel .ghead { background: color-mix(in srgb, var(--range) 13%, var(--panel-2)); }
+  .chev { color: var(--fg-mute); transition: transform .15s; font-size: 11px; text-align: center; }
+  .group.open .chev { transform: rotate(90deg); }
+  .ghead .gid { font-family: var(--mono); font-weight: 700; color: var(--range); font-size: 12px; }
+  .group.keepg .ghead .gid { color: var(--keep); }
+  .ghead .gsum { color: var(--fg-dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ghead .gstat { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); white-space: nowrap; }
+  .ghead .gstat em { color: var(--keep); font-style: normal; }
+  .gbody { display: none; padding: 4px; }
+  .group.open .gbody { display: block; }
+
+  .atom {
+    display: grid; grid-template-columns: 74px 84px 58px minmax(0, 1fr); gap: 10px; align-items: start;
+    padding: 7px 8px; border-radius: 8px; border: 1px solid transparent;
+  }
+  .atom + .atom { border-top: 1px solid var(--line-soft); border-radius: 0; }
+  .atom:hover { background: var(--panel-2); }
+  .atom .aref { font-family: var(--mono); font-size: 11.5px; color: var(--accent-2); }
+  .atom .akind { font-family: var(--mono); font-size: 10.5px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
+  .atom .atok { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); text-align: right; }
+  .atom .abody {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: zoom-in;
+  }
+  .atom.open .abody { -webkit-line-clamp: unset; cursor: zoom-out; }
+  .atom .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .tag {
+    font-family: var(--mono); font-size: 10px; padding: 0 5px; border-radius: 5px;
+    background: var(--elev); color: var(--fg-dim); border: 1px solid var(--line-soft);
+  }
+  .tag.lock { color: var(--warn); }
+  mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+  /* ---------- editor ---------- */
+  .epad { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .etitle { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .etitle .eid { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--range); }
+  .etitle .erefs { font-family: var(--mono); font-size: 11.5px; color: var(--fg-mute); }
+  .estats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .estat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+  .estat label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-mute); }
+  .estat span { font-family: var(--mono); font-size: 12.5px; }
+  .field label {
+    display: flex; align-items: center; gap: 8px; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--fg-mute); margin-bottom: 5px;
+  }
+  .field label .count { margin-left: auto; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+  .field input, .field textarea {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; resize: vertical; font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  }
+  .field textarea { min-height: 200px; }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .field.invalid input, .field.invalid textarea { border-color: var(--danger); }
+  .erow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--fg-mute); font-size: 11px; }
+  kbd {
+    font-family: var(--mono); font-size: 10.5px; background: var(--elev); border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; color: var(--fg-dim);
+  }
+  .empty { color: var(--fg-mute); text-align: center; padding: 44px 18px; font-size: 12.5px; line-height: 1.7; }
+
+  /* ---------- overlays ---------- */
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translate(-50%, 12px);
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+    padding: 9px 14px; border-radius: 9px; box-shadow: var(--shadow); font-size: 12.5px;
+    opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 50; max-width: 70vw;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: var(--danger); color: var(--danger); }
+  .toast.ok { border-color: color-mix(in srgb, var(--keep) 60%, var(--line)); }
+  .help {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; place-items: center; z-index: 60; padding: 20px;
+  }
+  .help.show { display: grid; }
+  .help-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    padding: 18px 20px; min-width: 300px; max-width: 420px;
+  }
+  .help-card h3 { margin: 0 0 12px; font-size: 13px; }
+  .help-card dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: 12px; }
+  .help-card dt { text-align: right; }
+  .help-card dd { margin: 0; color: var(--fg-dim); }
+  .closed { display: grid; place-items: center; height: 100%; color: var(--fg-dim); font-size: 13px; text-align: center; padding: 30px; }
+
+  @media (max-width: 1220px) {
+    main {
+      grid-template-columns: 250px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) minmax(180px, 42vh);
+      grid-template-areas: "ranges timeline" "editor editor";
+    }
+  }
+  @media (max-width: 860px) {
+    .metrics { grid-template-columns: 1fr; }
+    main {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(120px, 24vh) minmax(220px, 1fr) auto;
+      grid-template-areas: "ranges" "timeline" "editor";
+    }
+    .pane.editor { max-height: 60vh; }
+    .atom { grid-template-columns: 70px 1fr auto; }
+    .atom .abody { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 class="brand"><b>Midcompact</b> Review</h1>
+    <span class="chip" id="draft-badge"></span>
+    <span class="chip dirty" id="dirty-badge" hidden></span>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" id="save-all" hidden>Save all</button>
+    <button class="btn btn-sm btn-icon" id="refresh" title="Reload state (r)" aria-label="Reload state">⟳</button>
+    <button class="btn btn-sm btn-icon" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme"></button>
+    <button class="btn btn-sm btn-icon" id="help-btn" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
+    <button class="btn btn-sm btn-primary" id="close">Close &amp; return</button>
+  </div>
+  <div class="metrics" id="metrics"></div>
+</header>
+
+<main>
+  <section class="pane ranges" aria-label="Compression ranges">
+    <div class="pane-head">
+      <div class="search">
+        <span class="ico">⌕</span>
+        <input id="q" type="search" placeholder="Filter ranges &amp; atoms  (/)" autocomplete="off" spellcheck="false">
+        <button class="clr" id="q-clear" hidden aria-label="Clear filter">✕</button>
+      </div>
+    </div>
+    <div class="scroll"><div class="rlist" id="range-list" role="listbox" aria-label="Ranges"></div></div>
+  </section>
+
+  <section class="pane timeline" aria-label="Anchor timeline">
+    <div class="pane-head">
+      <span class="pane-title">Timeline</span>
+      <span class="chip" id="tl-stat"></span>
+      <div class="spacer"></div>
+      <div class="seg" role="group" aria-label="Policy filter">
+        <button data-filter="all" aria-pressed="true">All</button>
+        <button data-filter="range" aria-pressed="false">Compressed</button>
+        <button data-filter="keep" aria-pressed="false">Kept</button>
+      </div>
+      <button class="btn btn-sm" id="toggle-all">Expand all</button>
+    </div>
+    <div class="scroll" id="tl-scroll"><div class="tl" id="timeline"></div></div>
+  </section>
+
+  <aside class="pane editor" aria-label="Range editor">
+    <div class="scroll"><div id="editor"></div></div>
+  </aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="help-card">
+    <h3>Keyboard shortcuts</h3>
+    <dl>
+      <dt><kbd>j</kbd> / <kbd>k</kbd></dt><dd>Next / previous range</dd>
+      <dt><kbd>/</kbd></dt><dd>Focus filter</dd>
+      <dt><kbd>e</kbd></dt><dd>Focus summary editor</dd>
+      <dt><kbd>⌘/Ctrl</kbd>+<kbd>S</kbd></dt><dd>Save current range</dd>
+      <dt><kbd>r</kbd></dt><dd>Reload state from server</dd>
+      <dt><kbd>x</kbd></dt><dd>Expand / collapse selected group</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Blur field / close dialog</dd>
+    </dl>
+  </div>
+</div>
+
+<script id="state" type="application/json"><!--MIDCOMPACT_STATE--></script>
+<script type="module">
+const EMPTY = { atoms: [], draft: { revision: 0, ranges: [] }, telemetry: {} };
+let state = (() => {
+  try {
+    const s = JSON.parse(document.getElementById('state').textContent);
+    return { atoms: s.atoms ?? [], draft: { revision: s.draft?.revision ?? 0, ranges: s.draft?.ranges ?? [] }, telemetry: s.telemetry ?? {} };
+  } catch { return EMPTY; }
+})();
+
+let selectedId = state.draft.ranges[0]?.id ?? null;
+let query = '';
+let policy = 'all';
+const edits = new Map();          // rangeId -> { topic, summary }
+const collapsed = new Set();      // group keys currently collapsed
+const openAtoms = new Set();      // atom refs expanded to full preview
+let lastScrolled = null;
+let removeArmed = null;
+let closeArmed = false;
+
+state.draft.ranges.forEach(r => { if (r.id !== selectedId) collapsed.add(r.id); });
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const fmt = n => n == null || Number.isNaN(n) ? '—'
+  : Math.abs(n) >= 1000 ? (n / 1000).toFixed(Math.abs(n) % 1000 ? 1 : 0) + 'k' : String(Math.round(n));
+const pct = n => n == null || Number.isNaN(n) ? '—' : n.toFixed(n % 1 ? 1 : 0) + '%';
+const clamp = n => Math.max(0, Math.min(100, n));
+const rangeById = id => state.draft.ranges.find(r => r.id === id);
+const saveOf = r => Math.max(0, (r.originalApproxTokens ?? 0) - (r.compressedApproxTokens ?? 0));
+
+function hl(text, q) {
+  const out = esc(text);
+  if (!q) return out;
+  const re = new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  return out.replace(re, m => '<mark>' + m + '</mark>');
+}
+function atomText(a) {
+  return [a.ref, a.kind, a.preview, ...(a.toolNames ?? []), ...(a.roles ?? [])].join(' ').toLowerCase();
+}
+function rangeText(r) {
+  return [r.id, r.startRef, r.endRef, r.topic ?? '', r.summary].join(' ').toLowerCase();
+}
+function draftOf(r) {
+  const e = edits.get(r.id);
+  return { topic: e ? e.topic : (r.topic ?? ''), summary: e ? e.summary : r.summary };
+}
+function isDirty(r) {
+  const e = edits.get(r.id);
+  return !!e && (e.topic !== (r.topic ?? '') || e.summary !== r.summary);
+}
+const dirtyIds = () => state.draft.ranges.filter(isDirty).map(r => r.id);
+
+/* ---------- render ---------- */
+function render() {
+  const n = state.draft.ranges.length;
+  $('draft-badge').textContent = `draft v${state.draft.revision} · ${n} range${n === 1 ? '' : 's'}`;
+  const d = dirtyIds();
+  $('dirty-badge').hidden = d.length === 0;
+  $('dirty-badge').textContent = `${d.length} unsaved`;
+  $('save-all').hidden = d.length < 2;
+  $('save-all').textContent = `Save all (${d.length})`;
+  renderMetrics();
+  renderRanges();
+  renderTimeline();
+  renderEditor();
+  if (selectedId && selectedId !== lastScrolled) {
+    lastScrolled = selectedId;
+    document.querySelector(`[data-group-key="${cssEsc(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' });
+    document.querySelector(`[data-range="${cssEsc(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }
+}
+const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+
+function renderMetrics() {
+  const t = state.telemetry ?? {};
+  const cw = t.contextWindow;
+  const aw = cw && t.anchorTokens != null ? clamp(t.anchorTokens / cw * 100) : 0;
+  const pw = cw && t.projectedTokens != null ? clamp(t.projectedTokens / cw * 100) : 0;
+  const totalSave = state.draft.ranges.reduce((s, r) => s + saveOf(r), 0);
+  const atomsCovered = state.draft.ranges.reduce((s, r) => s + (r.atomCount ?? 0), 0);
+  $('metrics').innerHTML = `
+    <div class="metric">
+      <label>context window</label>
+      <div class="val">${fmt(t.projectedTokens)} <small>projected of ${fmt(cw)}</small></div>
+      <div class="track"><i class="anchor" style="width:${aw}%"></i><i class="proj" style="width:${pw}%"></i></div>
+      <div class="legend">
+        <span><i class="dotm" style="background:color-mix(in srgb,var(--warn) 55%,transparent)"></i>anchor <b>${fmt(t.anchorTokens)}</b> (${pct(t.anchorPercent)})</span>
+        <span><i class="dotm" style="background:var(--accent)"></i>projected <b>${fmt(t.projectedTokens)}</b> (${pct(t.projectedPercent)})</span>
+      </div>
+    </div>
+    <div class="metric">
+      <label>estimated save</label>
+      <div class="val" style="color:var(--keep)">−${fmt(t.estimatedSavedTokens ?? totalSave)}</div>
+      <div class="legend"><span>~${fmt(t.selectedOriginalApproxTokens)} → ~${fmt(t.selectedCompressedApproxTokens)}</span></div>
+    </div>
+    <div class="metric">
+      <label>coverage</label>
+      <div class="val">${atomsCovered} <small>/ ${state.atoms.length} atoms</small></div>
+      <div class="legend"><span>across ${state.draft.ranges.length} range(s) · −${fmt(totalSave)} tok</span></div>
+    </div>`;
+}
+
+function renderRanges() {
+  const list = $('range-list');
+  const rs = state.draft.ranges.filter(r => !query || rangeText(r).includes(query));
+  if (!state.draft.ranges.length) {
+    list.innerHTML = '<div class="empty">No compression ranges in this draft.</div>';
+    return;
+  }
+  if (!rs.length) { list.innerHTML = '<div class="empty">No range matches the filter.</div>'; return; }
+  list.innerHTML = rs.map(r => {
+    const d = draftOf(r);
+    const ratio = r.originalApproxTokens ? Math.round((1 - r.compressedApproxTokens / r.originalApproxTokens) * 100) : 0;
+    return `<div class="ritem" role="option" tabindex="0" data-range="${esc(r.id)}" aria-selected="${r.id === selectedId}">
+      <div class="r1">
+        <span class="rid">${hl(r.id, query)}</span>
+        <span class="refs">${esc(r.startRef)}→${esc(r.endRef)}</span>
+        ${isDirty(r) ? '<span class="udot" title="unsaved edits"></span>' : ''}
+        <span class="save">−${fmt(saveOf(r))}</span>
+      </div>
+      ${d.topic ? `<div class="meta" style="color:var(--accent-2)">${hl(d.topic, query)}</div>` : ''}
+      <div class="rsum">${hl(d.summary, query)}</div>
+      <div class="meta">${r.atomCount} atoms · ~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)} (−${ratio}%)</div>
+    </div>`;
+  }).join('');
+}
+
+function buildGroups() {
+  const groups = [];
+  let cur = null;
+  state.atoms.forEach((a, i) => {
+    const key = a.owningRangeId ?? null;
+    if (!cur || cur.key !== key) { cur = { key, idx: i, atoms: [] }; groups.push(cur); }
+    cur.atoms.push(a);
+  });
+  return groups;
+}
+
+function renderTimeline() {
+  const tl = $('timeline');
+  if (!state.atoms.length) { tl.innerHTML = '<div class="empty">No atoms in anchor snapshot.</div>'; $('tl-stat').textContent = ''; return; }
+
+  let shown = 0;
+  const html = buildGroups().map(g => {
+    if (policy === 'range' && !g.key) return '';
+    if (policy === 'keep' && g.key) return '';
+    const r = g.key ? rangeById(g.key) : null;
+    const gkey = g.key ?? ('keep-' + g.idx);
+    const groupMatch = r ? rangeText(r).includes(query) : false;
+    const atoms = query && !groupMatch ? g.atoms.filter(a => atomText(a).includes(query)) : g.atoms;
+    if (query && !groupMatch && !atoms.length) return '';
+    shown += atoms.length;
+
+    const tok = g.atoms.reduce((s, a) => s + (a.approxTokens ?? 0), 0);
+    const open = !collapsed.has(gkey) || (query && !groupMatch);
+    const body = atoms.map(a => atomRow(a)).join('');
+
+    if (!r) {
+      return `<section class="group keepg ${open ? 'open' : ''}" data-group-key="${esc(gkey)}">
+        <button class="ghead" data-toggle="${esc(gkey)}" aria-expanded="${open}">
+          <span class="chev">▶</span>
+          <span class="gid">KEEP</span>
+          <span class="gsum">${esc(g.atoms[0].ref)} → ${esc(g.atoms[g.atoms.length - 1].ref)} verbatim</span>
+          <span class="gstat">${g.atoms.length} atoms · ~${fmt(tok)}</span>
+        </button>
+        <div class="gbody">${body}</div>
+      </section>`;
+    }
+    const d = draftOf(r);
+    return `<section class="group ${open ? 'open' : ''} ${r.id === selectedId ? 'sel' : ''}" data-group-key="${esc(gkey)}">
+      <button class="ghead" data-toggle="${esc(gkey)}" data-select="${esc(r.id)}" aria-expanded="${open}">
+        <span class="chev">▶</span>
+        <span class="gid">${esc(r.id)}</span>
+        <span class="gsum">${hl(d.topic || d.summary, query)}</span>
+        <span class="gstat">${r.atomCount} atoms · ~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)} <em>−${fmt(saveOf(r))}</em></span>
+      </button>
+      <div class="gbody">${body}</div>
+    </section>`;
+  }).join('');
+
+  tl.innerHTML = html || '<div class="empty">Nothing matches the current filter.</div>';
+  $('tl-stat').textContent = query || policy !== 'all' ? `${shown}/${state.atoms.length} atoms` : `${state.atoms.length} atoms`;
+}
+
+function atomRow(a) {
+  const tags = [
+    ...(a.toolNames ?? []).slice(0, 3).map(t => `<span class="tag">${esc(t)}</span>`),
+    ...(a.roles ?? []).slice(0, 2).map(t => `<span class="tag">${esc(t)}</span>`),
+    a.compressible === false ? '<span class="tag lock">not compressible</span>' : '',
+    a.protocolClosed === false ? '<span class="tag lock">open protocol</span>' : '',
+    a.compressedBlockId ? `<span class="tag">blk ${esc(a.compressedBlockId)}</span>` : '',
+  ].filter(Boolean).join('');
+  const open = openAtoms.has(a.ref);
+  return `<div class="atom ${open ? 'open' : ''}" data-atom="${esc(a.ref)}">
+    <span class="aref">${hl(a.ref, query)}</span>
+    <span class="akind">${hl(a.kind ?? '', query)}</span>
+    <span class="atok">~${fmt(a.approxTokens)}</span>
+    <div>
+      <div class="abody">${hl(a.preview ?? '', query)}</div>
+      ${tags ? `<div class="tags">${tags}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderEditor() {
+  const panel = $('editor');
+  const r = selectedId ? rangeById(selectedId) : null;
+  if (!r) {
+    panel.innerHTML = `<div class="empty">${state.draft.ranges.length
+      ? 'Select a range on the left to edit its topic and summary.'
+      : 'No compression ranges to review.<br>Close and return to the terminal.'}</div>`;
+    return;
+  }
+  const d = draftOf(r);
+  const dirty = isDirty(r);
+  const ratio = r.originalApproxTokens ? Math.round((1 - r.compressedApproxTokens / r.originalApproxTokens) * 100) : 0;
+  panel.innerHTML = `<div class="epad">
+    <div>
+      <div class="etitle">
+        <span class="eid">${esc(r.id)}</span>
+        <span class="erefs">${esc(r.startRef)} → ${esc(r.endRef)}</span>
+      </div>
+      <div class="estats">
+        <div class="estat"><label>atoms</label><span>${r.atomCount}</span></div>
+        <div class="estat"><label>tokens</label><span>~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)}</span></div>
+        <div class="estat"><label>save</label><span style="color:var(--keep)">−${fmt(saveOf(r))} (${ratio}%)</span></div>
+      </div>
+    </div>
+    <div class="field" id="f-topic">
+      <label for="topic">Topic <span class="count">optional</span></label>
+      <input id="topic" value="${esc(d.topic)}" placeholder="short label, e.g. auth refactor" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field ${d.summary.trim() ? '' : 'invalid'}" id="f-summary">
+      <label for="summary">Summary <span class="count" id="sum-count"></span></label>
+      <textarea id="summary" spellcheck="false">${esc(d.summary)}</textarea>
+    </div>
+    <div class="erow">
+      <button class="btn btn-primary" id="save-btn" ${dirty ? '' : 'disabled'}>Save</button>
+      <button class="btn" id="revert-btn" ${dirty ? '' : 'disabled'}>Revert</button>
+      <div class="spacer"></div>
+      <button class="btn btn-danger ${removeArmed === r.id ? 'armed' : ''}" id="remove-btn">
+        ${removeArmed === r.id ? 'Confirm remove' : 'Remove range'}
+      </button>
+    </div>
+    <div class="hint">Topic and summary are saved together (<kbd>⌘/Ctrl</kbd>+<kbd>S</kbd>). Removing a range keeps its atoms verbatim.</div>
+  </div>`;
+  updateCount();
+}
+
+function updateCount() {
+  const ta = $('summary');
+  if (!ta) return;
+  const len = ta.value.length;
+  $('sum-count').textContent = `${len} chars · ~${Math.ceil(len / 4)} tok`;
+}
+
+/* ---------- state mutation ---------- */
+function select(id) {
+  if (!id || id === selectedId) return;
+  selectedId = id;
+  collapsed.delete(id);
+  removeArmed = null;
+  render();
+}
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    let msg = `request failed (${res.status})`;
+    try { const e = await res.json(); if (e && e.error) msg = e.error; } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+async function saveRange(id) {
+  const r = rangeById(id);
+  const e = edits.get(id);
+  if (!r || !e) return false;
+  if (!e.summary.trim()) { toast('Summary cannot be empty', 'err'); $('summary')?.focus(); return false; }
+  const base = `/api/range/${encodeURIComponent(id)}`;
+  if (e.topic.trim() !== (r.topic ?? '').trim()) state = await post(`${base}/edit-topic`, { value: e.topic.trim() });
+  if (e.summary.trim() !== r.summary) state = await post(`${base}/edit-summary`, { value: e.summary.trim() });
+  edits.delete(id);
+  return true;
+}
+
+async function saveCurrent() {
+  if (!selectedId || !isDirty(rangeById(selectedId) ?? {})) return;
+  try { if (await saveRange(selectedId)) { render(); toast('Saved ' + selectedId, 'ok'); } }
+  catch (err) { toast(String(err.message ?? err), 'err'); }
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) throw new Error('state fetch failed');
+    state = await res.json();
+    if (!rangeById(selectedId)) selectedId = state.draft.ranges[0]?.id ?? null;
+    render();
+    toast('Reloaded', 'ok');
+  } catch (err) { toast(String(err.message ?? err), 'err'); }
+}
+
+/* ---------- events ---------- */
+$('range-list').addEventListener('click', e => {
+  const item = e.target.closest('[data-range]');
+  if (item) select(item.dataset.range);
+});
+$('range-list').addEventListener('keydown', e => {
+  const item = e.target.closest('[data-range]');
+  if (item && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(item.dataset.range); }
+});
+
+$('timeline').addEventListener('click', e => {
+  const atom = e.target.closest('[data-atom]');
+  if (atom && e.target.closest('.abody')) {
+    const ref = atom.dataset.atom;
+    openAtoms.has(ref) ? openAtoms.delete(ref) : openAtoms.add(ref);
+    atom.classList.toggle('open');
+    return;
+  }
+  const head = e.target.closest('[data-toggle]');
+  if (!head) return;
+  const key = head.dataset.toggle;
+  const chevron = e.target.closest('.chev');
+  if (head.dataset.select && !chevron && head.dataset.select !== selectedId) { select(head.dataset.select); return; }
+  collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
+  head.closest('.group').classList.toggle('open');
+  head.setAttribute('aria-expanded', String(!collapsed.has(key)));
+});
+
+$('toggle-all').addEventListener('click', () => {
+  if (collapsed.size) { collapsed.clear(); $('toggle-all').textContent = 'Collapse all'; }
+  else {
+    buildGroups().forEach((g, i) => collapsed.add(g.key ?? ('keep-' + g.idx)));
+    $('toggle-all').textContent = 'Expand all';
+  }
+  renderTimeline();
+});
+
+document.querySelectorAll('.seg [data-filter]').forEach(b => b.addEventListener('click', () => {
+  policy = b.dataset.filter;
+  document.querySelectorAll('.seg [data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderTimeline();
+}));
+
+$('q').addEventListener('input', () => {
+  query = $('q').value.trim().toLowerCase();
+  $('q-clear').hidden = !query;
+  renderRanges(); renderTimeline();
+});
+$('q-clear').addEventListener('click', () => { $('q').value = ''; $('q').dispatchEvent(new Event('input')); $('q').focus(); });
+
+$('editor').addEventListener('input', e => {
+  const r = rangeById(selectedId);
+  if (!r || !$('topic') || !$('summary')) return;
+  edits.set(r.id, { topic: $('topic').value, summary: $('summary').value });
+  if (!isDirty(r)) edits.delete(r.id);
+  const dirty = isDirty(r);
+  $('save-btn').disabled = !dirty;
+  $('revert-btn').disabled = !dirty;
+  $('f-summary').classList.toggle('invalid', !$('summary').value.trim());
+  updateCount();
+  renderRanges();
+  const d = dirtyIds();
+  $('dirty-badge').hidden = d.length === 0;
+  $('dirty-badge').textContent = `${d.length} unsaved`;
+  $('save-all').hidden = d.length < 2;
+  $('save-all').textContent = `Save all (${d.length})`;
+  if (e.target.id === 'topic') renderTimeline();
+});
+
+$('editor').addEventListener('click', async e => {
+  const r = rangeById(selectedId);
+  if (!r) return;
+  if (e.target.closest('#save-btn')) { await saveCurrent(); return; }
+  if (e.target.closest('#revert-btn')) { edits.delete(r.id); render(); toast('Reverted'); return; }
+  if (e.target.closest('#remove-btn')) {
+    if (removeArmed !== r.id) {
+      removeArmed = r.id;
+      renderEditor();
+      setTimeout(() => { if (removeArmed === r.id) { removeArmed = null; renderEditor(); } }, 4000);
+      return;
+    }
+    removeArmed = null;
+    try {
+      state = await post(`/api/range/${encodeURIComponent(r.id)}/remove`, {});
+      edits.delete(r.id);
+      selectedId = state.draft.ranges[0]?.id ?? null;
+      lastScrolled = null;
+      render();
+      toast('Removed ' + r.id, 'ok');
+    } catch (err) { toast(String(err.message ?? err), 'err'); }
+  }
+});
+
+$('save-all').addEventListener('click', async () => {
+  try {
+    for (const id of dirtyIds()) await saveRange(id);
+    render(); toast('All changes saved', 'ok');
+  } catch (err) { render(); toast(String(err.message ?? err), 'err'); }
+});
+
+$('refresh').addEventListener('click', refresh);
+
+$('close').addEventListener('click', async () => {
+  const d = dirtyIds();
+  if (d.length && !closeArmed) {
+    closeArmed = true;
+    $('close').textContent = `Discard ${d.length} unsaved & close`;
+    setTimeout(() => { closeArmed = false; $('close').textContent = 'Close & return'; }, 4000);
+    toast('Unsaved edits — click again to discard and close', 'err');
+    return;
+  }
+  try {
+    await post('/api/close', {});
+    document.body.innerHTML = '<div class="closed">Review closed.<br>Return to your terminal.</div>';
+  } catch (err) { toast(String(err.message ?? err), 'err'); }
+});
+
+/* theme */
+function themeIcon() {
+  $('theme-toggle').textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀' : '☾';
+}
+$('theme-toggle').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('midcompact-theme', next); } catch {}
+  themeIcon();
+});
+themeIcon();
+
+/* help + shortcuts */
+const help = $('help');
+$('help-btn').addEventListener('click', () => help.classList.toggle('show'));
+help.addEventListener('click', e => { if (e.target === help) help.classList.remove('show'); });
+
+function moveSel(delta) {
+  const ids = state.draft.ranges.map(r => r.id);
+  if (!ids.length) return;
+  const i = ids.indexOf(selectedId);
+  select(ids[Math.max(0, Math.min(ids.length - 1, i < 0 ? 0 : i + delta))]);
+}
+document.addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveCurrent(); return; }
+  if (e.key === 'Escape') { help.classList.remove('show'); if (typing) e.target.blur(); return; }
+  if (typing) return;
+  if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
+  if (e.key === '?') { help.classList.toggle('show'); return; }
+  if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); return; }
+  if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); return; }
+  if (e.key === 'e') { e.preventDefault(); $('summary')?.focus(); return; }
+  if (e.key === 'r') { refresh(); return; }
+  if (e.key === 'x' && selectedId) {
+    collapsed.has(selectedId) ? collapsed.delete(selectedId) : collapsed.add(selectedId);
+    renderTimeline();
+  }
+});
+
+let toastTimer;
+function toast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), kind === 'err' ? 3200 : 1800);
+}
+
+window.addEventListener('beforeunload', e => { if (dirtyIds().length) { e.preventDefault(); e.returnValue = ''; } });
+
+render();
+</script>
+</body>
+</html>

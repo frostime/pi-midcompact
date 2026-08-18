@@ -14,6 +14,7 @@ import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, updateDraftRa
 import { projectMessages } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
+import { showReviewWebUi } from "./review-webui.js";
 import {
   DRAFT_ENTRY,
   STATE_ENTRY,
@@ -29,6 +30,7 @@ import type {
   CompressionBlock,
   CompressionState,
   DraftPlan,
+  DraftTelemetry,
   MessageLike,
   TransactionState,
 } from "./types.js";
@@ -97,7 +99,8 @@ export default function (pi: ExtensionAPI) {
         { value: "start", label: "start — Start a new midcompact transaction at the current anchor" },
         { value: "abort", label: "abort — Abort the active transaction and return to anchor" },
         { value: "commit", label: "commit — Commit the current draft to the branch state" },
-        { value: "review", label: "review — Open interactive UI to inspect and edit the draft" },
+        { value: "review", label: "review — Open interactive TUI to inspect and edit the draft" },
+        { value: "review-webui", label: "review-webui — Open a local web page to inspect and edit the draft (works without TUI)" },
         { value: "status", label: "status — Show current transaction and draft status" },
       ];
       const filtered = items.filter((item) => item.value.startsWith(query));
@@ -159,7 +162,12 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === "review") {
-        await reviewTransaction(ctx);
+        await reviewTransaction(ctx, "tui");
+        return;
+      }
+
+      if (sub === "review-webui") {
+        await reviewTransaction(ctx, "web");
         return;
       }
 
@@ -262,49 +270,69 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  async function reviewTransaction(ctx: ExtensionCommandContext): Promise<void> {
+  async function reviewTransaction(ctx: ExtensionCommandContext, mode: "tui" | "web" = "tui"): Promise<void> {
+    const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
+    const currentTx = restored.transaction ?? transaction;
+    const currentDraft = restored.draft ?? draft;
+    if (!currentTx) {
+      ctx.ui.notify("No active midcompact transaction.", "warning");
+      return;
+    }
+    const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
+    const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
+
+    const commitMutation = (next: DraftPlan): void => {
+      draft = next;
+      pi.appendEntry(DRAFT_ENTRY, next);
+      updateStatus(ctx, currentTx, next);
+    };
+
+    if (mode === "web") {
+      const getLatest = (): { draft: DraftPlan; telemetry: DraftTelemetry } => ({
+        draft: draft ?? emptyDraft(currentTx.id),
+        telemetry: draftTelemetry(currentTx, draft),
+      });
+      await showReviewWebUi(ctx, snapshot.atoms, getLatest, {
+        editSummary: (id, summary) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { summary })),
+        editTopic: (id, topic) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { topic: topic || undefined })),
+        remove: (id) => commitMutation(removeDraftRange(draft ?? emptyDraft(currentTx.id), id)),
+      });
+      ctx.ui.notify("Midcompact review-webui closed.", "info");
+      return;
+    }
+
+    if (ctx.mode !== "tui") {
+      ctx.ui.notify(
+        "Interactive TUI review is only available in interactive (tui) mode. Use /midcompact review-webui to open a local web page instead.",
+        "warning",
+      );
+      return;
+    }
+
     while (true) {
-      const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-      const currentTx = restored.transaction ?? transaction;
-      const currentDraft = restored.draft ?? draft;
-      if (!currentTx) {
-        ctx.ui.notify("No active midcompact transaction.", "warning");
-        return;
-      }
-      const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
-      const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
-      const telemetry = draftTelemetry(currentTx, currentPlan);
-      if (ctx.mode !== "tui") {
-        ctx.ui.notify(formatDraft(currentPlan, telemetry), "info");
-        return;
-      }
-      const action = await showReviewUi(ctx, snapshot.atoms, currentPlan, telemetry);
+      const plan = draft ?? emptyDraft(currentTx.id);
+      const telemetry = draftTelemetry(currentTx, plan);
+      const action = await showReviewUi(ctx, snapshot.atoms, plan, telemetry);
       if (action.action === "close") return;
-      const range = currentPlan.ranges.find((candidate) => candidate.id === action.draftId);
+      const range = plan.ranges.find((candidate) => candidate.id === action.draftId);
       if (!range) continue;
 
       if (action.action === "edit-summary") {
         const value = await ctx.ui.editor(`Edit ${range.id} summary`, range.summary);
         if (value === undefined || !value.trim()) continue;
-        draft = updateDraftRange(currentPlan, range.id, { summary: value.trim() });
-        pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, currentTx, draft);
+        commitMutation(updateDraftRange(plan, range.id, { summary: value.trim() }));
         continue;
       }
       if (action.action === "edit-topic") {
         const value = await ctx.ui.input(`Edit ${range.id} topic`, range.topic ?? "");
         if (value === undefined) continue;
-        draft = updateDraftRange(currentPlan, range.id, { topic: value.trim() || undefined });
-        pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, currentTx, draft);
+        commitMutation(updateDraftRange(plan, range.id, { topic: value.trim() || undefined }));
         continue;
       }
       if (action.action === "remove") {
         const approved = await ctx.ui.confirm("Remove compression range?", `${range.id}: ${range.startRef} → ${range.endRef}`);
         if (!approved) continue;
-        draft = removeDraftRange(currentPlan, range.id);
-        pi.appendEntry(DRAFT_ENTRY, draft);
-        updateStatus(ctx, currentTx, draft);
+        commitMutation(removeDraftRange(plan, range.id));
       }
     }
   }

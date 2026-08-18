@@ -92,7 +92,7 @@ function makeBaseCtx(sm) {
         this.confirmations.push({ title, message });
         return this.confirmResult;
       },
-      async custom(factory) {
+      async custom(factory, _options) {
         let result = { action: "close" };
         const tui = { terminal: { rows: 30, columns: 120 }, requestRender() {} };
         const done = value => { result = value; };
@@ -165,7 +165,7 @@ test("/midcompact completes only the subcommand token", () => {
   const { pi } = setupRuntime(entries);
   const command = pi.commands.get("midcompact");
 
-  assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review"]);
+  assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review", "review-webui"]);
   assert.equal(command.getArgumentCompletions("start "), null);
 });
 

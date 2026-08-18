@@ -8,6 +8,7 @@ const projectionMod = await import(new URL("projection.js", ROOT));
 const stateMod = await import(new URL("state.js", ROOT));
 const telemetryMod = await import(new URL("telemetry.js", ROOT));
 const reviewMod = await import(new URL("review-ui.js", ROOT));
+const reviewWebMod = await import(new URL("review-webui.js", ROOT));
 
 const { buildAtoms, locateAtoms } = atomsMod;
 const { addDraftRange, emptyDraft } = planMod;
@@ -15,6 +16,7 @@ const { projectMessages } = projectionMod;
 const { restoreCompressionState, STATE_ENTRY } = stateMod;
 const { draftTelemetry } = telemetryMod;
 const { buildReviewText } = reviewMod;
+const { serializeReviewState } = reviewWebMod;
 
 function entry(id, message, parentId = null) {
   return { type: "message", id, parentId, message };
@@ -189,4 +191,33 @@ test("review text maps the linear atom stream to draft ranges and visible KEEP h
   assert.match(text, /d2 a0004/);
   assert.match(text, /awareness, not a target/i);
   assert.match(text, /Projected/);
+});
+
+test("serializeReviewState maps atoms to ranges and tags range boundaries", () => {
+  const messages = [
+    user("phase one", 1),
+    assistant([{ type: "text", text: "old exploration" }], 2),
+    user("critical keep", 3),
+    assistant([{ type: "text", text: "more old work" }], 4),
+  ];
+  const branch = messages.map((m, i) => entry(`e${i + 1}`, m));
+  const atoms = buildAtoms(messages, branch);
+  let draft = emptyDraft("tx-web");
+  draft = addDraftRange(draft, atoms, { start: "a0001", end: "a0002", summary: "phase one summarized", topic: "intro" });
+  const telemetry = draftTelemetry({ version: 1, id: "tx-web", anchorEntryId: "e4", startedAt: "now" }, draft);
+  const state = serializeReviewState(atoms, draft, telemetry);
+  assert.equal(state.draft.revision, 1);
+  assert.equal(state.draft.ranges.length, 1);
+  const r = state.draft.ranges[0];
+  assert.equal(r.id, "d1");
+  assert.equal(r.topic, "intro");
+  assert.equal(r.atomCount, 2);
+  const inRange = state.atoms.filter(a => a.owningRangeId === "d1");
+  assert.equal(inRange.length, 2);
+  assert.equal(inRange[0].isRangeStart, true);
+  assert.equal(inRange[0].isRangeEnd, false);
+  assert.equal(inRange[1].isRangeStart, false);
+  assert.equal(inRange[1].isRangeEnd, true);
+  const keep = state.atoms.find(a => a.ref === "a0003");
+  assert.equal(keep.owningRangeId, undefined);
 });

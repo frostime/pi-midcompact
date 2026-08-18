@@ -72,7 +72,7 @@ If `/midcompact start` carried an instruction (it arrives as `User focus: ...`),
 1. `action="locate"` to resolve the landmarks you agreed on into atom refs. Results include previews; request `detail="full"` when a boundary is ambiguous.
 2. `action="plan", op="add"` per range — several ranges for non-contiguous compression. To keep one important atom verbatim inside a broader phase, add ranges around it; that is KEEP by omission in practice.
 3. `action="plan", op="show"`, then present the complete plan described by content rather than atom IDs.
-4. Recommend `/midcompact review` when the user wants to inspect the anchor timeline, ranges, summaries, and KEEP holes visually. Apply changes with `op="update"`, `op="remove"`, or new ranges.
+4. Recommend `/midcompact review` when the user wants to inspect the anchor timeline, ranges, summaries, and KEEP holes visually. In non-interactive modes (no TUI, RPC, print), `/midcompact review` only warns and points to `/midcompact review-webui`, which starts a local web page that works without a TUI. Apply changes with `op="update"`, `op="remove"`, or new ranges.
 5. Ask the user to run `/midcompact commit` when satisfied.
 
 ## Tool interface
