@@ -55,6 +55,7 @@ const TOOL_NAME = "midcompact";
 const TOOL_DESCRIPTION =
   "Inventory, locate, draft, or recall mid-context compression. Agent and user share one DraftPlan. If a transaction already has a DraftPlan, call action=\"plan\", op=\"show\" first to discover it. Use the `midcompact` skill for workflow guidance.";
 const STATUS_KEY = "midcompact";
+const START_PROMPT_PREFIX = "A mid-compaction transaction is active on a frozen anchor snapshot.";
 
 const Params = Type.Object({
   action: StringEnum(["inspect", "locate", "plan", "recall"] as const),
@@ -101,7 +102,6 @@ export default function (pi: ExtensionAPI) {
       transaction = undefined;
       draft = undefined;
     }
-    // Reload drops any prior runtime lock; the next Agent/UI operation reacquires it.
     planningLock.owner = undefined;
     updateStatus(ctx, transaction, draft, planningLock.owner);
   }
@@ -124,8 +124,8 @@ export default function (pi: ExtensionAPI) {
 
   // Keep a user-created DraftPlan visible to the next Agent turn without
   // starting a turn automatically after the user saves the UI.
-  pi.on("before_agent_start", async () => {
-    if (!transaction) return;
+  pi.on("before_agent_start", async (event) => {
+    if (!transaction || event.prompt.startsWith(START_PROMPT_PREFIX)) return;
     const currentDraft = draft ?? emptyDraft(transaction.id);
     return {
       message: {
@@ -250,12 +250,13 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId} (${startMode}-first). ${compactUsage(transaction)}`, "info");
 
     if (startMode === "agent") {
-      sendAgentStartPrompt(transaction, customInstructions);
+      await sendAgentStartPrompt(transaction, customInstructions, "agent");
       return;
     }
-    // User-first: open Selection UI to edit the (currently empty) DraftPlan.
-    // The Selection UI is a separate surface from Review UI but shares DraftPlan.
-    // UI implementation is deferred; for now we surface a clear handoff notice.
+    // Use the same context setup for User manual, but make this turn an
+    // acknowledgement only before opening the user editing surface.
+    await sendAgentStartPrompt(transaction, customInstructions, "user");
+    await ctx.waitForIdle();
     await openSelectionUi(ctx);
   }
 
@@ -293,6 +294,8 @@ export default function (pi: ExtensionAPI) {
           } catch (error) {
             ctx.ui.notify(`Selection could not be saved: ${error instanceof Error ? error.message : String(error)}`, "warning");
           }
+        } else {
+          ctx.ui.notify("Selection closed. The DraftPlan remains available; reopen select or tell the Agent to continue.", "info");
         }
         return;
       }
@@ -315,17 +318,25 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  function sendAgentStartPrompt(tx: TransactionState, customInstructions?: string): void {
+  async function sendAgentStartPrompt(tx: TransactionState, customInstructions: string | undefined, mode: StartMode): Promise<void> {
     const awareness = formatTelemetry(draftTelemetry(tx, draft));
     const promptLines = [
-      "A mid-compaction transaction is active on a frozen anchor snapshot.",
+      START_PROMPT_PREFIX,
       awareness,
-      "These numbers are context awareness, not a target or optimization constraint. Use them to judge the scale of proposed compression while preserving semantic value.",
-      "Workflow: first call midcompact(action=\"inspect\") to see the global distribution; then propose ranges with midcompact(action=\"plan\", op=\"add\") and fill summaries with op=\"update\". If a DraftPlan already exists (for example a user pre-selected ranges and then handed off to you), call midcompact(action=\"plan\", op=\"show\") first and treat the existing plan as your starting point.",
-      "You can add, update, and remove ranges freely; the user reviews and commits. You cannot commit.",
+      "The extension provides inspect for bounded inventory, locate for local details, plan show/add/update/remove for one shared DraftPlan, and recall for committed blocks.",
+      "The user owns the final compression decision. You may edit the DraftPlan, but you must not commit. Preserve facts that future work still needs; local character and image counts are not token estimates.",
     ];
     if (customInstructions) promptLines.push(`User focus: ${customInstructions}`);
-    pi.sendUserMessage(promptLines.join("\n"));
+    if (mode === "agent") {
+      promptLines.push(
+        "FINAL STATE: AGENT DIRECT. Begin now: call inspect first; if a DraftPlan already exists, call plan show first; then use locate and plan to create or refine ranges and summaries. Stop before commit.",
+      );
+    } else {
+      promptLines.push(
+        "FINAL STATE: USER MANUAL. The user is about to edit the initial DraftPlan. Acknowledge with OK only. Do not call any midcompact tool, inspect, locate, plan, or recall; do not change the draft or commit. Wait until the user finishes editing and sends a later request.",
+      );
+    }
+    await pi.sendUserMessage(promptLines.join("\n"));
   }
 
   async function abortTransaction(ctx: ExtensionCommandContext): Promise<void> {

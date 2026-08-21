@@ -127,7 +127,7 @@ Run:
 /midcompact start
 ```
 
-Pi opens a three-way chooser before creating transaction state: **Drop**, **Agent direct**, or **User manual**. Agent direct starts the existing inventory-first Agent workflow. User manual opens the Selection workbench without starting a model turn; save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
+Pi opens a three-way chooser before creating transaction state: **Drop**, **Agent direct**, or **User manual**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens. It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
 
 ```text
 /midcompact start Compress the early repository exploration, but keep user requirements verbatim.

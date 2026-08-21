@@ -190,8 +190,8 @@ test("/midcompact start chooser forwards an initial focus (Agent-first)", async 
   assert.equal(toolCtx.ui.confirmations.length, 0);
   assert.match(toolCtx.ui.reviewFrames[0].join("\n"), /Drop.*Agent direct.*User manual/s);
   assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
-  assert.match(pi.sentUserMessages.at(-1), /action="inspect"/);
-  assert.match(pi.sentUserMessages.at(-1), /op="show"/);
+  assert.match(pi.sentUserMessages.at(-1), /inspect/);
+  assert.match(pi.sentUserMessages.at(-1), /plan show/);
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
   assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
 });
@@ -303,7 +303,7 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   assert.equal(latestStateEntry.data.blocks[1].id, "c0002");
 });
 
-test("User-first start does not send an Agent prompt and saves an empty DraftPlan", async () => {
+test("User-first start sends a waiting prompt, then opens Selection without further Agent work", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
     { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
@@ -314,7 +314,11 @@ test("User-first start does not send an Agent prompt and saves an empty DraftPla
   toolCtx.ui.customInputs = ["3", "s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
-  assert.equal(pi.sentUserMessages.length, 0, "User-first must not auto-trigger an Agent turn");
+  assert.equal(pi.sentUserMessages.length, 1, "User-first sends the shared setup prompt once");
+  assert.match(pi.sentUserMessages[0], /FINAL STATE: USER MANUAL/);
+  assert.match(pi.sentUserMessages[0], /Acknowledge with OK only/);
+  const startHandoff = await pi.emit("before_agent_start", { prompt: pi.sentUserMessages[0] }, toolCtx);
+  assert.equal(startHandoff, undefined, "the startup prompt already carries its own guidance");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
   assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
   assert.match(toolCtx.ui.messages.at(-1).text, /DraftPlan saved|tell the Agent/i);
@@ -338,7 +342,27 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   assert.equal(draftEntry.data.ranges[0].startRef, "a0001");
   assert.equal(draftEntry.data.ranges[0].endRef, "a0001");
   assert.equal(draftEntry.data.ranges[0].summary, "");
-  assert.equal(pi.sentUserMessages.length, 0);
+  assert.equal(pi.sentUserMessages.length, 1);
+});
+
+test("User-first ESC closes without discarding the transaction, and select can reopen it", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.customInputs = ["3", "\x1b"];
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+
+  assert.equal(entries.some(entry => entry.customType === "midcompact-transaction"), true);
+  assert.equal([...entries].reverse().find(entry => entry.customType === "midcompact-draft").data.ranges.length, 0);
+
+  toolCtx.ui.customInputs = [[" ", "s"]];
+  await pi.commands.get("midcompact").handler("select", commandCtx);
+  const draftEntry = [...entries].reverse().find(entry => entry.customType === "midcompact-draft");
+  assert.equal(draftEntry.data.ranges.length, 1);
+  assert.equal(pi.sentUserMessages.length, 1);
 });
 
 test("Agent discovers an existing user DraftPlan via plan show after handoff", async () => {

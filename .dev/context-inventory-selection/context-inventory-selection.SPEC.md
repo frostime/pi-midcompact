@@ -32,9 +32,9 @@ midcompact 当前要求 Agent 在长上下文中通过多次局部搜索建立�
 
 采用“inventory → 统一 DraftPlan → summary/review → commit”的流程：
 
-1. `/midcompact start [instructions]` 保持现有入口。启动确认后，扩展在冻结锚点上提供一个小型选择：先让 Agent 开始，或先让用户编辑 DraftPlan。
+1. `/midcompact start [instructions]` 保持现有入口。启动时提供三个选择：Drop、Agent direct 或 User manual。
 2. Agent 和用户都通过各自端点操作同一个 DraftPlan。Selection UI 只是用户编辑 DraftPlan 的一种界面，不产生独立的 SelectionState。
-3. User-first 模式保存 DraftPlan 后不自动启动 Agent。扩展通知用户，用户随后发送普通消息明确要求 Agent 继续；Agent 首先读取已有 DraftPlan，再决定是否 inspect/locate/add/update/remove。
+3. 两个进入模式都先向 Agent 发送相同的事务背景、工具和 DraftPlan 规则。Agent direct 的末尾要求立即开始规划；User manual 的末尾要求只确认知悉，等待用户完成 Selection。User-first 保存 DraftPlan 后不自动开始规划；用户随后发送普通消息明确要求 Agent 继续，Agent 首先读取已有 DraftPlan，再决定是否 inspect/locate/add/update/remove。
 4. DraftPlan 中 summary 可以为空。Review 可以打开 pending plan，但 commit 必须要求所有范围都有非空 summary。
 5. Selection UI 和 Review UI 是独立界面，但共享 DraftPlan、metrics 和 mutation 规则。它们的区别是交互重点，不是底层数据模型。
 
@@ -100,15 +100,15 @@ Pi 数据：
 交互流程：
 
 1. 等待 Pi idle；
-2. 使用现有启动确认；
-3. 冻结当前 anchor；
-4. 提供两个模式选项：
-   - `Agent first`：立即把规划交给 Agent；
-   - `User first`：先打开用户 DraftPlan 编辑界面；
-5. 模式选择取消时，不创建可见事务状态并返回原位置；
-6. 选择完成后才持久化事务和空 DraftPlan。
+2. 冻结当前 anchor；
+3. 提供三个选项：
+   - `Drop`：不创建事务，保留当前会话；
+   - `Agent direct`：创建事务和空 DraftPlan，立即发送公共事务 prompt，末尾要求 Agent 现在开始规划；
+   - `User manual`：创建事务和空 DraftPlan，立即发送同一公共 prompt，末尾要求 Agent 只确认知悉并等待；确认 turn settled 后打开 Selection UI；
+4. Drop 时不持久化事务或 DraftPlan；
+5. 无 UI 的模式保持 Agent direct 兼容行为。
 
-无 UI 的模式保持 Agent-first 兼容行为。User-first 的 Web 入口可以由后续 selection Web UI 提供，但不改变 `/midcompact start` 的基本语法。
+User manual 的确认 turn 不是规划 turn。它只建立 Agent 对事务和 DraftPlan 的共同认识；末尾 prompt 要求 Agent 只确认知悉。Agent settled 后释放运行时锁，用户才能编辑 Selection。
 
 ### 4. Agent-first
 
@@ -135,7 +135,7 @@ Agent 必须把已有 DraftPlan 视为当前初始计划，而不是假设事务
 
 ### 5. User-first 与 Agent 交接
 
-User-first 模式打开独立 Selection UI。用户可以：
+User-first 在创建事务后先进行一次仅确认的 Agent turn。该 turn 接收公共 midcompact 背景和 `USER MANUAL` 末尾状态，必须只确认知悉，不得调用 midcompact 工具或改动 DraftPlan。Agent settled 后打开独立 Selection UI。用户可以：
 
 - 按 group 或 atom 选择范围；
 - 添加、删除和调整 DraftRange；
@@ -147,7 +147,7 @@ User-first 模式打开独立 Selection UI。用户可以：
 
 用户选择的大范围可以跨 KEEP/protected atom，但在写入 DraftPlan 前必须由统一 selection normalization 逻辑扣除并拆分为不含 protected atom 的连续 ranges。tool exchange 不能被拆开。
 
-关闭 Selection UI 的语义是保存当前 DraftPlan，不是最终确认，也不是 commit。扩展不得自动发送 Agent turn。关闭后显示通知，例如：
+关闭 Selection UI 的语义是保留当前 DraftPlan，不是最终确认，也不是 commit。若有未保存的选择，TUI/Web 先保存或要求用户决定是否保存；无改动关闭时，已有 DraftPlan 原样保留。关闭后不得自动启动下一次规划 Agent turn。扩展显示通知，例如：
 
 ```text
 Draft saved. Tell the Agent to continue processing the current midcompact draft.
@@ -195,7 +195,7 @@ Review UI 重点是：
 
 - 查看当前全部 DraftRange；
 - 编辑 summary/topic；
-- 增删或调整 range；
+- 删除被否决的 range；边界调整转回 Selection；
 - 查看 pending、字符、图片和 protected 状态；
 - 最终确认是否 commit。
 
@@ -291,7 +291,7 @@ Selection UI 和 Review UI 保持不同界面与操作重点，但共享 DraftPl
 - 带洞 compression block；
 - SelectionState 审计；
 - 用户初始 plan 与 Agent 当前 plan 的 diff 历史；
-- 自动启动 Agent；
+- 自动在 Selection 保存后开始规划 Agent turn；
 - `/midcompact confirm`。
 
 ## Acceptance Criteria
@@ -299,10 +299,10 @@ Selection UI 和 Review UI 保持不同界面与操作重点，但共享 DraftPl
 ### Start And Handoff
 
 - `/midcompact start [instructions]` 入口不要求 mode flags。
-- 启动确认后，交互模式显示 Agent-first/User-first 两个选项。
-- Agent-first 立即发送 Agent workflow prompt。
-- User-first 打开 Selection UI，且在用户关闭保存前不启动模型。
-- User-first 关闭后保存 DraftPlan、释放 UI、给用户显示继续交接提示，不自动创建 Agent turn。
+- 启动时显示 Drop / Agent direct / User manual 三个选项。
+- Agent direct 立即发送公共事务 prompt，并以立即规划状态结尾。
+- User manual 立即发送同一公共事务 prompt，但以仅确认状态结尾；确认 turn 只确认知悉，Agent settled 后才打开 Selection UI。
+- User-first 保存或关闭后保留 DraftPlan、释放 UI、给用户显示继续交接提示，不自动创建后续规划 Agent turn。
 - 用户下一条明确交接消息触发 Agent 后，Agent 第一个相关工具调用是 `plan show`，并能发现已有用户 DraftPlan。
 
 ### Inventory And Plan

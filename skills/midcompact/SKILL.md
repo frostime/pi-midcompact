@@ -34,7 +34,7 @@ You cannot commit. `/midcompact commit` is the user's gate. Your output is a pro
 
 ## One plan, two entry points
 
-Agent and user operate on the **same DraftPlan**. `/midcompact start` offers two routes — Agent-first or User-first — but neither freezes boundaries. User-first just lets the user draft the initial ranges before the Agent touches anything; once the user hands off, the Agent treats the existing DraftPlan as its starting point and may add, update, or remove ranges freely. Only `/midcompact commit` (user-only) finalizes.
+Agent and user operate on the **same DraftPlan**. `/midcompact start` offers Agent direct or User manual. Both receive the same transaction guidance: Agent direct begins planning immediately; User manual requires one acknowledgement-only turn before the user edits the initial ranges. During that acknowledgement, do not call midcompact tools or change the DraftPlan. After the user later hands off, treat the existing DraftPlan as the starting point and may add, update, or remove ranges freely. Only `/midcompact commit` (user-only) finalizes.
 
 A `DraftRange` may have an empty `summary` — that is a **pending summary**. Review can open a plan with pending summaries, but commit requires every range to have a non-empty summary, valid boundaries, no overlap, and no protected atom.
 

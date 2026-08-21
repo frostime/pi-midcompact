@@ -127,7 +127,7 @@ pi install git:github.com/frostime/pi-midcompact
 /midcompact start
 ```
 
-Pi 会在创建事务状态前提供三个选项：**Drop**、**Agent direct** 和 **User manual**。Agent direct 进入现有的 inventory-first Agent 流程；User manual 在不触发模型调用的情况下打开 Selection 工作台。用户保存初始 DraftPlan 并关闭界面后，可在准备好时再让 Agent 继续。也可以在命令中直接写明初始重点：
+Pi 会在创建事务状态前提供三个选项：**Drop**、**Agent direct** 和 **User manual**。Agent direct 进入现有的 inventory-first Agent 流程；User manual 会发送同样的事务说明，但末尾要求 Agent 只确认知悉。Agent 简短回复后，才打开 Selection 工作台；在用户交接前不会开始规划或修改 DraftPlan。用户保存初始 DraftPlan 并关闭界面后，可在准备好时再让 Agent 继续。也可以在命令中直接写明初始重点：
 
 ```text
 /midcompact start 压缩前期仓库探索过程，但保留用户需求原文。
