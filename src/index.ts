@@ -11,22 +11,18 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { buildAtoms, formatLocatedAtom, isProtectedAtom, locateAtoms } from "./atoms.js";
 import { buildInventory, formatInventory } from "./inventory.js";
 import { messageText } from "./messages.js";
-import { addDraftRange, addPendingRanges, emptyDraft, formatDraft, removeDraftRange, updateDraftRange } from "./plan.js";
+import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, updateDraftRange } from "./plan.js";
 import { projectMessages } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
 import { showReviewWebUi } from "./review-webui.js";
-import { expandSelection, SelectionError } from "./selection.js";
 import {
   DRAFT_ENTRY,
-  SELECTION_ENTRY,
   STATE_ENTRY,
   TXN_ENTRY,
   coerceDraftRange,
-  defaultTransactionMode,
-  defaultTransactionPhase,
+  defaultStartMode,
   emptyCompressionState,
-  emptySelection,
   restoreCompressionState,
   restoreTransaction,
 } from "./state.js";
@@ -39,18 +35,25 @@ import type {
   DraftPlan,
   DraftTelemetry,
   MessageLike,
-  SelectionState,
-  TransactionMode,
+  StartMode,
   TransactionState,
 } from "./types.js";
+import {
+  acquireAgent,
+  emptyPlanningLock,
+  releaseAgent,
+  releaseUi,
+  tryAcquireUi,
+  type PlanningLockState,
+} from "./planning-lock.js";
 
 const TOOL_NAME = "midcompact";
 const TOOL_DESCRIPTION =
-  "Inventory, locate, draft, or recall mid-context compression. Agent workflow: inspect first, then persist a candidate Selection, wait for explicit user confirmation, then locate/plan summaries. Use the `midcompact` skill for workflow guidance.";
+  "Inventory, locate, draft, or recall mid-context compression. Agent and user share one DraftPlan. If a transaction already has a DraftPlan, call action=\"plan\", op=\"show\" first to discover it. Use the `midcompact` skill for workflow guidance.";
 const STATUS_KEY = "midcompact";
 
 const Params = Type.Object({
-  action: StringEnum(["inspect", "locate", "plan", "recall", "select", "confirm"] as const),
+  action: StringEnum(["inspect", "locate", "plan", "recall"] as const),
   ref: Type.Optional(Type.String()),
   pattern: Type.Optional(Type.String()),
   source: Type.Optional(StringEnum(["any", "user", "assistant", "tool_call", "tool_result"] as const)),
@@ -67,9 +70,6 @@ const Params = Type.Object({
   // inspect pagination
   page_size: Type.Optional(Type.Number()),
   cursor: Type.Optional(Type.String()),
-  // selection mutation: spans + keep refs as JSON-encoded arrays
-  spans: Type.Optional(Type.String()),
-  keep_refs: Type.Optional(Type.String()),
 });
 
 type ParamsType = Static<typeof Params>;
@@ -80,7 +80,8 @@ export default function (pi: ExtensionAPI) {
   let activeState: CompressionState | undefined;
   let transaction: TransactionState | undefined;
   let draft: DraftPlan | undefined;
-  let selection: SelectionState | undefined;
+  // Runtime mutex over DraftPlan edits. Not persisted: lost on reload by design.
+  const planningLock: PlanningLockState = emptyPlanningLock();
 
   registerStateRenderer(pi);
 
@@ -89,16 +90,16 @@ export default function (pi: ExtensionAPI) {
     activeState = restoreCompressionState(branch) ?? undefined;
     const restored = restoreTransaction(branch);
     if (restored.transaction) {
-      const tx = withCompatDefaults(restored.transaction, restored.draft)!;
+      const tx = withCompatDefaults(restored.transaction)!;
       transaction = tx;
       draft = restored.draft ? { ...restored.draft, ranges: restored.draft.ranges.map(coerceDraftRange) } : emptyDraft(tx.id);
-      selection = restored.selection;
     } else {
       transaction = undefined;
       draft = undefined;
-      selection = undefined;
     }
-    updateStatus(ctx, transaction, draft);
+    // Reload drops any prior runtime lock; the next Agent/UI operation reacquires it.
+    planningLock.owner = undefined;
+    updateStatus(ctx, transaction, draft, planningLock.owner);
   }
 
   pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
@@ -108,8 +109,28 @@ export default function (pi: ExtensionAPI) {
     activeState = undefined;
     transaction = undefined;
     draft = undefined;
-    selection = undefined;
+    planningLock.owner = undefined;
   });
+
+  // Agent turns hold the runtime edit lock for their entire lifetime, including
+  // inspect/locate before the first DraftPlan mutation.
+  pi.on("agent_start", async () => {
+    if (transaction) acquireAgent(planningLock);
+  });
+
+  // Agent turn end releases the Agent's runtime edit lock so the user can open a UI.
+  pi.on("agent_settled", async () => {
+    releaseAgent(planningLock);
+  });
+
+  // Expose the UI-side lock operations so the future Selection/Review UI (and tests)
+  // can acquire/release the runtime mutex without a dedicated tool action. This is
+  // the UI's entry point for mutual exclusion, parallel to the Agent's plan mutation path.
+  (pi as unknown as { midcompactPlanningLock?: unknown }).midcompactPlanningLock = {
+    tryAcquireUi: () => tryAcquireUi(planningLock),
+    releaseUi: () => releaseUi(planningLock),
+    getOwner: () => planningLock.owner,
+  };
 
   pi.on("context", async (event) => {
     if (!activeState?.blocks.length) return;
@@ -117,20 +138,17 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("midcompact", {
-    description: "Start, review, commit, inspect, confirm, or abort a branch-isolated mid-context compression transaction",
+    description: "Start, review, commit, inspect, or abort a branch-isolated mid-context compression transaction",
     getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
       const query = prefix.trimStart().toLowerCase();
       if (/\s/.test(query)) return null;
       const items: AutocompleteItem[] = [
         { value: "start", label: "start — Start a new midcompact transaction at the current anchor" },
-        { value: "start --user", label: "start --user — Start in User select mode (manual range selection)" },
-        { value: "start --agent", label: "start --agent — Start in Agent propose mode (Agent drafts the proposal)" },
         { value: "abort", label: "abort — Abort the active transaction and return to anchor" },
         { value: "commit", label: "commit — Commit the current draft to the branch state" },
         { value: "review", label: "review — Open interactive TUI to inspect and edit the draft" },
         { value: "review-webui", label: "review-webui — Open a local web page to inspect and edit the draft (works without TUI)" },
-        { value: "confirm", label: "confirm — Confirm the current Selection and materialize pending ranges" },
-        { value: "status", label: "status — Show current transaction, selection, and draft status" },
+        { value: "status", label: "status — Show current transaction and draft status" },
       ];
       const filtered = items.filter((item) => item.value.startsWith(query));
       return filtered.length > 0 ? filtered : null;
@@ -144,23 +162,17 @@ export default function (pi: ExtensionAPI) {
       if (lower === "commit") return commitTransaction(ctx);
       if (lower === "review") return reviewTransaction(ctx, "tui");
       if (lower === "review-webui") return reviewTransaction(ctx, "web");
-      if (lower === "confirm") return confirmSelection(ctx);
       if (lower === "status") return showStatus(ctx);
 
-      // start [--user|--agent] [instructions...]
+      // start [instructions...]
       const startMatch = rawArgs.match(/^start\b\s*(.*)$/i);
       if (startMatch) {
-        const rest = startMatch[1] ?? "";
-        const flagMatch = rest.match(/^(--user|--agent)\b\s*(.*)$/i);
-        const mode: TransactionMode | undefined = flagMatch
-          ? (flagMatch[1]!.toLowerCase() === "--user" ? "user" : "agent")
-          : undefined;
-        const instructions = (flagMatch ? flagMatch[2] : rest).trim();
-        return startTransaction(ctx, mode, instructions || undefined);
+        const instructions = (startMatch[1] ?? "").trim();
+        return startTransaction(ctx, instructions || undefined);
       }
 
       ctx.ui.notify(
-        "Usage: /midcompact start [--user|--agent] [instructions] | /midcompact confirm | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort",
+        "Usage: /midcompact start [instructions] | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort",
         "warning",
       );
     },
@@ -168,7 +180,7 @@ export default function (pi: ExtensionAPI) {
 
   // ---- Transaction lifecycle ----
 
-  async function startTransaction(ctx: ExtensionCommandContext, mode: TransactionMode | undefined, customInstructions?: string): Promise<void> {
+  async function startTransaction(ctx: ExtensionCommandContext, customInstructions?: string): Promise<void> {
     if (transaction) {
       ctx.ui.notify("A midcompact transaction is already active on this branch.", "warning");
       return;
@@ -189,32 +201,61 @@ export default function (pi: ExtensionAPI) {
         return;
       }
     }
-    // Freeze anchor FIRST: persist transaction + empty Selection + empty draft, then decide mode.
-    const resolvedMode: TransactionMode = mode ?? "agent";
+    // Mode choice: Agent-first or User-first. Both operate on the same DraftPlan;
+    // neither freezes boundaries. No mode flags on the command line.
+    const modeChoice = await chooseStartMode(ctx);
+    if (modeChoice === "cancelled") {
+      ctx.ui.notify("Midcompact start cancelled.", "info");
+      return;
+    }
+    const startMode: StartMode = modeChoice;
     transaction = {
       version: 1,
       id: `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
       anchorEntryId,
       startedAt: new Date().toISOString(),
-      mode: resolvedMode,
-      phase: "selecting",
+      startMode,
       anchorUsage: snapshotContextUsage(ctx.getContextUsage()),
     };
     draft = emptyDraft(transaction.id);
-    selection = emptySelection(transaction.id, resolvedMode);
     pi.appendEntry(TXN_ENTRY, transaction);
-    pi.appendEntry(SELECTION_ENTRY, selection);
     pi.appendEntry(DRAFT_ENTRY, draft);
-    updateStatus(ctx, transaction, draft);
-    ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId} (${resolvedMode} mode). ${compactUsage(transaction)}`, "info");
+    updateStatus(ctx, transaction, draft, planningLock.owner);
+    ctx.ui.notify(`Midcompact started at anchor ${anchorEntryId} (${startMode}-first). ${compactUsage(transaction)}`, "info");
 
-    if (resolvedMode === "agent") {
+    if (startMode === "agent") {
       sendAgentStartPrompt(transaction, customInstructions);
       return;
     }
-    // User select mode: do NOT trigger the model until Selection is confirmed.
+    // User-first: open Selection UI to edit the (currently empty) DraftPlan.
+    // The Selection UI is a separate surface from Review UI but shares DraftPlan.
+    // UI implementation is deferred; for now we surface a clear handoff notice.
+    await openSelectionUi(ctx);
+  }
+
+  async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled"> {
+    if (!ctx.hasUI) return "agent"; // non-interactive fallback stays Agent-first
+    // Two-step confirm stands in for a select widget until the Selection UI exists.
+    const agentFirst = await ctx.ui.confirm(
+      "Who should draft the initial plan?",
+      "Choose Agent first (OK) to let the Agent inspect and propose ranges, or cancel to pick User first.",
+    );
+    if (agentFirst) return "agent";
+    const userFirst = await ctx.ui.confirm(
+      "User-first mode?",
+      "OK opens the User-first route: you draft the initial DraftPlan, save it, then tell the Agent to continue. Cancel aborts the start.",
+    );
+    if (userFirst) return "user";
+    return "cancelled";
+  }
+
+  async function openSelectionUi(ctx: ExtensionCommandContext): Promise<void> {
+    // Selection TUI/Web UI is implemented in a later phase. Until then, the
+    // user-first route tells the user the UI is not yet available and that the
+    // empty DraftPlan is saved; they can hand off to the Agent to fill it.
+    // No Agent turn is triggered here.
     ctx.ui.notify(
-      "User select mode: build your Selection via midcompact(action=\"select\") and run /midcompact confirm when ready. No Agent prompt until then.",
+      "User-first Selection UI is not yet available in this build. An empty DraftPlan has been saved. Tell the Agent to continue, or use /midcompact review to edit it.",
       "info",
     );
   }
@@ -225,94 +266,18 @@ export default function (pi: ExtensionAPI) {
       "A mid-compaction transaction is active on a frozen anchor snapshot.",
       awareness,
       "These numbers are context awareness, not a target or optimization constraint. Use them to judge the scale of proposed compression while preserving semantic value.",
-      "Workflow: first call midcompact(action=\"inspect\") to see the global distribution; then propose candidate ranges, persist them with midcompact(action=\"select\"), and wait for the user to run /midcompact confirm. Only after confirmation may you locate/plan and write summaries.",
-      "Do NOT call midcompact(action=\"plan\", op=\"add\") before the user confirms the Selection.",
-      "You cannot commit. The user reviews and explicitly runs /midcompact commit.",
+      "Workflow: first call midcompact(action=\"inspect\") to see the global distribution; then propose ranges with midcompact(action=\"plan\", op=\"add\") and fill summaries with op=\"update\". If a DraftPlan already exists (for example a user pre-selected ranges and then handed off to you), call midcompact(action=\"plan\", op=\"show\") first and treat the existing plan as your starting point.",
+      "You can add, update, and remove ranges freely; the user reviews and commits. You cannot commit.",
     ];
     if (customInstructions) promptLines.push(`User focus: ${customInstructions}`);
     pi.sendUserMessage(promptLines.join("\n"));
   }
 
-  async function confirmSelection(ctx: ExtensionCommandContext): Promise<void> {
-    const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-    const currentTx = withCompatDefaults(restored.transaction ?? transaction, restored.draft ?? draft);
-    const currentSelection = restored.selection ?? selection;
-    if (!currentTx) {
-      ctx.ui.notify("No active midcompact transaction.", "warning");
-      return;
-    }
-    if (!currentSelection || currentSelection.spans.length === 0) {
-      ctx.ui.notify("No Selection to confirm. Build one with midcompact(action=\"select\") first.", "warning");
-      return;
-    }
-    if (currentSelection.confirmed) {
-      ctx.ui.notify("Selection is already confirmed; use /midcompact review or run summaries.", "info");
-      return;
-    }
-    const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
-    let confirmed;
-    try {
-      confirmed = expandSelection(snapshot.atoms, { spans: currentSelection.spans, keepRefs: currentSelection.keepRefs });
-    } catch (err) {
-      ctx.ui.notify(`Cannot confirm Selection: ${err instanceof Error ? err.message : String(err)}`, "error");
-      return;
-    }
-    if (confirmed.spans.length === 0) {
-      ctx.ui.notify("Selection resolves to no compressible ranges (all protected or KEEP).", "warning");
-      return;
-    }
-    // Materialize pending ranges and advance phase to summarizing.
-    transaction = currentTx;
-    draft = restored.draft ?? draft ?? emptyDraft(currentTx.id);
-    draft = addPendingRanges(draft, snapshot.atoms, confirmed.spans);
-    selection = {
-      ...currentSelection,
-      confirmed: true,
-      materializedRangeRefs: confirmed.spans.map((span) => ({ startRef: span.startRef, endRef: span.endRef })),
-      updatedAt: new Date().toISOString(),
-    };
-    transaction = { ...transaction, phase: "summarizing" };
-    pi.appendEntry(SELECTION_ENTRY, selection);
-    pi.appendEntry(TXN_ENTRY, transaction);
-    pi.appendEntry(DRAFT_ENTRY, draft);
-    updateStatus(ctx, transaction, draft);
-    ctx.ui.notify(
-      `Selection confirmed: ${confirmed.spans.length} pending range(s). Phase → summarizing. Agent will write summaries without moving your boundaries.`,
-      "info",
-    );
-    if (transaction.mode === "user") {
-      sendUserSelectSummaryPrompt(ctx.sessionManager, transaction, confirmed.spans);
-    } else {
-      sendAgentConfirmPrompt(transaction, confirmed.spans);
-    }
-  }
-
-  function sendUserSelectSummaryPrompt(sm: ExtensionContext["sessionManager"], tx: TransactionState, spans: ReadonlyArray<{ startRef: string; endRef: string }>): void {
-    const snapshot = buildAnchorSnapshot(sm, tx);
-    const spanLines = spans.map((span) => {
-      const startAtom = snapshot.atoms.find((atom) => atom.ref === span.startRef)!;
-      const endAtom = snapshot.atoms.find((atom) => atom.ref === span.endRef)!;
-      const slice = snapshot.atoms.slice(startAtom.index, endAtom.index + 1);
-      const chars = slice.reduce((sum, atom) => sum + atom.metrics.contentChars, 0);
-      const images = slice.reduce((sum, atom) => sum + atom.metrics.imageCount, 0);
-      return `${span.startRef}→${span.endRef} | ${chars} chars${images ? ` · ${images} images` : ""}`;
-    });
-    pi.sendUserMessage([
-      "User-confirmed selection is now materialized as pending ranges. Write a non-empty summary for each range; do not expand or move the confirmed boundaries.",
-      ...spanLines,
-      "Call midcompact(action=\"plan\", op=\"update\", draft_id=..., summary=...) for each range. The user will review and commit.",
-    ].join("\n"));
-  }
-
-  function sendAgentConfirmPrompt(tx: TransactionState, spans: ReadonlyArray<{ startRef: string; endRef: string }>): void {
-    pi.sendUserMessage([
-      "The user confirmed the Selection. Pending ranges are materialized; you may now locate boundary atoms and write summaries for each range.",
-      `Ranges: ${spans.map((span) => `${span.startRef}→${span.endRef}`).join(", ")}`,
-      "Do not move confirmed boundaries. You cannot commit.",
-    ].join("\n"));
-  }
-
   async function abortTransaction(ctx: ExtensionCommandContext): Promise<void> {
+    if (planningLock.owner === "agent") {
+      ctx.ui.notify("The Agent is currently processing the midcompact draft. Abort after the Agent turn ends.", "warning");
+      return;
+    }
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
     const currentTx = restored.transaction ?? transaction;
     if (!currentTx) {
@@ -326,14 +291,19 @@ export default function (pi: ExtensionAPI) {
     }
     transaction = undefined;
     draft = undefined;
-    selection = undefined;
-    updateStatus(ctx, transaction, draft);
+    releaseAgent(planningLock);
+    releaseUi(planningLock);
+    updateStatus(ctx, transaction, draft, planningLock.owner);
     ctx.ui.notify("Midcompact transaction aborted; returned to anchor.", "info");
   }
 
   async function commitTransaction(ctx: ExtensionCommandContext): Promise<void> {
+    if (planningLock.owner === "agent") {
+      ctx.ui.notify("The Agent is currently processing the midcompact draft. Commit after the Agent turn ends.", "warning");
+      return;
+    }
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-    const currentTx = withCompatDefaults(restored.transaction ?? transaction, restored.draft ?? draft);
+    const currentTx = withCompatDefaults(restored.transaction ?? transaction);
     const currentDraft = restored.draft?.ranges.map(coerceDraftRange) ? { ...restored.draft!, ranges: restored.draft.ranges.map(coerceDraftRange) } : draft;
     if (!currentTx) {
       ctx.ui.notify("No active midcompact transaction.", "warning");
@@ -343,7 +313,7 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Draft is empty; nothing to commit.", "warning");
       return;
     }
-    // Commit validation: reject pending summary, invalid boundaries, overlaps, protected atoms.
+    // Commit validation: reject empty summary, invalid boundaries, overlaps, protected atoms.
     const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
     try {
       validateDraftForCommit(currentDraft, snapshot.atoms);
@@ -364,23 +334,21 @@ export default function (pi: ExtensionAPI) {
     activeState = nextState;
     transaction = undefined;
     draft = undefined;
-    selection = undefined;
-    updateStatus(ctx, transaction, draft);
+    releaseAgent(planningLock);
+    releaseUi(planningLock);
+    updateStatus(ctx, transaction, draft, planningLock.owner);
     ctx.ui.notify(commitNotice(nextState), "info");
   }
 
   async function showStatus(ctx: ExtensionCommandContext): Promise<void> {
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-    const currentTx = withCompatDefaults(restored.transaction ?? transaction, restored.draft ?? draft);
+    const currentTx = withCompatDefaults(restored.transaction ?? transaction);
     const currentDraft = restored.draft ?? draft;
-    const currentSelection = restored.selection ?? selection;
     if (currentTx) {
       const parts = [
         formatDraft(currentDraft ?? emptyDraft(currentTx.id), draftTelemetry(currentTx, currentDraft)),
+        `Mode: ${currentTx.startMode ?? "agent"}-first · lock: ${planningLock.owner ?? "free"}`,
       ];
-      if (currentSelection) {
-        parts.push(`Selection: ${currentSelection.confirmed ? "confirmed" : "unconfirmed"} · ${currentSelection.spans.length} span(s) · ${currentSelection.keepRefs.length} KEEP · mode ${currentSelection.mode} · phase ${currentTx.phase ?? "selecting"}`);
-      }
       ctx.ui.notify(parts.join("\n"), "info");
       return;
     }
@@ -393,20 +361,25 @@ export default function (pi: ExtensionAPI) {
 
   async function reviewTransaction(ctx: ExtensionCommandContext, mode: "tui" | "web" = "tui"): Promise<void> {
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-    const currentTx = withCompatDefaults(restored.transaction ?? transaction, restored.draft ?? draft);
+    const currentTx = withCompatDefaults(restored.transaction ?? transaction);
     const currentDraft = restored.draft ?? draft;
     if (!currentTx) {
       ctx.ui.notify("No active midcompact transaction.", "warning");
       return;
     }
-    const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
-    const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
+    if (!tryAcquireUi(planningLock)) {
+      ctx.ui.notify("The Agent is currently processing the midcompact draft. Try opening review after the Agent turn ends.", "warning");
+      return;
+    }
+    try {
+      const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
+      const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
 
-    const commitMutation = (next: DraftPlan): void => {
-      draft = next;
-      pi.appendEntry(DRAFT_ENTRY, next);
-      updateStatus(ctx, currentTx, next);
-    };
+      const commitMutation = (next: DraftPlan): void => {
+        draft = next;
+        pi.appendEntry(DRAFT_ENTRY, next);
+        updateStatus(ctx, currentTx, next, planningLock.owner);
+      };
 
     if (mode === "web") {
       const getLatest = (): { draft: DraftPlan; telemetry: DraftTelemetry } => ({
@@ -456,7 +429,26 @@ export default function (pi: ExtensionAPI) {
         commitMutation(removeDraftRange(plan, range.id));
       }
     }
+    } finally {
+      releaseUi(planningLock);
+    }
   }
+
+  // ---- Planning lock (runtime mutex, not persisted) ----
+
+  /** Agent tool path: all active-transaction operations yield to an editing UI. */
+  function requireAgentAccess(ctx: ExtensionContext): boolean {
+    if (!acquireAgent(planningLock)) {
+      ctx.ui.notify("A Selection/Review UI is currently editing the midcompact draft. Close it before the Agent can continue.", "warning");
+      return false;
+    }
+    return true;
+  }
+
+  // UI-side acquire/release are exposed via the module re-export above so the
+  // future Selection/Review UI (and tests) can drive them without going through
+  // a tool action. The Agent acquires the lock at agent_start and releases it
+  // at agent_settled.
 
   // ---- Tool ----
 
@@ -469,26 +461,21 @@ export default function (pi: ExtensionAPI) {
       try {
         if (params.action === "recall") return toolResult(handleRecall(params, ctx));
         const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
-        const currentTx = withCompatDefaults(restored.transaction ?? transaction, restored.draft ?? draft);
+        const currentTx = withCompatDefaults(restored.transaction ?? transaction);
         if (!currentTx) return toolResult("No active midcompact transaction. Ask the user to run `/midcompact start` first.");
         transaction = currentTx;
-        selection = restored.selection ?? selection;
         draft = restored.draft ? { ...restored.draft, ranges: restored.draft.ranges.map(coerceDraftRange) } : (draft ?? emptyDraft(currentTx.id));
+        if (!requireAgentAccess(ctx)) {
+          return toolResult("Agent operation blocked: a user editing UI holds the planning lock.");
+        }
         const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
 
         if (params.action === "inspect") return toolResult(handleInspect(params, snapshot.atoms, currentTx));
         if (params.action === "locate") return toolResult(handleLocate(params, snapshot.atoms));
-        if (params.action === "select") return toolResult(handleSelect(params, snapshot.atoms, ctx));
-        if (params.action === "confirm") {
-          // Tool-level confirm is an explicit programmatic confirmation path for
-          // Agent propose; runtime still enforces the same guard.
-          return toolResult(handleToolConfirm(params, snapshot.atoms, ctx));
-        }
         if (params.action === "plan") {
-          guardPlanMutation(currentTx, params);
           draft = handlePlan(params, draft!, snapshot.atoms);
           pi.appendEntry(DRAFT_ENTRY, draft);
-          updateStatus(ctx, transaction, draft);
+          updateStatus(ctx, transaction, draft, planningLock.owner);
           return toolResult(formatDraft(draft, draftTelemetry(transaction, draft)));
         }
         return toolResult("Unknown action.");
@@ -501,58 +488,6 @@ export default function (pi: ExtensionAPI) {
   function handleInspect(params: ParamsType, atoms: Atom[], tx: TransactionState): string {
     const page = buildInventory(atoms, { pageSize: params.page_size, cursor: params.cursor }, { transaction: tx });
     return formatInventory(page);
-  }
-
-  function handleSelect(params: ParamsType, atoms: Atom[], _ctx: ExtensionContext): string {
-    if (!selection) throw new Error("No active Selection; start a transaction first.");
-    if (selection.confirmed) throw new Error("Selection is already confirmed; boundaries cannot be changed. Abort and restart to edit.");
-    const spans = parseJsonArray("spans", params.spans, (item) => ({ startRef: item.startRef, endRef: item.endRef }));
-    const keepRefs = parseJsonArray("keep_refs", params.keep_refs, (item) => item) as string[];
-    // Validate against atoms so the caller gets a clear error before the Selection is persisted.
-    const result = expandSelection(atoms, { spans, keepRefs });
-    selection = { ...selection, spans, keepRefs, updatedAt: new Date().toISOString() };
-    pi.appendEntry(SELECTION_ENTRY, selection);
-    const preview = result.spans.length
-      ? result.spans.map((span) => `${span.startRef}→${span.endRef}`).join(", ")
-      : "(resolves to no compressible ranges yet)";
-    return `Selection persisted (unconfirmed): ${spans.length} requested span(s), ${keepRefs.length} KEEP. Expanded ordinary spans: ${preview}. Run /midcompact confirm (or midcompact action=confirm) to materialize pending ranges.`;
-  }
-
-  function handleToolConfirm(_params: ParamsType, atoms: Atom[], _ctx: ExtensionContext): string {
-    if (!selection) throw new Error("No active Selection to confirm.");
-    if (selection.confirmed) return "Selection already confirmed.";
-    if (selection.spans.length === 0) throw new Error("Selection is empty; add spans with action=select first.");
-    const result = expandSelection(atoms, { spans: selection.spans, keepRefs: selection.keepRefs });
-    if (result.spans.length === 0) throw new SelectionError("Selection resolves to no compressible ranges.");
-    draft ??= emptyDraft(transaction!.id);
-    draft = addPendingRanges(draft, atoms, result.spans);
-    selection = {
-      ...selection,
-      confirmed: true,
-      materializedRangeRefs: result.spans.map((span) => ({ startRef: span.startRef, endRef: span.endRef })),
-      updatedAt: new Date().toISOString(),
-    };
-    transaction = { ...transaction!, phase: "summarizing" };
-    pi.appendEntry(SELECTION_ENTRY, selection);
-    pi.appendEntry(TXN_ENTRY, transaction);
-    pi.appendEntry(DRAFT_ENTRY, draft);
-    return `Selection confirmed: ${result.spans.length} pending range(s) materialized. Phase → summarizing.`;
-  }
-
-  function guardPlanMutation(tx: TransactionState, params: ParamsType): void {
-    const op = params.op ?? "show";
-    if (op === "show") return;
-    // Runtime guard: the selecting phase has no confirmed Selection yet, so no plan mutation is allowed.
-    const phase = tx.phase ?? defaultTransactionPhase(undefined, draft);
-    if (phase === "selecting") {
-      throw new Error("Transaction is in selecting phase; build and confirm a Selection before mutating the plan.");
-    }
-    if (op === "add") {
-      // Adding ranges requires a confirmed Selection; summaries are then filled via op="update".
-      if (!selection?.confirmed) {
-        throw new Error("Plan add requires a confirmed Selection; confirm the Selection first (/midcompact confirm).");
-      }
-    }
   }
 
   function handleRecall(params: ParamsType, ctx: ExtensionContext): string {
@@ -580,12 +515,11 @@ export default function (pi: ExtensionAPI) {
     return full.length > limit ? `${full.slice(0, limit)}\n\n[truncated; refine the recall request or inspect the source session for more]` : full;
   }
 
-  function withCompatDefaults(tx: TransactionState | undefined, restoredDraft?: DraftPlan): TransactionState | undefined {
+  function withCompatDefaults(tx: TransactionState | undefined): TransactionState | undefined {
     if (!tx) return undefined;
     return {
       ...tx,
-      mode: defaultTransactionMode(tx.mode),
-      phase: defaultTransactionPhase(tx.phase, restoredDraft),
+      startMode: defaultStartMode(tx.startMode),
     };
   }
 }
@@ -620,18 +554,6 @@ function handlePlan(params: ParamsType, current: DraftPlan, atoms: Atom[]): Draf
   }
   if (!params.start || !params.end) throw new Error("plan add requires start and end.");
   return addDraftRange(current, atoms, { start: params.start, end: params.end, summary: params.summary, topic: params.topic });
-}
-
-function parseJsonArray<T>(field: string, raw: string | undefined, map: (item: any) => T): T[] {
-  if (!raw) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`\`${field}\` must be a JSON-encoded array.`);
-  }
-  if (!Array.isArray(parsed)) throw new Error(`\`${field}\` must be a JSON-encoded array.`);
-  return parsed.map(map);
 }
 
 function validateDraftForCommit(draft: DraftPlan, atoms: Atom[]): void {
@@ -723,15 +645,16 @@ function updateStatus(
   ctx: ExtensionContext,
   tx: TransactionState | undefined,
   currentDraft: DraftPlan | undefined,
+  lockOwner: "agent" | "ui" | undefined = undefined,
 ): void {
   const theme = ctx.ui.theme;
   if (tx) {
-    const phase = tx.phase ?? "selecting";
     const pending = (currentDraft?.ranges ?? []).filter((range) => range.summary.trim().length === 0).length;
     const chars = (currentDraft?.ranges ?? []).reduce((sum, range) => sum + range.originalContentChars, 0);
+    const lock = lockOwner === "ui" ? " · UI editing" : lockOwner === "agent" ? " · Agent editing" : "";
     ctx.ui.setStatus(
       STATUS_KEY,
-      `${theme.fg("accent", "MC " + phase)} · ${currentDraft?.ranges.length ?? 0} ranges${pending ? ` · ${pending} pending` : ""} · ${chars} chars`,
+      `${theme.fg("accent", "MC planning")} · ${currentDraft?.ranges.length ?? 0} ranges${pending ? ` · ${pending} pending` : ""} · ${chars} chars${lock}`,
     );
     return;
   }

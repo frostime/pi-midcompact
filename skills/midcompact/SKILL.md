@@ -28,21 +28,15 @@ Three mechanical facts shape how you work:
 |-------|------|
 | Extension | Session-tree mechanics, projection, protocol safety, factual metrics, selection subtraction, runtime guards |
 | You | Semantic judgment: which content may yield to a summary, and what each summary must carry |
-| User | Compression scope and depth; explicit Selection confirmation; the only actor that can commit |
+| User | Compression scope and depth; the only actor that can commit |
 
 You cannot commit. `/midcompact commit` is the user's gate. Your output is a proposal.
 
-## Three stages: inventory, selection, summary
+## One plan, two entry points
 
-A transaction moves through four phases, enforced by the runtime:
+Agent and user operate on the **same DraftPlan**. `/midcompact start` offers two routes — Agent-first or User-first — but neither freezes boundaries. User-first just lets the user draft the initial ranges before the Agent touches anything; once the user hands off, the Agent treats the existing DraftPlan as its starting point and may add, update, or remove ranges freely. Only `/midcompact commit` (user-only) finalizes.
 
-```
-selecting -> selection-confirmed -> summarizing -> ready_for_review
-```
-
-- **Selection** is a persisted, editable, non-committable intent: requested spans plus KEEP refs. It survives UI close and reload.
-- **Pending ranges** are the ordinary spans produced after the user explicitly confirms the Selection. Each needs its own non-empty summary.
-- **Review draft** exists only when every pending range has a non-empty summary; only then can the user commit.
+A `DraftRange` may have an empty `summary` — that is a **pending summary**. Review can open a plan with pending summaries, but commit requires every range to have a non-empty summary, valid boundaries, no overlap, and no protected atom.
 
 ## What may be compressed
 
@@ -79,18 +73,14 @@ Illustrative cases, derived from the law:
 
 If `/midcompact start` carried an instruction (it arrives as `User focus: ...`), treat it as guidance for whichever of scope and depth it specifies. Still propose, but briefly; ask only what the instruction leaves open.
 
-## Phase 2 — persist a candidate Selection, then wait for confirmation
+## Phase 2 — draft ranges, fill summaries, review
 
-1. Persist the proposal with `action="select"`, passing `spans` (JSON array of `{startRef,endRef}`) and `keep_refs` (JSON array of atom refs to KEEP inside the spans). A span may cross KEEP and protected atoms.
-2. **Do not call `plan add` yet.** The runtime rejects it in the `selecting` phase.
-3. Ask the user to run `/midcompact confirm` (or `action="confirm"`). Only after confirmation are pending ranges materialized and the phase advances to `summarizing`. Natural-language agreement alone is not a state transition.
-
-## Phase 3 — summarize pending ranges, then review
-
-1. After confirmation, `action="plan", op="show"` lists the materialized pending ranges (each with an empty summary). You may `action="locate"` a boundary atom to write an accurate summary, but do not move confirmed boundaries.
-2. `action="plan", op="update", draft_id=..., summary=...` for each range. A range is not review-ready until its summary is non-empty.
-3. Recommend `/midcompact review` when the user wants to inspect ranges, summaries, and KEEP holes visually. In non-interactive modes, `/midcompact review` points to `/midcompact review-webui`.
-4. Ask the user to run `/midcompact commit` when every range is summarized. You cannot commit.
+1. `action="plan", op="add"` per range — several ranges for non-contiguous compression. `summary` may be empty to mark a range pending. To keep one important atom verbatim inside a broader phase, add ranges around it; that is KEEP by omission in practice. To change a boundary later, `op="remove"` then `op="add"` the new span.
+2. `action="plan", op="update", draft_id=..., summary=...` to fill each pending summary. A range is not review-ready until its summary is non-empty.
+3. If a transaction already has a DraftPlan when you start work (user pre-selected ranges, then handed off), call `action="plan", op="show"` **first** and treat it as your initial plan rather than assuming an empty start.
+4. `action="plan", op="show"`, then present the plan described by content rather than atom IDs.
+5. Recommend `/midcompact review` when the user wants to inspect ranges, summaries, and KEEP holes visually. In non-interactive modes, `/midcompact review` points to `/midcompact review-webui`.
+6. Ask the user to run `/midcompact commit` when every range is summarized. You cannot commit.
 
 ## Tool interface
 
@@ -102,16 +92,12 @@ If `/midcompact start` carried an instruction (it arrives as `User focus: ...`),
 
 `action="locate"` — pass either `ref` for a direct lookup, or at least one real filter: `pattern`, `tool_name`, or a `source` other than `any`. With none it returns nothing rather than an error. Optional: `direction` (`oldest`/`newest`), `limit` (default 5, max 20), `detail` (`brief`/`full`).
 
-`action="select"` — persist a candidate Selection (unconfirmed). `spans` is a JSON array of `{startRef,endRef}`; `keep_refs` is a JSON array of atom refs to KEEP. Spans may cross KEEP/protected atoms; the extension subtracts them, and compressing only a protected atom is rejected. Rejected after the Selection is confirmed.
-
-`action="confirm"` — confirm the current Selection, materialize pending ranges, advance to `summarizing`. Equivalent to `/midcompact confirm`.
-
-`action="plan"` — `op` defaults to `show`.
+`action="plan"` — `op` defaults to `show`. Agent and user share one DraftPlan; there is no separate `select` or `confirm` action.
 
 | op | Requires |
 |----|----------|
 | `show` | — |
-| `add` | `start`, `end`, `summary`; `topic` optional (only after Selection is confirmed) |
+| `add` | `start`, `end`; `summary` optional (empty = pending), `topic` optional |
 | `update` | `draft_id` and at least one of `summary`, `topic` |
 | `remove` | `draft_id` |
 

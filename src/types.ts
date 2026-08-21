@@ -167,43 +167,28 @@ export interface DraftPlan {
   ranges: DraftRange[];
 }
 
-export type TransactionMode = "agent" | "user";
-
-export type TransactionPhase =
-  | "selecting"
-  | "selection-confirmed"
-  | "summarizing"
-  | "ready_for_review";
+/** How a transaction's initial DraftPlan editing is routed. Informational only; */
+/** both routes operate on the same DraftPlan and do not freeze boundaries. */
+export type StartMode = "agent" | "user";
 
 export interface TransactionState {
   version: 1;
   id: string;
   anchorEntryId: string;
   startedAt: string;
-  mode?: TransactionMode;
-  phase?: TransactionPhase;
+  /** Initial routing chosen at start: Agent-first prompt or User-first UI. */
+  startMode?: StartMode;
   /** Frozen awareness captured when /midcompact starts; informational, never a target. */
   anchorUsage?: ContextUsageSnapshot;
 }
 
-/** A requested atom span in a Selection. May cross KEEP/protected atoms. */
+/** Who currently holds the runtime mutex over DraftPlan edits. Not persisted. */
+export type PlanningLockOwner = "agent" | "ui";
+
+/** A requested atom span that may cross KEEP/protected atoms; fed into selection normalization. */
 export interface SelectionSpan {
   startRef: string;
   endRef: string;
-}
-
-export interface SelectionState {
-  version: 1;
-  transactionId: string;
-  mode: TransactionMode;
-  confirmed: boolean;
-  /** Requested spans before KEEP/protected subtraction. */
-  spans: SelectionSpan[];
-  /** Atom refs the caller marked KEEP inside the spans. */
-  keepRefs: string[];
-  /** Atom refs of materialized pending ranges after confirmation (for restore). */
-  materializedRangeRefs?: Array<{ startRef: string; endRef: string }>;
-  updatedAt: string;
 }
 
 /** A finalized ordinary span after KEEP/protected subtraction. */

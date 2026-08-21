@@ -1,23 +1,20 @@
 // Persistence boundary. Owns restoration of CompressionState, TransactionState,
-// DraftPlan, and SelectionState from the session branch. Provides backward-
-// compatible defaults so old v1 state (without mode/phase/Selection) restores
-// and projects without migration.
+// and DraftPlan from the session branch. Provides backward-compatible defaults
+// so old v1 state (without startMode) restores without migration. The runtime
+// planning lock is not persisted here; it lives only in memory.
 
 import type {
   CompressionState,
   DraftPlan,
   DraftRange,
-  SelectionState,
   SessionEntryLike,
-  TransactionMode,
-  TransactionPhase,
+  StartMode,
   TransactionState,
 } from "./types.js";
 
 export const STATE_ENTRY = "midcompact-state";
 export const TXN_ENTRY = "midcompact-transaction";
 export const DRAFT_ENTRY = "midcompact-draft";
-export const SELECTION_ENTRY = "midcompact-selection";
 
 interface CustomEntryLike extends SessionEntryLike {
   data?: unknown;
@@ -27,38 +24,9 @@ export function emptyCompressionState(): CompressionState {
   return { version: 1, createdAt: new Date().toISOString(), blocks: [] };
 }
 
-export function emptySelection(transactionId: string, mode: TransactionMode): SelectionState {
-  return {
-    version: 1,
-    transactionId,
-    mode,
-    confirmed: false,
-    spans: [],
-    keepRefs: [],
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-/** Default mode for transactions persisted before mode existed. */
-export function defaultTransactionMode(mode: TransactionMode | undefined): TransactionMode {
+/** Default routing for transactions persisted before startMode existed. */
+export function defaultStartMode(mode: StartMode | undefined): StartMode {
   return mode ?? "agent";
-}
-
-/**
- * Default phase for transactions persisted before phase existed. Inferred from
- * the restored draft so an old Agent-first transaction resumes in a sensible
- * phase without losing its already-built ranges.
- */
-export function defaultTransactionPhase(
-  phase: TransactionPhase | undefined,
-  draft?: DraftPlan,
-): TransactionPhase {
-  if (phase) return phase;
-  const ranges = draft?.ranges ?? [];
-  if (ranges.length === 0) return "selecting";
-  // An old transaction with complete ranges was ready for review; an old
-  // transaction with at least one pending summary was mid-summarizing.
-  return ranges.every((range) => range.summary.trim().length > 0) ? "ready_for_review" : "summarizing";
 }
 
 export function restoreCompressionState(entries: readonly unknown[]): CompressionState | undefined {
@@ -74,29 +42,22 @@ export function restoreCompressionState(entries: readonly unknown[]): Compressio
 export function restoreTransaction(entries: readonly unknown[]): {
   transaction?: TransactionState;
   draft?: DraftPlan;
-  selection?: SelectionState;
 } {
   let transaction: TransactionState | undefined;
   let draft: DraftPlan | undefined;
-  let selection: SelectionState | undefined;
   for (const raw of entries) {
     const entry = raw as CustomEntryLike;
     if (entry.type !== "custom") continue;
     if (entry.customType === TXN_ENTRY && isTransaction(entry.data)) {
       transaction = entry.data;
       draft = undefined;
-      selection = undefined;
       continue;
     }
     if (entry.customType === DRAFT_ENTRY && transaction && isDraft(entry.data) && entry.data.transactionId === transaction.id) {
       draft = entry.data;
-      continue;
-    }
-    if (entry.customType === SELECTION_ENTRY && transaction && isSelection(entry.data) && entry.data.transactionId === transaction.id) {
-      selection = entry.data;
     }
   }
-  return { transaction, draft, selection };
+  return { transaction, draft };
 }
 
 export function isCompressionState(value: unknown): value is CompressionState {
@@ -120,12 +81,6 @@ function isDraft(value: unknown): value is DraftPlan {
   if (!value || typeof value !== "object") return false;
   const plan = value as Record<string, unknown>;
   return plan.version === 1 && typeof plan.transactionId === "string" && typeof plan.revision === "number" && Array.isArray(plan.ranges);
-}
-
-function isSelection(value: unknown): value is SelectionState {
-  if (!value || typeof value !== "object") return false;
-  const sel = value as Record<string, unknown>;
-  return sel.version === 1 && typeof sel.transactionId === "string" && typeof sel.mode === "string" && typeof sel.confirmed === "boolean" && Array.isArray(sel.spans) && Array.isArray(sel.keepRefs);
 }
 
 /**

@@ -12,17 +12,19 @@ const inventoryMod = await import(new URL("inventory.js", ROOT));
 const selectionMod = await import(new URL("selection.js", ROOT));
 const reviewMod = await import(new URL("review-ui.js", ROOT));
 const reviewWebMod = await import(new URL("review-webui.js", ROOT));
+const planningLockMod = await import(new URL("planning-lock.js", ROOT));
 
 const { buildAtoms, locateAtoms } = atomsMod;
 const { addDraftRange, addPendingRanges, emptyDraft, isReviewReady } = planMod;
 const { projectMessages } = projectionMod;
-const { restoreCompressionState, STATE_ENTRY, coerceDraftRange, defaultTransactionPhase } = stateMod;
+const { restoreCompressionState, STATE_ENTRY, coerceDraftRange, defaultStartMode } = stateMod;
 const { draftTelemetry } = telemetryMod;
 const { measureMessage, measureContentParts, codePointCount, readImageDimensions, aggregateMetrics } = contentMetricsMod;
 const { buildInventory, formatInventory, encodeCursor, decodeCursor, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = inventoryMod;
 const { expandSelection, SelectionError } = selectionMod;
 const { buildReviewText } = reviewMod;
 const { serializeReviewState } = reviewWebMod;
+const { emptyPlanningLock, agentCanMutate, tryAcquireUi, acquireAgent, releaseAgent, releaseUi } = planningLockMod;
 
 function entry(id, message, parentId = null) {
   return { type: "message", id, parentId, message };
@@ -462,12 +464,9 @@ test("addPendingRanges creates ranges with empty (pending) summaries; isReviewRe
 
 // ---- Phase 6: state restore / compat ----
 
-test("defaultTransactionPhase infers a sensible phase for old transactions", () => {
-  assert.equal(defaultTransactionPhase(undefined, undefined), "selecting");
-  const draftWithPending = { version: 1, transactionId: "t", revision: 1, ranges: [{ id: "d1", summary: "", startRef: "a0001", endRef: "a0001", startIndex: 0, endIndex: 0, entryIds: [], messageKeys: [], originalContentChars: 0, originalImageCount: 0, originalImagePayloadBytes: 0, replacementContentChars: 0, originalApproxTokens: 0, compressedApproxTokens: 0, startPreview: "", endPreview: "" }] };
-  assert.equal(defaultTransactionPhase(undefined, draftWithPending), "summarizing");
-  const draftReady = { ...draftWithPending, ranges: [{ ...draftWithPending.ranges[0], summary: "filled" }] };
-  assert.equal(defaultTransactionPhase(undefined, draftReady), "ready_for_review");
+test("defaultStartMode infers agent for old transactions", () => {
+  assert.equal(defaultStartMode(undefined), "agent");
+  assert.equal(defaultStartMode("user"), "user");
 });
 
 test("coerceDraftRange backfills factual fields for old DraftRange shapes", () => {
@@ -477,4 +476,52 @@ test("coerceDraftRange backfills factual fields for old DraftRange shapes", () =
   assert.equal(coerced.originalImageCount, 0);
   assert.equal(coerced.replacementContentChars, 0);
   assert.equal(coerced.originalApproxTokens, 10);
+});
+
+// ---- Planning lock (runtime mutex, not persisted) ----
+
+test("planning lock: UI blocks Agent mutation and vice versa", () => {
+  const lock = emptyPlanningLock();
+  assert.equal(agentCanMutate(lock), true);
+  assert.equal(tryAcquireUi(lock), true);
+  assert.equal(lock.owner, "ui");
+  // Agent cannot mutate while UI holds the lock.
+  assert.equal(agentCanMutate(lock), false);
+  // Re-acquiring UI is idempotent-ish: owner stays "ui".
+  assert.equal(tryAcquireUi(lock), true);
+});
+
+test("planning lock: Agent blocks UI acquire", () => {
+  const lock = emptyPlanningLock();
+  acquireAgent(lock);
+  assert.equal(lock.owner, "agent");
+  assert.equal(tryAcquireUi(lock), false);
+  assert.equal(lock.owner, "agent");
+});
+
+test("planning lock: releaseAgent on turn end frees the lock; releaseUi on disconnect frees it", () => {
+  const agent = emptyPlanningLock();
+  acquireAgent(agent);
+  releaseAgent(agent);
+  assert.equal(agent.owner, undefined);
+  assert.equal(tryAcquireUi(agent), true);
+
+  const ui = emptyPlanningLock();
+  tryAcquireUi(ui);
+  releaseUi(ui);
+  assert.equal(ui.owner, undefined);
+  assert.equal(agentCanMutate(ui), true);
+});
+
+test("planning lock: release is a no-op for the other owner", () => {
+  const lock = emptyPlanningLock();
+  acquireAgent(lock);
+  releaseUi(lock); // UI release must not steal the Agent's lock
+  assert.equal(lock.owner, "agent");
+  // Agent release frees it; then UI can acquire and Agent release must not steal it.
+  releaseAgent(lock);
+  assert.equal(lock.owner, undefined);
+  tryAcquireUi(lock);
+  releaseAgent(lock); // Agent release must not steal the UI's lock
+  assert.equal(lock.owner, "ui");
 });

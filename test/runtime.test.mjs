@@ -77,6 +77,8 @@ function makeBaseCtx(sm) {
       messages: [],
       reviewFrames: [],
       confirmations: [],
+      // Sequence of confirm results: first answer chooses Agent/User first, etc.
+      confirmSequence: [],
       confirmResult: true,
       statuses: new Map(),
       theme: {
@@ -90,6 +92,7 @@ function makeBaseCtx(sm) {
       async input(_title, placeholder) { return placeholder; },
       async confirm(title, message) {
         this.confirmations.push({ title, message });
+        if (this.confirmSequence.length > 0) return this.confirmSequence.shift();
         return this.confirmResult;
       },
       async custom(factory, _options) {
@@ -134,70 +137,68 @@ function setupRuntime(entries) {
   return { sm, pi, toolCtx, commandCtx };
 }
 
-/** Drive the full Agent-propose workflow end-to-end via the tool surface. */
-async function runAgentWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
+/** Drive the Agent-first workflow end-to-end via the tool surface. */
+async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  // confirm start, then confirm "Agent first?" -> true
+  toolCtx.ui.confirmSequence = [true, true];
   await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
   const tool = pi.tools.get("midcompact");
 
-  // Agent must inspect first.
+  // Agent inspects first.
   const inspected = await tool.execute("tc-inspect", { action: "inspect" }, null, null, toolCtx);
   assert.match(inspected.content[0].text, /content chars/i);
 
-  // Agent persists a candidate Selection (unconfirmed).
-  const selected = await tool.execute("tc-select", {
-    action: "select",
-    spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]),
-    keep_refs: JSON.stringify([]),
+  // Agent adds a range with an empty (pending) summary — allowed without confirm/select.
+  const added = await tool.execute("tc-add", {
+    action: "plan", op: "add", start: "a0001", end: "a0002",
   }, null, null, toolCtx);
-  assert.match(selected.content[0].text, /Selection persisted \(unconfirmed\)/);
+  assert.match(added.content[0].text, /d1:/);
+  assert.match(added.content[0].text, /pending summary/);
 
-  // Runtime guard: plan add is rejected before confirmation (selecting phase).
-  const guarded = await tool.execute("tc-guard", {
-    action: "plan", op: "add", start: "a0001", end: "a0002", summary: "x",
+  // Agent fills the summary via update.
+  const updated = await tool.execute("tc-update", {
+    action: "plan", op: "update", draft_id: "d1", summary: "Phase one summarized.",
   }, null, null, toolCtx);
-  assert.match(guarded.content[0].text, /selecting phase/);
-
-  // User confirms.
-  await pi.commands.get("midcompact").handler("confirm", commandCtx);
-
-  // User confirms.
-  await pi.commands.get("midcompact").handler("confirm", commandCtx);
-
-  // After confirmation, ranges are already materialized (pending). Fill summaries via plan update.
-  const draftState = await tool.execute("tc-after-confirm", { action: "plan", op: "show" }, null, null, toolCtx);
-  const rangeIds = [...draftState.content[0].text.matchAll(/d\d+:/g)].map(m => m[0].replace(/:$/, ""));
-  for (const id of rangeIds) {
-    await tool.execute(`tc-fill-${id}`, { action: "plan", op: "update", draft_id: id, summary: `Summary for ${id}.` }, null, null, toolCtx);
-  }
-  const planned = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
-  assert.match(planned.content[0].text, /d1:/);
+  assert.match(updated.content[0].text, /summarized/);
   // Agent-facing plan output echoes no summary text and no projected token claim.
-  assert.doesNotMatch(planned.content[0].text, /Summary for d1\./);
-  assert.doesNotMatch(planned.content[0].text, /projected if committed now/);
-  assert.match(planned.content[0].text, /content chars/);
-  assert.match(toolCtx.ui.statuses.get("midcompact"), /MC summarizing/);
+  assert.doesNotMatch(updated.content[0].text, /Phase one summarized\./);
+  assert.doesNotMatch(updated.content[0].text, /projected if committed now/);
+  assert.match(updated.content[0].text, /content chars/);
+  assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);
   return tool;
 }
 
-test("/midcompact start confirms and forwards an initial focus", async () => {
+test("/midcompact start [instructions] no longer accepts --user/--agent flags", async () => {
+  const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  // "--user" is treated as instructions text, not a mode flag.
+  toolCtx.ui.confirmSequence = [true, true];
+  await pi.commands.get("midcompact").handler("start --user", commandCtx);
+  assert.match(pi.sentUserMessages.at(-1), /User focus: --user/);
+});
+
+test("/midcompact start confirms and forwards an initial focus (Agent-first)", async () => {
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.confirmSequence = [true, true]; // confirm start, choose Agent first
   await pi.commands.get("midcompact").handler("start Compress old exploration only", commandCtx);
 
-  assert.equal(toolCtx.ui.confirmations.length, 1);
+  assert.equal(toolCtx.ui.confirmations.length, 2);
   assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
   assert.match(pi.sentUserMessages.at(-1), /action="inspect"/);
+  assert.match(pi.sentUserMessages.at(-1), /op="show"/);
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
-  assert.equal(entries.some(e => e.customType === "midcompact-selection"), true);
+  assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
 });
 
 test("/midcompact start cancellation leaves the session at its anchor", async () => {
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
-  toolCtx.ui.confirmResult = false;
+  toolCtx.ui.confirmSequence = [false]; // decline start confirm
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   await pi.commands.get("midcompact").handler("start", commandCtx);
@@ -214,11 +215,10 @@ test("/midcompact completes only the subcommand token", () => {
   const command = pi.commands.get("midcompact");
 
   assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review", "review-webui"]);
-  assert.deepEqual(command.getArgumentCompletions("con").map(item => item.value), ["confirm"]);
   assert.equal(command.getArgumentCompletions("start "), null);
 });
 
-test("Agent propose workflow: inspect → select → confirm → plan → review → commit, then tree rollback restores raw history", async () => {
+test("Agent-first workflow: inspect → plan add (pending) → update → review → commit, then tree rollback restores raw history", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("old requirement", 1) },
     { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
@@ -230,7 +230,8 @@ test("Agent propose workflow: inspect → select → confirm → plan → review
   const commandCtx = makeCommandCtx(pi, sm, toolCtx);
   extensionFactory(pi);
 
-  const tool = await runAgentWorkflow(pi, toolCtx, commandCtx, { instructions: "Compress old exploration only" });
+  const tool = await runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions: "Compress old exploration only" });
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
 
   // Review UI still maps ranges and KEEP holes.
   await pi.commands.get("midcompact").handler("review", commandCtx);
@@ -242,18 +243,16 @@ test("Agent propose workflow: inspect → select → confirm → plan → review
   assert.equal("navigateTree" in toolCtx, false, "tool context must not expose command-only session navigation");
   await pi.commands.get("midcompact").handler("commit", commandCtx);
 
-  const committedLeaf = sm.leafId; // setLabel appends a label-change entry after the state entry.
+  const committedLeaf = sm.leafId;
   const committedEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
   assert.ok(committedEntry);
   assert.equal(committedEntry.parentId, "e3");
   assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), false);
-  assert.equal(sm.getBranch().some(e => e.customType === "midcompact-selection"), false);
   assert.match(pi.labels.get(committedEntry.id), /^midcompact/);
   assert.equal(toolCtx.ui.statuses.has("midcompact"), false);
   assert.ok(pi.entryRenderers.has("midcompact-state"));
   assert.equal(committedEntry.data.lastCommit.anchorUsage.percent, 70);
   assert.equal(committedEntry.data.lastCommit.anchorUsage.contextWindow, 100000);
-  // Commit stats carry factual char/image fields.
   assert.equal(typeof committedEntry.data.lastCommit.selectedOriginalContentChars, "number");
   assert.equal(typeof committedEntry.data.lastCommit.selectedReplacementContentChars, "number");
 
@@ -277,10 +276,7 @@ test("Agent propose workflow: inspect → select → confirm → plan → review
   assert.match(recalled.content[0].text, /old requirement/);
   assert.match(recalled.content[0].text, /old exploration/);
 
-  const afterRecall = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
-  assert.equal(afterRecall.messages[0].customType, "midcompact-summary");
-
-  // A later transaction should retain c0001 and compress only newly accumulated raw history.
+  // A later transaction retains c0001 and compresses only newly accumulated raw history.
   const newUserId = `x${++pi.counter}`;
   entries.push({ type: "message", id: newUserId, parentId: sm.leafId, message: user("new phase request", pi.counter) });
   sm.leafId = newUserId;
@@ -289,18 +285,13 @@ test("Agent propose workflow: inspect → select → confirm → plan → review
   sm.leafId = newAssistantId;
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.confirmSequence = [true, true];
   await pi.commands.get("midcompact").handler("start", commandCtx);
   const inspect2 = await tool.execute("tc-inspect2", { action: "inspect" }, null, null, toolCtx);
   assert.match(inspect2.content[0].text, /compressed.*protected|protected/);
-  await tool.execute("tc-select2", {
-    action: "select", spans: JSON.stringify([{ startRef: "a0003", endRef: "a0004" }]), keep_refs: JSON.stringify([]),
-  }, null, null, toolCtx);
-  await pi.commands.get("midcompact").handler("confirm", commandCtx);
-  const draftState2 = await tool.execute("tc-after-confirm2", { action: "plan", op: "show" }, null, null, toolCtx);
-  const rangeIds2 = [...draftState2.content[0].text.matchAll(/d\d+:/g)].map(m => m[0].replace(/:$/, ""));
-  for (const id of rangeIds2) {
-    await tool.execute(`tc-fill2-${id}`, { action: "plan", op: "update", draft_id: id, summary: "New phase summarized." }, null, null, toolCtx);
-  }
+  await tool.execute("tc-add2", { action: "plan", op: "add", start: "a0003", end: "a0004" }, null, null, toolCtx);
+  await tool.execute("tc-update2", { action: "plan", op: "update", draft_id: "d1", summary: "New phase summarized." }, null, null, toolCtx);
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   await pi.commands.get("midcompact").handler("commit", commandCtx);
 
   const latestStateEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
@@ -310,7 +301,28 @@ test("Agent propose workflow: inspect → select → confirm → plan → review
   assert.equal(latestStateEntry.data.blocks[1].id, "c0002");
 });
 
-test("User select workflow: start --user sends no Agent prompt until Selection is confirmed", async () => {
+test("User-first start does not send an Agent prompt and saves an empty DraftPlan", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
+
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  // confirm start yes; Agent-first? no; User-first? yes
+  toolCtx.ui.confirmSequence = [true, false, true];
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+
+  assert.equal(pi.sentUserMessages.length, 0, "User-first must not auto-trigger an Agent turn");
+  assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
+  assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
+  // Selection UI is deferred; user is told the UI is not yet available.
+  assert.match(toolCtx.ui.messages.at(-1).text, /Selection UI is not yet available|empty DraftPlan has been saved/i);
+  const txEntry = entries.find(e => e.customType === "midcompact-transaction");
+  assert.equal(txEntry.data.startMode, "user");
+});
+
+test("Agent discovers an existing user DraftPlan via plan show after handoff", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
     { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
@@ -320,32 +332,20 @@ test("User select workflow: start --user sends no Agent prompt until Selection i
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
 
+  // User-first start.
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start --user", commandCtx);
-  // No Agent prompt yet.
-  assert.equal(pi.sentUserMessages.length, 0);
-  assert.match(toolCtx.ui.messages.at(-1).text, /User select mode/);
+  toolCtx.ui.confirmSequence = [true, false, true];
+  await pi.commands.get("midcompact").handler("start", commandCtx);
 
-  // User builds a Selection spanning a KEEP hole.
-  const selected = await tool.execute("tc-usel", {
-    action: "select",
-    spans: JSON.stringify([{ startRef: "a0001", endRef: "a0004" }]),
-    keep_refs: JSON.stringify(["a0003"]),
-  }, null, null, toolCtx);
-  assert.match(selected.content[0].text, /Selection persisted \(unconfirmed\)/);
+  // Simulate the user having pre-selected a range (written into DraftPlan by the
+  // future Selection UI). Here we drive it through the Agent tool as a stand-in,
+  // since the UI is not yet implemented.
+  await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
 
-  // User select cannot edit a Selection after confirmation.
-  await pi.commands.get("midcompact").handler("confirm", commandCtx);
-  assert.ok(pi.sentUserMessages.length > 0, "summary prompt sent only after confirmation");
-  // Confirmed materialized ranges exclude the KEEP atom.
-  const showAfter = await tool.execute("tc-ushow", { action: "plan", op: "show" }, null, null, toolCtx);
-  assert.match(showAfter.content[0].text, /a0001 → a0002/);
-  assert.match(showAfter.content[0].text, /a0004 → a0004/);
-
-  const reSelect = await tool.execute("tc-uredo", {
-    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0001" }]), keep_refs: JSON.stringify([]),
-  }, null, null, toolCtx);
-  assert.match(reSelect.content[0].text, /already confirmed/);
+  // User hands off; Agent's first call is plan show and it sees the existing draft.
+  const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
+  assert.match(shown.content[0].text, /d1:/);
+  assert.match(shown.content[0].text, /pending summary/);
 });
 
 test("commit rejects a pending (empty) summary", async () => {
@@ -356,17 +356,16 @@ test("commit rejects a pending (empty) summary", async () => {
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.confirmSequence = [true, true];
   await pi.commands.get("midcompact").handler("start", commandCtx);
-  await tool.execute("tc-sel", {
-    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]), keep_refs: JSON.stringify([]),
-  }, null, null, toolCtx);
-  await pi.commands.get("midcompact").handler("confirm", commandCtx);
-  // Confirmed ranges materialize with pending (empty) summaries; do not fill them.
+  // Add a range but leave its summary empty (pending).
+  await tool.execute("tc-add", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   await pi.commands.get("midcompact").handler("commit", commandCtx);
   assert.match(toolCtx.ui.messages.at(-1).text, /empty.*summary|pending.*summary|commit rejected/i);
 });
 
-test("reload restores transaction mode, selection, and phase", async () => {
+test("reload restores transaction startMode and draft", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
     { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
@@ -374,18 +373,150 @@ test("reload restores transaction mode, selection, and phase", async () => {
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start --user", commandCtx);
-  await tool.execute("tc-sel", {
-    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]), keep_refs: JSON.stringify([]),
-  }, null, null, toolCtx);
+  toolCtx.ui.confirmSequence = [true, false, true]; // User-first
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
 
-  // Simulate a reload by emitting session_start again on a fresh tool context.
+  // Simulate a reload on a fresh context.
   const freshCtx = makeBaseCtx(sm);
   const freshCommandCtx = makeCommandCtx(pi, sm, freshCtx);
   await pi.emit("session_start", { reason: "reload" }, freshCtx);
   await pi.commands.get("midcompact").handler("status", freshCommandCtx);
-  // Selection + phase restored: status notify reflects unconfirmed selection and selecting phase.
   const statusNotify = freshCtx.ui.messages.at(-1).text;
-  assert.match(statusNotify, /unconfirmed/);
-  assert.match(statusNotify, /selecting/);
+  assert.match(statusNotify, /user-first/);
+  assert.match(statusNotify, /d1/);
+});
+
+test("no select/confirm actions exist in the tool surface", () => {
+  const { pi } = setupRuntime([{ type: "message", id: "e1", parentId: null, message: user("x", 1) }]);
+  const tool = pi.tools.get("midcompact");
+  // The mock StringEnum compiles to { kind: "string-enum", value: { values: [...] } }.
+  const actionParam = tool.parameters;
+  const json = JSON.stringify(actionParam);
+  assert.doesNotMatch(json, /"select"/);
+  assert.doesNotMatch(json, /"confirm"/);
+  assert.match(json, /"inspect"/);
+  assert.match(json, /"locate"/);
+  assert.match(json, /"plan"/);
+  assert.match(json, /"recall"/);
+});
+
+test("no /midcompact confirm command exists", () => {
+  const { pi } = setupRuntime([{ type: "message", id: "e1", parentId: null, message: user("x", 1) }]);
+  const command = pi.commands.get("midcompact");
+  const completions = command.getArgumentCompletions("con") ?? [];
+  assert.equal(completions.some(c => c.value === "confirm"), false);
+});
+
+// ---- Planning lock runtime tests ----
+
+async function startAgentFirst(pi, toolCtx, commandCtx) {
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.confirmSequence = [true, true];
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+  return pi.tools.get("midcompact");
+}
+
+test("planning lock: Agent holding the lock blocks UI acquire and notifies", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = await startAgentFirst(pi, toolCtx, commandCtx);
+  // Agent plan mutation acquires the lock.
+  await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "agent");
+  // UI acquire is rejected while the Agent holds the lock.
+  assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), false);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "agent");
+});
+
+test("planning lock: agent_start blocks UI before the first tool action", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await startAgentFirst(pi, toolCtx, commandCtx);
+
+  await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "agent");
+  assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), false);
+
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), true);
+});
+
+test("planning lock: UI holding the lock blocks Agent plan mutation and returns a clear message", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = await startAgentFirst(pi, toolCtx, commandCtx);
+  // Simulate the user opening a UI first.
+  assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), true);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "ui");
+  // Agent plan mutation is rejected.
+  const res = await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  assert.match(res.content[0].text, /blocked.*planning lock|UI.*editing/i);
+  assert.match(toolCtx.ui.messages.at(-1).text, /UI is currently editing/i);
+  // The DraftPlan is unchanged.
+  const show = await tool.execute("tc2", { action: "plan", op: "show" }, null, null, toolCtx);
+  assert.doesNotMatch(show.content[0].text, /d1:/);
+});
+
+test("planning lock: Agent turn end (agent_settled) releases the lock so UI can edit", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = await startAgentFirst(pi, toolCtx, commandCtx);
+  await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "agent");
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), undefined);
+  assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), true);
+});
+
+test("planning lock: UI close or disconnect releases the lock so Agent can edit again", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = await startAgentFirst(pi, toolCtx, commandCtx);
+  pi.midcompactPlanningLock.tryAcquireUi();
+  // Agent mutation blocked while UI edits.
+  let res = await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  assert.match(res.content[0].text, /blocked/i);
+  // UI abnormal disconnect -> release.
+  pi.midcompactPlanningLock.releaseUi();
+  assert.equal(pi.midcompactPlanningLock.getOwner(), undefined);
+  // Agent can now mutate.
+  res = await tool.execute("tc2", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  assert.match(res.content[0].text, /d1:/);
+});
+
+test("planning lock: reload does not restore the old lock but DraftPlan is restored", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = await startAgentFirst(pi, toolCtx, commandCtx);
+  await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  await tool.execute("tc2", { action: "plan", op: "update", draft_id: "d1", summary: "filled." }, null, null, toolCtx);
+  assert.equal(pi.midcompactPlanningLock.getOwner(), "agent");
+  // Simulate reload on a fresh context.
+  const freshCtx = makeBaseCtx(sm);
+  const freshCommandCtx = makeCommandCtx(pi, sm, freshCtx);
+  await pi.emit("session_start", { reason: "reload" }, freshCtx);
+  // Lock is gone; DraftPlan is restored.
+  assert.equal(pi.midcompactPlanningLock.getOwner(), undefined);
+  const show = await tool.execute("tc3", { action: "plan", op: "show" }, null, null, freshCtx);
+  assert.match(show.content[0].text, /d1:/);
+  assert.match(show.content[0].text, /summarized/);
 });
