@@ -55,7 +55,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 实际压缩效果
 
-下方浏览器审查界面中的草案包含 **2 个区段**，覆盖 **73 个对话原子（atom，最小可压缩单元）中的 42 个**：约从 **31.0k token 降至 488 token**，预计减少 **30.6k token**。其余 31 个原子未被选中，仍以原文留在上下文中。点击图片可查看原图。
+下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 会把 Pi 提供的锚点 usage 与扩展统计的 content chars、图片数量分开显示，不再根据本地字符估算推导预计 token 节省量。点击图片可查看原图。
 
 <p align="center">
   <a href="./figures/review-webui.png">
@@ -127,7 +127,7 @@ pi install git:github.com/frostime/pi-midcompact
 /midcompact start
 ```
 
-Pi 会要求确认，随后在锚点之后创建临时事务，并提示 Agent 开始规划。此时尚未改动任何会话内容。也可以在命令中直接写明初始范围：
+Pi 会在创建事务状态前提供三个选项：**Drop**、**Agent direct** 和 **User manual**。Agent direct 进入现有的 inventory-first Agent 流程；User manual 在不触发模型调用的情况下打开 Selection 工作台。用户保存初始 DraftPlan 并关闭界面后，可在准备好时再让 Agent 继续。也可以在命令中直接写明初始重点：
 
 ```text
 /midcompact start 压缩前期仓库探索过程，但保留用户需求原文。
@@ -161,7 +161,14 @@ Agent 会在冻结的会话快照中定位相关内容，提出一个或多个�
 /midcompact review-webui
 ```
 
-两种审查界面都可以修改所选区段的摘要或主题、移除区段、切换不同区段。若需调整边界，或保留一个重要的未压缩部分，请告诉 Agent 保留什么，并要求它修订方案后再次审查。
+需要创建或调整区段与 `KEEP` 保留洞时，使用 Selection：
+
+```text
+/midcompact select
+/midcompact select-webui
+```
+
+TUI 与本地浏览器 Review 界面用于编辑摘要/主题和否决区段。Review 不创建或调整区段边界；边界变化应重新打开 Selection。用户先创建计划后，只需发送普通消息要求 Agent 继续当前 midcompact draft，Agent 会先读取已有计划。
 
 ### 4. 提交已审查的压缩
 
@@ -204,9 +211,11 @@ Enter/Esc/q        关闭
 
 | 命令 | 作用 |
 | --- | --- |
-| `/midcompact start [instructions]` | 确认后在当前会话树叶节点启动事务；可选地提供初始压缩重点。 |
-| `/midcompact review` | 在原生 TUI 中打开草案审查；非 TUI 模式下会提示使用 `review-webui`。 |
-| `/midcompact review-webui` | 启动可编辑的本地浏览器审查页面；无需 TUI。 |
+| `/midcompact start [instructions]` | 显示 Drop / Agent direct / User manual，并在当前会话树叶节点启动事务。 |
+| `/midcompact select` | 在原生 TUI 中打开 Selection 工作台，编辑区段和 `KEEP`。 |
+| `/midcompact select-webui` | 在本地浏览器中打开 Selection 工作台。 |
+| `/midcompact review` | 在原生 TUI 中审查摘要和主题。 |
+| `/midcompact review-webui` | 在本地浏览器中审查摘要和主题。 |
 | `/midcompact commit` | 提交已审查的草案；只能由用户执行。 |
 | `/midcompact abort` | 放弃事务并回到锚点。 |
 | `/midcompact status` | 显示当前草案，或本分支已提交的压缩状态。 |
@@ -224,4 +233,4 @@ Enter/Esc/q        关闭
 - **与 Pi 原生 `/compact` 的组合仍需更多真实会话验证。** 在完成充分验证前，不应在关键工作中依赖两者混用。
 - **Provider 与扩展互操作性仍需更多真实会话验证。** 非常规消息形态、第三方上下文转换顺序，以及长时间运行的精确消息指纹尚未得到广泛验证。
 - **超长会话尚未完成压力测试。** 审查快照很大、压缩块反复累积时，最终可能需要进一步整合。
-- **浏览器审查仅在本机开放。** `review-webui` 绑定到 loopback 地址，提供可编辑的审查页面；其草案修改与原生 TUI 使用同一条分支事务。
+- **浏览器工作台仅在本机开放。** `select-webui` 与 `review-webui` 绑定到 loopback，并与原生 TUI 操作同一份分支内 DraftPlan。

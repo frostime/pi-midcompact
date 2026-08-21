@@ -15,7 +15,7 @@ const reviewWebMod = await import(new URL("review-webui.js", ROOT));
 const planningLockMod = await import(new URL("planning-lock.js", ROOT));
 
 const { buildAtoms, locateAtoms } = atomsMod;
-const { addDraftRange, addPendingRanges, emptyDraft, isReviewReady } = planMod;
+const { addDraftRange, addPendingRanges, emptyDraft, isReviewReady, replaceDraftRanges } = planMod;
 const { projectMessages } = projectionMod;
 const { restoreCompressionState, STATE_ENTRY, coerceDraftRange, defaultStartMode } = stateMod;
 const { draftTelemetry } = telemetryMod;
@@ -23,7 +23,7 @@ const { measureMessage, measureContentParts, codePointCount, readImageDimensions
 const { buildInventory, formatInventory, encodeCursor, decodeCursor, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = inventoryMod;
 const { expandSelection, SelectionError } = selectionMod;
 const { buildReviewText } = reviewMod;
-const { serializeReviewState } = reviewWebMod;
+const { serializeReviewState, showReviewWebUi } = reviewWebMod;
 const { emptyPlanningLock, agentCanMutate, tryAcquireUi, acquireAgent, releaseAgent, releaseUi } = planningLockMod;
 
 function entry(id, message, parentId = null) {
@@ -251,6 +251,58 @@ test("serializeReviewState maps atoms to ranges and tags range boundaries", () =
   assert.equal(keep.owningRangeId, undefined);
 });
 
+test("serializeReviewState exposes selection groups and factual atom metrics", () => {
+  const messages = [user("phase one", 1), assistant([{ type: "text", text: "old exploration" }], 2)];
+  const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
+  const atoms = buildAtoms(messages, branch);
+  const draft = emptyDraft("tx-selection-web");
+  const telemetry = draftTelemetry({ version: 1, id: "tx-selection-web", anchorEntryId: "e2", startedAt: "now" }, draft);
+
+  const state = serializeReviewState(atoms, draft, telemetry, "selection");
+  assert.equal(state.view, "selection");
+  assert.equal(state.atoms[0].groupRef, "g0001");
+  assert.match(state.atoms[0].groupLabel, /phase one/);
+  assert.equal(state.atoms[0].contentChars, atoms[0].metrics.contentChars);
+  assert.equal(state.atoms[0].imageCount, 0);
+});
+
+test("Web UI ends when its page liveness connection disappears", async () => {
+  let ready;
+  const readyUrl = new Promise((resolve) => { ready = resolve; });
+  const ctx = {
+    ui: {
+      notify(text) {
+        const match = text.match(/http:\/\/127\.0\.0\.1:\d+\/\?view=review/);
+        if (match) ready(match[0]);
+      },
+    },
+  };
+  const draft = emptyDraft("tx-web-liveness");
+  const telemetry = draftTelemetry({ version: 1, id: "tx-web-liveness", anchorEntryId: "e1", startedAt: "now" }, draft);
+  const workbench = showReviewWebUi(
+    ctx,
+    [],
+    () => ({ draft, telemetry }),
+    { editSummary() {}, editTopic() {}, remove() {} },
+    "review",
+    { openBrowser() {}, livenessConnectTimeoutMs: 2_000, livenessPingIntervalMs: 20 },
+  );
+  const url = await readyUrl;
+  const response = await fetch(new URL("/api/liveness", url));
+  await response.body.cancel();
+
+  let completed = false;
+  try {
+    await Promise.race([
+      workbench.then(() => { completed = true; }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Web UI did not close after liveness disconnect.")), 500)),
+    ]);
+    assert.equal(completed, true);
+  } finally {
+    if (!completed) await fetch(new URL("/api/close", url), { method: "POST" }).catch(() => {});
+  }
+});
+
 // ---- Phase 2: factual content metrics ----
 
 test("codePointCount counts Unicode code points, not UTF-16 units", () => {
@@ -463,6 +515,28 @@ test("addPendingRanges creates ranges with empty (pending) summaries; isReviewRe
 });
 
 // ---- Phase 6: state restore / compat ----
+
+test("replaceDraftRanges preserves exact ranges and creates pending ranges for changed boundaries", () => {
+  const messages = [
+    user("phase one", 1),
+    assistant([{ type: "text", text: "old exploration" }], 2),
+    user("phase two", 3),
+    assistant([{ type: "text", text: "more work" }], 4),
+  ];
+  const atoms = buildAtoms(messages, messages.map((message, index) => entry(`e${index + 1}`, message)));
+  let draft = emptyDraft("tx-replace");
+  draft = addDraftRange(draft, atoms, { start: "a0001", end: "a0002", summary: "keep this summary", topic: "phase one" });
+
+  const replaced = replaceDraftRanges(draft, atoms, [
+    { startRef: "a0001", endRef: "a0002" },
+    { startRef: "a0003", endRef: "a0004" },
+  ]);
+  assert.equal(replaced.ranges.length, 2);
+  assert.equal(replaced.ranges[0].summary, "keep this summary");
+  assert.equal(replaced.ranges[0].topic, "phase one");
+  assert.equal(replaced.ranges[1].summary, "");
+  assert.equal(replaced.revision, draft.revision + 1);
+});
 
 test("defaultStartMode infers agent for old transactions", () => {
   assert.equal(defaultStartMode(undefined), "agent");

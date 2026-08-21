@@ -76,6 +76,7 @@ function makeBaseCtx(sm) {
     ui: {
       messages: [],
       reviewFrames: [],
+      customInputs: [],
       confirmations: [],
       // Sequence of confirm results: first answer chooses Agent/User first, etc.
       confirmSequence: [],
@@ -101,7 +102,9 @@ function makeBaseCtx(sm) {
         const done = value => { result = value; };
         const component = await factory(tui, this.theme, {}, done);
         this.reviewFrames.push(component.render(120));
-        component.handleInput?.("enter");
+        const next = this.customInputs.length ? this.customInputs.shift() : "enter";
+        const inputs = Array.isArray(next) ? next : [next];
+        for (const input of inputs) component.handleInput?.(input);
         return result;
       },
     },
@@ -140,8 +143,7 @@ function setupRuntime(entries) {
 /** Drive the Agent-first workflow end-to-end via the tool surface. */
 async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  // confirm start, then confirm "Agent first?" -> true
-  toolCtx.ui.confirmSequence = [true, true];
+  // Start chooser defaults to Agent direct.
   await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
   const tool = pi.tools.get("midcompact");
 
@@ -174,20 +176,19 @@ test("/midcompact start [instructions] no longer accepts --user/--agent flags", 
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   // "--user" is treated as instructions text, not a mode flag.
-  toolCtx.ui.confirmSequence = [true, true];
   await pi.commands.get("midcompact").handler("start --user", commandCtx);
   assert.match(pi.sentUserMessages.at(-1), /User focus: --user/);
 });
 
-test("/midcompact start confirms and forwards an initial focus (Agent-first)", async () => {
+test("/midcompact start chooser forwards an initial focus (Agent-first)", async () => {
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.confirmSequence = [true, true]; // confirm start, choose Agent first
   await pi.commands.get("midcompact").handler("start Compress old exploration only", commandCtx);
 
-  assert.equal(toolCtx.ui.confirmations.length, 2);
+  assert.equal(toolCtx.ui.confirmations.length, 0);
+  assert.match(toolCtx.ui.reviewFrames[0].join("\n"), /Drop.*Agent direct.*User manual/s);
   assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
   assert.match(pi.sentUserMessages.at(-1), /action="inspect"/);
   assert.match(pi.sentUserMessages.at(-1), /op="show"/);
@@ -198,7 +199,7 @@ test("/midcompact start confirms and forwards an initial focus (Agent-first)", a
 test("/midcompact start cancellation leaves the session at its anchor", async () => {
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
-  toolCtx.ui.confirmSequence = [false]; // decline start confirm
+  toolCtx.ui.customInputs = ["1"];
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   await pi.commands.get("midcompact").handler("start", commandCtx);
@@ -215,6 +216,7 @@ test("/midcompact completes only the subcommand token", () => {
   const command = pi.commands.get("midcompact");
 
   assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review", "review-webui"]);
+  assert.deepEqual(command.getArgumentCompletions("sel").map(item => item.value), ["select", "select-webui"]);
   assert.equal(command.getArgumentCompletions("start "), null);
 });
 
@@ -309,17 +311,34 @@ test("User-first start does not send an Agent prompt and saves an empty DraftPla
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  // confirm start yes; Agent-first? no; User-first? yes
-  toolCtx.ui.confirmSequence = [true, false, true];
+  toolCtx.ui.customInputs = ["3", "s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
   assert.equal(pi.sentUserMessages.length, 0, "User-first must not auto-trigger an Agent turn");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
   assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
-  // Selection UI is deferred; user is told the UI is not yet available.
-  assert.match(toolCtx.ui.messages.at(-1).text, /Selection UI is not yet available|empty DraftPlan has been saved/i);
+  assert.match(toolCtx.ui.messages.at(-1).text, /DraftPlan saved|tell the Agent/i);
   const txEntry = entries.find(e => e.customType === "midcompact-transaction");
   assert.equal(txEntry.data.startMode, "user");
+});
+
+test("User-first TUI selection writes pending ranges into the shared DraftPlan", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.customInputs = ["3", [" ", "s"]];
+
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+
+  const draftEntry = [...entries].reverse().find(entry => entry.customType === "midcompact-draft");
+  assert.equal(draftEntry.data.ranges.length, 1);
+  assert.equal(draftEntry.data.ranges[0].startRef, "a0001");
+  assert.equal(draftEntry.data.ranges[0].endRef, "a0001");
+  assert.equal(draftEntry.data.ranges[0].summary, "");
+  assert.equal(pi.sentUserMessages.length, 0);
 });
 
 test("Agent discovers an existing user DraftPlan via plan show after handoff", async () => {
@@ -334,7 +353,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
 
   // User-first start.
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.confirmSequence = [true, false, true];
+  toolCtx.ui.customInputs = ["3", "s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
   // Simulate the user having pre-selected a range (written into DraftPlan by the
@@ -342,7 +361,13 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   // since the UI is not yet implemented.
   await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
 
+  await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
+  const handoff = await pi.emit("before_agent_start", { prompt: "continue the current midcompact draft" }, toolCtx);
+  assert.match(handoff.message.content, /persisted DraftPlan/);
+  assert.match(handoff.message.content, /plan.*show/);
+
   // User hands off; Agent's first call is plan show and it sees the existing draft.
+  await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
   const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
   assert.match(shown.content[0].text, /d1:/);
   assert.match(shown.content[0].text, /pending summary/);
@@ -373,7 +398,7 @@ test("reload restores transaction startMode and draft", async () => {
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.confirmSequence = [true, false, true]; // User-first
+  toolCtx.ui.customInputs = ["3", "s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
   await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
 

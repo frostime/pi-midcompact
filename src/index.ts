@@ -11,10 +11,13 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { buildAtoms, formatLocatedAtom, isProtectedAtom, locateAtoms } from "./atoms.js";
 import { buildInventory, formatInventory } from "./inventory.js";
 import { messageText } from "./messages.js";
-import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, updateDraftRange } from "./plan.js";
+import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, replaceDraftRanges, updateDraftRange } from "./plan.js";
+import { expandSelection } from "./selection.js";
 import { projectMessages } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
+import { showSelectionUi } from "./selection-ui.js";
+import { showStartChoiceUi } from "./start-ui.js";
 import { showReviewWebUi } from "./review-webui.js";
 import {
   DRAFT_ENTRY,
@@ -35,6 +38,7 @@ import type {
   DraftPlan,
   DraftTelemetry,
   MessageLike,
+  SelectionSpan,
   StartMode,
   TransactionState,
 } from "./types.js";
@@ -118,6 +122,24 @@ export default function (pi: ExtensionAPI) {
     if (transaction) acquireAgent(planningLock);
   });
 
+  // Keep a user-created DraftPlan visible to the next Agent turn without
+  // starting a turn automatically after the user saves the UI.
+  pi.on("before_agent_start", async () => {
+    if (!transaction) return;
+    const currentDraft = draft ?? emptyDraft(transaction.id);
+    return {
+      message: {
+        customType: "midcompact-handoff",
+        content: [
+          "An active midcompact transaction exists with a persisted DraftPlan.",
+          `Draft revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
+          "If the current user request asks to continue midcompact, call midcompact(action=\"plan\", op=\"show\") first, treat the existing plan as the initial proposal, and continue from it.",
+        ].join("\n"),
+        display: false,
+      },
+    };
+  });
+
   // Agent turn end releases the Agent's runtime edit lock so the user can open a UI.
   pi.on("agent_settled", async () => {
     releaseAgent(planningLock);
@@ -138,7 +160,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("midcompact", {
-    description: "Start, review, commit, inspect, or abort a branch-isolated mid-context compression transaction",
+    description: "Start, select, review, commit, inspect, or abort a branch-isolated mid-context compression transaction",
     getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
       const query = prefix.trimStart().toLowerCase();
       if (/\s/.test(query)) return null;
@@ -148,6 +170,8 @@ export default function (pi: ExtensionAPI) {
         { value: "commit", label: "commit — Commit the current draft to the branch state" },
         { value: "review", label: "review — Open interactive TUI to inspect and edit the draft" },
         { value: "review-webui", label: "review-webui — Open a local web page to inspect and edit the draft (works without TUI)" },
+        { value: "select", label: "select — Open the TUI Selection surface to edit range boundaries" },
+        { value: "select-webui", label: "select-webui — Open Selection in a local browser" },
         { value: "status", label: "status — Show current transaction and draft status" },
       ];
       const filtered = items.filter((item) => item.value.startsWith(query));
@@ -162,6 +186,8 @@ export default function (pi: ExtensionAPI) {
       if (lower === "commit") return commitTransaction(ctx);
       if (lower === "review") return reviewTransaction(ctx, "tui");
       if (lower === "review-webui") return reviewTransaction(ctx, "web");
+      if (lower === "select") return openSelectionUi(ctx, "auto");
+      if (lower === "select-webui") return openSelectionUi(ctx, "web");
       if (lower === "status") return showStatus(ctx);
 
       // start [instructions...]
@@ -172,7 +198,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       ctx.ui.notify(
-        "Usage: /midcompact start [instructions] | /midcompact review | /midcompact commit | /midcompact status | /midcompact abort",
+        "Usage: /midcompact start [instructions] | /midcompact select[-webui] | /midcompact review[-webui] | /midcompact commit | /midcompact status | /midcompact abort",
         "warning",
       );
     },
@@ -191,10 +217,10 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Cannot start midcompact without a session leaf.", "error");
       return;
     }
-    if (ctx.hasUI) {
+    if (ctx.hasUI && ctx.mode !== "tui") {
       const ok = await ctx.ui.confirm(
         "Start midcompact transaction?",
-        "The current context snapshot will be frozen as an anchor. You will need to review and explicitly commit (/midcompact commit) or abort (/midcompact abort) later.",
+        "The current context snapshot will be frozen as an anchor. You will need to review and explicitly commit or abort later.",
       );
       if (!ok) {
         ctx.ui.notify("Midcompact start cancelled.", "info");
@@ -234,30 +260,59 @@ export default function (pi: ExtensionAPI) {
   }
 
   async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled"> {
-    if (!ctx.hasUI) return "agent"; // non-interactive fallback stays Agent-first
-    // Two-step confirm stands in for a select widget until the Selection UI exists.
-    const agentFirst = await ctx.ui.confirm(
-      "Who should draft the initial plan?",
-      "Choose Agent first (OK) to let the Agent inspect and propose ranges, or cancel to pick User first.",
-    );
-    if (agentFirst) return "agent";
-    const userFirst = await ctx.ui.confirm(
-      "User-first mode?",
-      "OK opens the User-first route: you draft the initial DraftPlan, save it, then tell the Agent to continue. Cancel aborts the start.",
-    );
-    if (userFirst) return "user";
-    return "cancelled";
+    if (!ctx.hasUI || ctx.mode !== "tui") return "agent";
+    return showStartChoiceUi(ctx);
   }
 
-  async function openSelectionUi(ctx: ExtensionCommandContext): Promise<void> {
-    // Selection TUI/Web UI is implemented in a later phase. Until then, the
-    // user-first route tells the user the UI is not yet available and that the
-    // empty DraftPlan is saved; they can hand off to the Agent to fill it.
-    // No Agent turn is triggered here.
-    ctx.ui.notify(
-      "User-first Selection UI is not yet available in this build. An empty DraftPlan has been saved. Tell the Agent to continue, or use /midcompact review to edit it.",
-      "info",
-    );
+  async function openSelectionUi(ctx: ExtensionCommandContext, mode: "auto" | "tui" | "web" = "auto"): Promise<void> {
+    const currentTx = transaction;
+    if (!currentTx || !draft) {
+      ctx.ui.notify("No active midcompact transaction.", "warning");
+      return;
+    }
+    if (!tryAcquireUi(planningLock)) {
+      ctx.ui.notify("The Agent is currently processing the midcompact draft. Try Selection after the Agent turn ends.", "warning");
+      return;
+    }
+
+    const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
+    const applySelection = (spans: SelectionSpan[], keepRefs: string[]): void => {
+      const normalized = expandSelection(snapshot.atoms, { spans, keepRefs });
+      draft = replaceDraftRanges(draft ?? emptyDraft(currentTx.id), snapshot.atoms, normalized.spans);
+      pi.appendEntry(DRAFT_ENTRY, draft);
+      updateStatus(ctx, currentTx, draft, planningLock.owner);
+    };
+
+    try {
+      if (mode === "tui" || (mode === "auto" && ctx.mode === "tui")) {
+        const action = await showSelectionUi(ctx, snapshot.atoms, draft, draftTelemetry(currentTx, draft));
+        if (action.action === "save") {
+          try {
+            applySelection(action.spans ?? [], action.keepRefs ?? []);
+            ctx.ui.notify("DraftPlan saved. Tell the Agent to continue processing it when ready.", "info");
+          } catch (error) {
+            ctx.ui.notify(`Selection could not be saved: ${error instanceof Error ? error.message : String(error)}`, "warning");
+          }
+        }
+        return;
+      }
+      await showReviewWebUi(ctx, snapshot.atoms, () => ({
+        draft: draft ?? emptyDraft(currentTx.id),
+        telemetry: draftTelemetry(currentTx, draft),
+      }), {
+        applySelection,
+        editSummary: () => { throw new Error("Summary editing belongs to Review."); },
+        editTopic: () => { throw new Error("Topic editing belongs to Review."); },
+        remove: (id) => {
+          draft = removeDraftRange(draft ?? emptyDraft(currentTx.id), id);
+          pi.appendEntry(DRAFT_ENTRY, draft);
+          updateStatus(ctx, currentTx, draft, planningLock.owner);
+        },
+      }, "selection");
+      ctx.ui.notify("Selection closed. The DraftPlan is saved; tell the Agent to continue when ready.", "info");
+    } finally {
+      releaseUi(planningLock);
+    }
   }
 
   function sendAgentStartPrompt(tx: TransactionState, customInstructions?: string): void {

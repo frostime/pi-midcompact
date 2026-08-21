@@ -79,8 +79,9 @@ If `/midcompact start` carried an instruction (it arrives as `User focus: ...`),
 2. `action="plan", op="update", draft_id=..., summary=...` to fill each pending summary. A range is not review-ready until its summary is non-empty.
 3. If a transaction already has a DraftPlan when you start work (user pre-selected ranges, then handed off), call `action="plan", op="show"` **first** and treat it as your initial plan rather than assuming an empty start.
 4. `action="plan", op="show"`, then present the plan described by content rather than atom IDs.
-5. Recommend `/midcompact review` when the user wants to inspect ranges, summaries, and KEEP holes visually. In non-interactive modes, `/midcompact review` points to `/midcompact review-webui`.
-6. Ask the user to run `/midcompact commit` when every range is summarized. You cannot commit.
+5. Recommend `/midcompact select` (or `/midcompact select-webui`) when the user wants to create ranges, change boundaries, or mark KEEP holes directly. These are user UI commands, not Agent tool actions.
+6. Recommend `/midcompact review` when the user wants to inspect ranges, edit summaries/topics, or reject ranges visually. In non-interactive modes, use `/midcompact review-webui`.
+7. Ask the user to run `/midcompact commit` when every range is summarized. You cannot commit.
 
 ## Tool interface
 

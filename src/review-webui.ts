@@ -5,17 +5,24 @@ import { readFileSync } from "node:fs";
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
-import type { Atom, DraftPlan, DraftTelemetry } from "./types.js";
+import type { Atom, DraftPlan, DraftTelemetry, SelectionSpan } from "./types.js";
 
 const HTML_TEMPLATE = readFileSync(new URL("review-webui.html", import.meta.url), "utf8");
 
+export type ReviewWebUiView = "review" | "selection";
+
 export interface ReviewState {
+  view: ReviewWebUiView;
   atoms: Array<{
     ref: string;
     index: number;
+    groupRef: string;
+    groupLabel: string;
     kind: string;
     preview: string;
-    approxTokens: number;
+    contentChars: number;
+    imageCount: number;
+    imagePayloadBytes: number;
     compressible: boolean;
     protocolClosed: boolean;
     toolNames: string[];
@@ -33,8 +40,10 @@ export interface ReviewState {
       endRef: string;
       topic?: string;
       summary: string;
-      originalApproxTokens: number;
-      compressedApproxTokens: number;
+      originalContentChars: number;
+      originalImageCount: number;
+      originalImagePayloadBytes: number;
+      replacementContentChars: number;
       atomCount: number;
     }>;
   };
@@ -42,27 +51,68 @@ export interface ReviewState {
 }
 
 export interface ReviewWebUiCallbacks {
+  applySelection?(spans: SelectionSpan[], keepRefs: string[]): void;
   editSummary(draftId: string, summary: string): void;
   editTopic(draftId: string, topic: string): void;
   remove(draftId: string): void;
 }
 
-
-
-function owningRange(atomIndex: number, ranges: DraftPlan["ranges"]) {
-  return ranges.find((r) => atomIndex >= r.startIndex && atomIndex <= r.endIndex);
+export interface ReviewWebUiRuntimeOptions {
+  /** Test seam; production opens the system browser. */
+  openBrowser?: (url: string) => void;
+  /** Release the UI when no page establishes its liveness stream. */
+  livenessConnectTimeoutMs?: number;
+  /** Server-originated keepalive interval for detecting a disappeared page. */
+  livenessPingIntervalMs?: number;
 }
 
-export function serializeReviewState(atoms: Atom[], draft: DraftPlan, telemetry: DraftTelemetry): ReviewState {
+function owningRange(atomIndex: number, ranges: DraftPlan["ranges"]) {
+  return ranges.find((range) => atomIndex >= range.startIndex && atomIndex <= range.endIndex);
+}
+
+function groupMeta(atoms: readonly Atom[]): Map<number, { ref: string; label: string }> {
+  let groupNumber = 0;
+  let seenUser = false;
+  const result = new Map<number, { ref: string; label: string }>();
+  atoms.forEach((atom, index) => {
+    if (atom.kind === "user") {
+      groupNumber += 1;
+      seenUser = true;
+    }
+    const ref = seenUser ? `g${String(groupNumber).padStart(4, "0")}` : "g0000";
+    const label = seenUser && atom.kind === "user" ? firstLine(atom.preview, 72) : seenUser ? `group ${ref}` : "context before first user message";
+    result.set(index, { ref, label });
+  });
+  return result;
+}
+
+function firstLine(text: string, limit: number): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 1)}...`;
+}
+
+export function serializeReviewState(
+  atoms: Atom[],
+  draft: DraftPlan,
+  telemetry: DraftTelemetry,
+  view: ReviewWebUiView = "review",
+): ReviewState {
+  const groups = groupMeta(atoms);
   return {
+    view,
     atoms: atoms.map((atom) => {
       const owner = owningRange(atom.index, draft.ranges);
+      const group = groups.get(atom.index)!;
       return {
         ref: atom.ref,
         index: atom.index,
+        groupRef: group.ref,
+        groupLabel: group.label,
         kind: atom.kind,
         preview: atom.preview,
-        approxTokens: atom.approxTokens,
+        contentChars: atom.metrics.contentChars,
+        imageCount: atom.metrics.imageCount,
+        imagePayloadBytes: atom.metrics.images.reduce((sum, image) => sum + image.payloadBytes, 0),
         compressible: atom.compressible,
         protocolClosed: atom.protocolClosed,
         toolNames: atom.toolNames,
@@ -81,8 +131,10 @@ export function serializeReviewState(atoms: Atom[], draft: DraftPlan, telemetry:
         endRef: range.endRef,
         topic: range.topic,
         summary: range.summary,
-        originalApproxTokens: range.originalApproxTokens,
-        compressedApproxTokens: range.compressedApproxTokens,
+        originalContentChars: range.originalContentChars,
+        originalImageCount: range.originalImageCount,
+        originalImagePayloadBytes: range.originalImagePayloadBytes,
+        replacementContentChars: range.replacementContentChars,
         atomCount: range.endIndex - range.startIndex + 1,
       })),
     },
@@ -90,123 +142,176 @@ export function serializeReviewState(atoms: Atom[], draft: DraftPlan, telemetry:
   };
 }
 
-/**
- * Start a local HTTP server hosting the midcompact review page. Resolves when
- * the user closes the review (POST /api/close) or the server errors out.
- *
- * Edits are applied via callbacks that the caller wires to the same draft
- * mutation + append-entry path used by the TUI, so both surfaces stay consistent.
- */
+/** Serve the shared Review/Selection workbench over loopback HTTP. */
 export async function showReviewWebUi(
   ctx: ExtensionCommandContext,
   atoms: Atom[],
   getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
   callbacks: ReviewWebUiCallbacks,
+  view: ReviewWebUiView = "review",
+  runtime: ReviewWebUiRuntimeOptions = {},
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const server = http.createServer((req, res) => {
+    const connectTimeoutMs = runtime.livenessConnectTimeoutMs ?? 30_000;
+    const pingIntervalMs = runtime.livenessPingIntervalMs ?? 10_000;
+    let settled = false;
+    let closing = false;
+    let livenessResponse: http.ServerResponse | undefined;
+    let connectTimer: NodeJS.Timeout | undefined;
+    let pingTimer: NodeJS.Timeout | undefined;
+
+    const clearTimers = () => {
+      if (connectTimer) clearTimeout(connectTimer);
+      if (pingTimer) clearInterval(pingTimer);
+      connectTimer = undefined;
+      pingTimer = undefined;
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      resolve();
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      reject(error);
+    };
+    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const path = url.pathname;
-
       const sendJson = (code: number, body: unknown) => {
         const payload = JSON.stringify(body);
-        res.writeHead(code, {
-          "content-type": "application/json; charset=utf-8",
-          "content-length": Buffer.byteLength(payload),
-        });
+        res.writeHead(code, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(payload) });
         res.end(payload);
       };
       const sendHtml = (html: string) => {
-        res.writeHead(200, {
-          "content-type": "text/html; charset=utf-8",
-          "content-length": Buffer.byteLength(html),
-        });
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html) });
         res.end(html);
       };
-
       const readBody = async (): Promise<string> => {
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         return Buffer.concat(chunks).toString("utf8");
       };
+      const currentState = () => {
+        const latest = getLatest();
+        return serializeReviewState(atoms, latest.draft, latest.telemetry, view);
+      };
 
       try {
-        if (req.method === "GET" && path === "/") {
-          const { draft, telemetry } = getLatest();
-          const stateJson = JSON.stringify(serializeReviewState(atoms, draft, telemetry)).replace(/</g, "\\u003c");
-          // NOTE: function replacer — a string replacement would interpret `$&` / `$'` in the payload.
-          sendHtml(HTML_TEMPLATE.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
-          return;
-        }
-        if (req.method === "GET" && path === "/api/state") {
-          const { draft, telemetry } = getLatest();
-          sendJson(200, serializeReviewState(atoms, draft, telemetry));
-          return;
-        }
-        if (req.method === "POST" && path === "/api/close") {
-          sendJson(200, { ok: true });
-          server.close();
-          resolve();
-          return;
-        }
-        const editMatch = path.match(/^\/api\/range\/([^/]+)\/(edit-summary|edit-topic|remove)$/);
-        if (req.method === "POST" && editMatch) {
-          const [, draftId, op] = editMatch;
-          const current = getLatest().draft;
-          const range = current.ranges.find((r) => r.id === draftId);
-          if (!range) {
-            sendJson(404, { error: `Unknown range ${draftId}` });
-            return;
-          }
-          if (op === "remove") {
-            callbacks.remove(draftId);
-            const { draft, telemetry } = getLatest();
-            sendJson(200, serializeReviewState(atoms, draft, telemetry));
-            return;
-          }
-          readBody().then((raw) => {
-            try {
-              const parsed = JSON.parse(raw) as { value?: string };
-              const value = typeof parsed.value === "string" ? parsed.value : "";
-              if (op === "edit-summary") {
-                if (!value.trim()) {
-                  sendJson(400, { error: "summary must not be empty" });
-                  return;
-                }
-                callbacks.editSummary(draftId, value.trim());
-              } else {
-                callbacks.editTopic(draftId, value.trim());
-              }
-              const { draft, telemetry } = getLatest();
-              sendJson(200, serializeReviewState(atoms, draft, telemetry));
-            } catch (err) {
-              sendJson(400, { error: err instanceof Error ? err.message : String(err) });
+        if (req.method === "GET" && path === "/api/liveness") {
+          if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
+          livenessResponse = res;
+          if (connectTimer) clearTimeout(connectTimer);
+          connectTimer = undefined;
+          res.writeHead(200, {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-cache",
+            connection: "keep-alive",
+          });
+          res.write(": connected\n\n");
+          if (pingTimer) clearInterval(pingTimer);
+          pingTimer = setInterval(() => {
+            if (!res.writableEnded) res.write(": keepalive\n\n");
+          }, pingIntervalMs);
+          req.on("close", () => {
+            if (livenessResponse === res) {
+              livenessResponse = undefined;
+              closeServer();
             }
           });
           return;
         }
+        if (req.method === "GET" && path === "/") {
+          const stateJson = JSON.stringify(currentState()).replace(/</g, "\\u003c");
+          sendHtml(HTML_TEMPLATE.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
+          return;
+        }
+        if (req.method === "GET" && path === "/api/state") {
+          sendJson(200, currentState());
+          return;
+        }
+        if (req.method === "POST" && path === "/api/close") {
+          sendJson(200, { ok: true });
+          closeServer();
+          return;
+        }
+        if (req.method === "POST" && path === "/api/selection") {
+          if (view !== "selection" || !callbacks.applySelection) {
+            sendJson(409, { error: "Selection is not available in this view." });
+            return;
+          }
+          const parsed = JSON.parse(await readBody()) as { spans?: SelectionSpan[]; keepRefs?: string[] };
+          if (!Array.isArray(parsed.spans) || !Array.isArray(parsed.keepRefs)) {
+            sendJson(400, { error: "Selection requires spans and keepRefs arrays." });
+            return;
+          }
+          callbacks.applySelection(parsed.spans, parsed.keepRefs);
+          sendJson(200, currentState());
+          return;
+        }
+        const editMatch = path.match(/^\/api\/range\/([^/]+)\/(edit-summary|edit-topic|remove)$/);
+        if (req.method === "POST" && editMatch) {
+          const [, draftId, operation] = editMatch;
+          if (view === "selection" && operation !== "remove") {
+            sendJson(409, { error: "Summary and topic editing belong to Review." });
+            return;
+          }
+          const current = getLatest().draft;
+          if (!current.ranges.some((range) => range.id === draftId)) {
+            sendJson(404, { error: `Unknown range ${draftId}` });
+            return;
+          }
+          if (operation === "remove") {
+            callbacks.remove(draftId);
+            sendJson(200, currentState());
+            return;
+          }
+          const parsed = JSON.parse(await readBody()) as { value?: string };
+          const value = typeof parsed.value === "string" ? parsed.value.trim() : "";
+          if (operation === "edit-summary") {
+            if (!value) {
+              sendJson(400, { error: "summary must not be empty" });
+              return;
+            }
+            callbacks.editSummary(draftId, value);
+          } else callbacks.editTopic(draftId, value);
+          sendJson(200, currentState());
+          return;
+        }
         sendJson(404, { error: "not found" });
-      } catch (err) {
-        sendJson(500, { error: err instanceof Error ? err.message : String(err) });
+      } catch (error) {
+        sendJson(400, { error: error instanceof Error ? error.message : String(error) });
       }
     });
 
-    server.on("error", reject);
-    // Bind loopback only; random port assigned by the OS.
+    const closeServer = () => {
+      if (closing || settled) return;
+      closing = true;
+      clearTimers();
+      if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
+      livenessResponse = undefined;
+      server.close(finish);
+    };
+
+    server.on("error", fail);
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      const url = `http://127.0.0.1:${port}`;
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      const url = `http://127.0.0.1:${port}/?view=${view}`;
       const token = randomBytes(3).toString("hex");
-      ctx.ui.notify(`Midcompact review-webui ready: ${url} (token ${token})`, "info");
-      tryOpenBrowser(url);
+      ctx.ui.notify(`Midcompact ${view} webui ready: ${url} (token ${token})`, "info");
+      connectTimer = setTimeout(closeServer, connectTimeoutMs);
+      (runtime.openBrowser ?? tryOpenBrowser)(url);
     });
   });
 }
 
 function tryOpenBrowser(url: string): void {
-  const cmd = process.platform === "win32" ? `start "" "${url}"`
+  const command = process.platform === "win32" ? `start "" "${url}"`
     : process.platform === "darwin" ? `open "${url}"`
-    : `xdg-open "${url}"`;
-  exec(cmd, () => { /* best-effort; ignore failures */ });
+      : `xdg-open "${url}"`;
+  exec(command, () => { /* best-effort */ });
 }

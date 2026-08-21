@@ -102,6 +102,37 @@ function nextDraftId(draft: DraftPlan): string {
   return `d${max + 1}`;
 }
 
+/** Replace the current range set with normalized ordinary spans, preserving exact prior ranges. */
+export function replaceDraftRanges(
+  draft: DraftPlan,
+  atoms: Atom[],
+  spans: readonly { startRef: string; endRef: string }[],
+): DraftPlan {
+  const existing = new Map(draft.ranges.map((range) => [`${range.startRef}:${range.endRef}`, range]));
+  let nextId = draft.ranges.reduce((max, range) => {
+    const match = /^d(\d+)$/.exec(range.id);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  const ranges: DraftRange[] = [];
+
+  for (const span of spans) {
+    const previous = existing.get(`${span.startRef}:${span.endRef}`);
+    if (previous) {
+      ranges.push(previous);
+      continue;
+    }
+    const created = addDraftRange(emptyDraft(draft.transactionId), atoms, {
+      start: span.startRef,
+      end: span.endRef,
+      summary: "",
+    }).ranges[0]!;
+    nextId += 1;
+    ranges.push({ ...created, id: `d${nextId}` });
+  }
+
+  return { ...draft, revision: draft.revision + 1, ranges };
+}
+
 /** True when every range has a non-empty summary (i.e. the draft is review-ready). */
 export function isReviewReady(draft: DraftPlan): boolean {
   return draft.ranges.length > 0 && draft.ranges.every((range) => range.summary.trim().length > 0);

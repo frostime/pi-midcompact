@@ -33,9 +33,9 @@
     --mark: rgba(224,175,104,.28);
     --shadow: 0 10px 34px rgba(0,0,0,.45);
     --ring: rgba(122,162,247,.45);
-    --r: 10px;
+    --r: 8px;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    --sans: "HarmonyOS Sans SC", "HarmonyOS Sans", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   [data-theme="light"] {
     --bg: #f3f5fa;
@@ -77,7 +77,7 @@
     padding: 12px 18px 14px; flex: 0 0 auto;
   }
   .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .brand { font-size: 15px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+  .brand { font-size: 15px; font-weight: 650; letter-spacing: 0; margin: 0; }
   .brand b { color: var(--accent); font-weight: 750; }
   .chip {
     background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-dim);
@@ -104,7 +104,7 @@
   .btn-sm { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
   .btn-icon { padding: 6px 9px; }
 
-  .metrics { display: grid; grid-template-columns: 2.1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .metrics { display: grid; grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
   .metric {
     background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 12px 10px;
   }
@@ -167,7 +167,7 @@
   .rlist { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
   .ritem {
     width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--line);
-    border-left: 3px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer;
+    border-left: 3px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer;
     display: grid; gap: 3px; transition: background .13s, border-color .13s;
   }
   .ritem:hover { background: var(--elev); }
@@ -189,7 +189,7 @@
   .group.keepg { background: transparent; border-color: var(--line-soft); }
   .ghead {
     position: sticky; top: 0; z-index: 2; width: 100%; text-align: left; cursor: pointer;
-    display: grid; grid-template-columns: 18px auto 1fr auto; align-items: center; gap: 8px;
+    display: grid; grid-template-columns: 34px auto minmax(0, 1fr) auto; align-items: center; gap: 8px;
     padding: 8px 10px; background: var(--panel-2); border: 0; border-bottom: 1px solid var(--line-soft);
   }
   .ghead:hover { background: var(--elev); }
@@ -225,6 +225,14 @@
     background: var(--elev); color: var(--fg-dim); border: 1px solid var(--line-soft);
   }
   .tag.lock { color: var(--warn); }
+  .tag.tool { font-weight: 700; color: var(--accent); border-color: var(--accent); }
+  .tag.tool.read { color: var(--range); border-color: var(--range); }
+  .tag.tool.write { color: var(--keep); border-color: var(--keep); }
+  .tag.tool.edit { color: var(--accent-2); border-color: var(--accent-2); }
+  .tag.tool.bash { color: var(--warn); border-color: var(--warn); }
+  .atom-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .atom.selected-atom { background: color-mix(in srgb, var(--range) 10%, transparent); border-color: color-mix(in srgb, var(--range) 35%, transparent); }
+  .atom.kept-atom { background: color-mix(in srgb, var(--keep) 8%, transparent); }
   mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
 
   /* ---------- editor ---------- */
@@ -260,7 +268,7 @@
   .toast {
     position: fixed; bottom: 18px; left: 50%; transform: translate(-50%, 12px);
     background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
-    padding: 9px 14px; border-radius: 9px; box-shadow: var(--shadow); font-size: 12.5px;
+    padding: 9px 14px; border-radius: 8px; box-shadow: var(--shadow); font-size: 12.5px;
     opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 50; max-width: 70vw;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -271,10 +279,12 @@
   }
   .help.show { display: grid; }
   .help-card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
     padding: 18px 20px; min-width: 300px; max-width: 420px;
   }
   .help-card h3 { margin: 0 0 12px; font-size: 13px; }
+  .help-card p { margin: 0; color: var(--fg-dim); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .help-card dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: 12px; }
   .help-card dt { text-align: right; }
   .help-card dd { margin: 0; color: var(--fg-dim); }
@@ -298,16 +308,22 @@
     .atom { grid-template-columns: 70px 1fr auto; }
     .atom .abody { grid-column: 1 / -1; }
   }
+  @media (max-width: 600px) {
+    .ghead { grid-template-columns: 34px auto minmax(0, 1fr); }
+    .ghead .gstat { grid-column: 2 / -1; white-space: normal; }
+    .atom > div { grid-column: 1 / -1; }
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="bar">
-    <h1 class="brand"><b>Midcompact</b> Review</h1>
+    <h1 class="brand"><b>Midcompact</b> <span id="mode-title">Review</span></h1>
     <span class="chip" id="draft-badge"></span>
     <span class="chip dirty" id="dirty-badge" hidden></span>
     <div class="spacer"></div>
     <button class="btn btn-sm" id="save-all" hidden>Save all</button>
+    <button class="btn btn-sm btn-primary" id="save-selection" hidden>Save selection</button>
     <button class="btn btn-sm btn-icon" id="refresh" title="Reload state (r)" aria-label="Reload state">⟳</button>
     <button class="btn btn-sm btn-icon" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme"></button>
     <button class="btn btn-sm btn-icon" id="help-btn" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
@@ -352,7 +368,7 @@
 <div class="help" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
   <div class="help-card">
     <h3>Keyboard shortcuts</h3>
-    <dl>
+    <dl id="help-list">
       <dt><kbd>j</kbd> / <kbd>k</kbd></dt><dd>Next / previous range</dd>
       <dt><kbd>/</kbd></dt><dd>Focus filter</dd>
       <dt><kbd>e</kbd></dt><dd>Focus summary editor</dd>
@@ -363,6 +379,17 @@
     </dl>
   </div>
 </div>
+<div class="help" id="close-dialog" role="dialog" aria-modal="true" aria-label="Unsaved changes">
+  <div class="help-card">
+    <h3>Unsaved changes</h3>
+    <p>Save the current DraftPlan before closing this workbench?</p>
+    <div class="dialog-actions">
+      <button class="btn" id="close-stay">Stay</button>
+      <button class="btn btn-danger" id="close-discard">Discard</button>
+      <button class="btn btn-primary" id="close-save">Save &amp; close</button>
+    </div>
+  </div>
+</div>
 
 <script id="state" type="application/json"><!--MIDCOMPACT_STATE--></script>
 <script type="module">
@@ -370,9 +397,14 @@ const EMPTY = { atoms: [], draft: { revision: 0, ranges: [] }, telemetry: {} };
 let state = (() => {
   try {
     const s = JSON.parse(document.getElementById('state').textContent);
-    return { atoms: s.atoms ?? [], draft: { revision: s.draft?.revision ?? 0, ranges: s.draft?.ranges ?? [] }, telemetry: s.telemetry ?? {} };
+    return { view: s.view ?? 'review', atoms: s.atoms ?? [], draft: { revision: s.draft?.revision ?? 0, ranges: s.draft?.ranges ?? [] }, telemetry: s.telemetry ?? {} };
   } catch { return EMPTY; }
 })();
+
+// The server owns the keepalive writes. If this page disappears, the stream
+// closes and the terminal-side UI lock is released without treating inactivity
+// in an open tab as disconnection.
+const liveness = new EventSource('/api/liveness');
 
 let selectedId = state.draft.ranges[0]?.id ?? null;
 let query = '';
@@ -382,7 +414,7 @@ const collapsed = new Set();      // group keys currently collapsed
 const openAtoms = new Set();      // atom refs expanded to full preview
 let lastScrolled = null;
 let removeArmed = null;
-let closeArmed = false;
+let selectionDirty = false;
 
 state.draft.ranges.forEach(r => { if (r.id !== selectedId) collapsed.add(r.id); });
 
@@ -393,8 +425,17 @@ const fmt = n => n == null || Number.isNaN(n) ? '—'
   : Math.abs(n) >= 1000 ? (n / 1000).toFixed(Math.abs(n) % 1000 ? 1 : 0) + 'k' : String(Math.round(n));
 const pct = n => n == null || Number.isNaN(n) ? '—' : n.toFixed(n % 1 ? 1 : 0) + '%';
 const clamp = n => Math.max(0, Math.min(100, n));
+const isSelection = () => state.view === 'selection';
+const atomByRef = ref => state.atoms.find(a => a.ref === ref);
+const rangeAtoms = r => {
+  const start = state.atoms.findIndex(a => a.ref === r.startRef);
+  const end = state.atoms.findIndex(a => a.ref === r.endRef);
+  return start >= 0 && end >= start ? state.atoms.slice(start, end + 1) : [];
+};
+let selectionRefs = new Set(state.draft.ranges.flatMap(r => rangeAtoms(r).map(a => a.ref)));
+let keepRefs = new Set();
 const rangeById = id => state.draft.ranges.find(r => r.id === id);
-const saveOf = r => Math.max(0, (r.originalApproxTokens ?? 0) - (r.compressedApproxTokens ?? 0));
+const saveOf = r => Math.max(0, (r.originalContentChars ?? 0) - (r.replacementContentChars ?? 0));
 
 function hl(text, q) {
   const out = esc(text);
@@ -423,9 +464,17 @@ function render() {
   const n = state.draft.ranges.length;
   $('draft-badge').textContent = `draft v${state.draft.revision} · ${n} range${n === 1 ? '' : 's'}`;
   const d = dirtyIds();
-  $('dirty-badge').hidden = d.length === 0;
-  $('dirty-badge').textContent = `${d.length} unsaved`;
-  $('save-all').hidden = d.length < 2;
+  const dirtyCount = d.length + (selectionDirty ? 1 : 0);
+  $('dirty-badge').hidden = dirtyCount === 0;
+  $('dirty-badge').textContent = `${dirtyCount} unsaved`;
+  $('mode-title').textContent = isSelection() ? 'Selection' : 'Review';
+  document.title = `Midcompact ${isSelection() ? 'Selection' : 'Review'}`;
+  document.querySelector('.seg').hidden = isSelection();
+  if (isSelection()) {
+    $('help-list').innerHTML = '<dt><kbd>/</kbd></dt><dd>Focus filter</dd><dt><kbd>Click</kbd></dt><dd>Add atom or KEEP</dd><dt><kbd>Save</kbd></dt><dd>Persist DraftPlan</dd><dt><kbd>Esc</kbd></dt><dd>Close dialog</dd>';
+  }
+  $('save-selection').hidden = !isSelection();
+  $('save-all').hidden = isSelection() || d.length < 2;
   $('save-all').textContent = `Save all (${d.length})`;
   renderMetrics();
   renderRanges();
@@ -441,35 +490,53 @@ const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).repla
 
 function renderMetrics() {
   const t = state.telemetry ?? {};
-  const cw = t.contextWindow;
-  const aw = cw && t.anchorTokens != null ? clamp(t.anchorTokens / cw * 100) : 0;
-  const pw = cw && t.projectedTokens != null ? clamp(t.projectedTokens / cw * 100) : 0;
-  const totalSave = state.draft.ranges.reduce((s, r) => s + saveOf(r), 0);
-  const atomsCovered = state.draft.ranges.reduce((s, r) => s + (r.atomCount ?? 0), 0);
+  const usage = t.anchorUsage;
+  const usageLabel = usage?.tokens == null ? 'unavailable' : `${fmt(usage.tokens)} / ${fmt(usage.contextWindow)} (${pct(usage.percent)})`;
+  const selected = isSelection() ? state.atoms.filter(a => selectionRefs.has(a.ref)) : state.atoms.filter(a => a.owningRangeId);
+  const chars = selected.reduce((sum, a) => sum + (a.contentChars ?? 0), 0);
+  const images = selected.reduce((sum, a) => sum + (a.imageCount ?? 0), 0);
+  const pending = state.draft.ranges.filter(r => !r.summary.trim()).length;
+  const usagePercent = usage?.percent == null ? 0 : clamp(usage.percent);
   $('metrics').innerHTML = `
-    <div class="metric">
-      <label>context window</label>
-      <div class="val">${fmt(t.projectedTokens)} <small>projected of ${fmt(cw)}</small></div>
-      <div class="track"><i class="anchor" style="width:${aw}%"></i><i class="proj" style="width:${pw}%"></i></div>
-      <div class="legend">
-        <span><i class="dotm" style="background:color-mix(in srgb,var(--warn) 55%,transparent)"></i>anchor <b>${fmt(t.anchorTokens)}</b> (${pct(t.anchorPercent)})</span>
-        <span><i class="dotm" style="background:var(--accent)"></i>projected <b>${fmt(t.projectedTokens)}</b> (${pct(t.projectedPercent)})</span>
-      </div>
-    </div>
-    <div class="metric">
-      <label>estimated save</label>
-      <div class="val" style="color:var(--keep)">−${fmt(t.estimatedSavedTokens ?? totalSave)}</div>
-      <div class="legend"><span>~${fmt(t.selectedOriginalApproxTokens)} → ~${fmt(t.selectedCompressedApproxTokens)}</span></div>
-    </div>
-    <div class="metric">
-      <label>coverage</label>
-      <div class="val">${atomsCovered} <small>/ ${state.atoms.length} atoms</small></div>
-      <div class="legend"><span>across ${state.draft.ranges.length} range(s) · −${fmt(totalSave)} tok</span></div>
-    </div>`;
+    <div class="metric"><label>Pi reported anchor</label><div class="val">${usageLabel}</div><div class="track"><i class="anchor" style="width:${usagePercent}%"></i></div><div class="legend"><span>provider usage fact · no local token estimate</span></div></div>
+    <div class="metric"><label>Draft ranges</label><div class="val">${state.draft.ranges.length} <small>${pending ? `${pending} pending` : 'ready for review'}</small></div><div class="legend"><span>revision <b>${state.draft.revision}</b></span></div></div>
+    <div class="metric"><label>Content chars</label><div class="val">${fmt(chars)}</div><div class="legend"><span>${selected.length} selected atoms</span></div></div>
+    <div class="metric"><label>Images</label><div class="val">${images}</div><div class="legend"><span>payload facts only</span></div></div>`;
+}
+
+function proposedRanges() {
+  const runs = [];
+  for (const atom of state.atoms) {
+    if (!selectionRefs.has(atom.ref) || keepRefs.has(atom.ref) || !atom.compressible) continue;
+    const previous = runs.at(-1);
+    if (previous && previous.endIndex + 1 === atom.index) {
+      previous.endRef = atom.ref;
+      previous.endIndex = atom.index;
+      previous.atoms.push(atom);
+    } else runs.push({ startRef: atom.ref, endRef: atom.ref, endIndex: atom.index, atoms: [atom] });
+  }
+  return runs;
 }
 
 function renderRanges() {
   const list = $('range-list');
+  if (isSelection()) {
+    const ranges = proposedRanges();
+    if (!ranges.length) {
+      list.innerHTML = '<div class="empty">No atoms selected.<br>Add a group or atom from the timeline.</div>';
+      return;
+    }
+    list.innerHTML = ranges.map((range, index) => {
+      const chars = range.atoms.reduce((sum, atom) => sum + (atom.contentChars ?? 0), 0);
+      const images = range.atoms.reduce((sum, atom) => sum + (atom.imageCount ?? 0), 0);
+      return `<div class="ritem" role="option">
+        <div class="r1"><span class="rid">range ${index + 1}</span><span class="refs">${esc(range.startRef)}→${esc(range.endRef)}</span><span class="spacer"></span><button class="btn btn-sm btn-icon" data-remove-proposed="${index}" title="Remove range" aria-label="Remove range">×</button></div>
+        <div class="rsum">Pending summary</div>
+        <div class="meta">${range.atoms.length} atoms · ${fmt(chars)} chars · ${images} images</div>
+      </div>`;
+    }).join('');
+    return;
+  }
   const rs = state.draft.ranges.filter(r => !query || rangeText(r).includes(query));
   if (!state.draft.ranges.length) {
     list.innerHTML = '<div class="empty">No compression ranges in this draft.</div>';
@@ -478,7 +545,7 @@ function renderRanges() {
   if (!rs.length) { list.innerHTML = '<div class="empty">No range matches the filter.</div>'; return; }
   list.innerHTML = rs.map(r => {
     const d = draftOf(r);
-    const ratio = r.originalApproxTokens ? Math.round((1 - r.compressedApproxTokens / r.originalApproxTokens) * 100) : 0;
+    const ratio = r.originalContentChars ? Math.round((1 - (r.replacementContentChars ?? 0) / r.originalContentChars) * 100) : 0;
     return `<div class="ritem" role="option" tabindex="0" data-range="${esc(r.id)}" aria-selected="${r.id === selectedId}">
       <div class="r1">
         <span class="rid">${hl(r.id, query)}</span>
@@ -488,18 +555,21 @@ function renderRanges() {
       </div>
       ${d.topic ? `<div class="meta" style="color:var(--accent-2)">${hl(d.topic, query)}</div>` : ''}
       <div class="rsum">${hl(d.summary, query)}</div>
-      <div class="meta">${r.atomCount} atoms · ~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)} (−${ratio}%)</div>
+      <div class="meta">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} chars · ${ratio}% fewer chars</div>
     </div>`;
   }).join('');
 }
 
 function buildGroups() {
   const groups = [];
-  let cur = null;
-  state.atoms.forEach((a, i) => {
-    const key = a.owningRangeId ?? null;
-    if (!cur || cur.key !== key) { cur = { key, idx: i, atoms: [] }; groups.push(cur); }
-    cur.atoms.push(a);
+  let current = null;
+  state.atoms.forEach((atom, index) => {
+    const key = isSelection() ? atom.groupRef : (atom.owningRangeId ?? null);
+    if (!current || current.key !== key) {
+      current = { key, idx: index, label: atom.groupLabel, atoms: [] };
+      groups.push(current);
+    }
+    current.atoms.push(atom);
   });
   return groups;
 }
@@ -510,18 +580,32 @@ function renderTimeline() {
 
   let shown = 0;
   const html = buildGroups().map(g => {
-    if (policy === 'range' && !g.key) return '';
-    if (policy === 'keep' && g.key) return '';
-    const r = g.key ? rangeById(g.key) : null;
+    if (!isSelection() && policy === 'range' && !g.key) return '';
+    if (!isSelection() && policy === 'keep' && g.key) return '';
+    const r = !isSelection() && g.key ? rangeById(g.key) : null;
     const gkey = g.key ?? ('keep-' + g.idx);
-    const groupMatch = r ? rangeText(r).includes(query) : false;
+    const groupMatch = r ? rangeText(r).includes(query) : `${g.label ?? ''} ${gkey}`.toLowerCase().includes(query);
     const atoms = query && !groupMatch ? g.atoms.filter(a => atomText(a).includes(query)) : g.atoms;
     if (query && !groupMatch && !atoms.length) return '';
     shown += atoms.length;
 
-    const tok = g.atoms.reduce((s, a) => s + (a.approxTokens ?? 0), 0);
+    const chars = g.atoms.reduce((sum, atom) => sum + (atom.contentChars ?? 0), 0);
+    const images = g.atoms.reduce((sum, atom) => sum + (atom.imageCount ?? 0), 0);
     const open = !collapsed.has(gkey) || (query && !groupMatch);
     const body = atoms.map(a => atomRow(a)).join('');
+
+    if (isSelection()) {
+      const allSelected = g.atoms.every(atom => selectionRefs.has(atom.ref));
+      return `<section class="group ${open ? 'open' : ''} ${allSelected ? 'sel' : ''}" data-group-key="${esc(gkey)}">
+        <div class="ghead" aria-expanded="${open}">
+          <button class="btn btn-sm btn-icon" data-toggle="${esc(gkey)}" title="Expand group">▶</button>
+          <span class="gid">${esc(gkey)}</span>
+          <span class="gsum">${esc(g.label ?? '')}</span>
+          <span class="gstat">${g.atoms.length} atoms · ${fmt(chars)} chars · ${images} img <button class="btn btn-sm" data-select-group="${esc(gkey)}">${allSelected ? 'Clear group' : 'Add group'}</button></span>
+        </div>
+        <div class="gbody">${body}</div>
+      </section>`;
+    }
 
     if (!r) {
       return `<section class="group keepg ${open ? 'open' : ''}" data-group-key="${esc(gkey)}">
@@ -529,7 +613,7 @@ function renderTimeline() {
           <span class="chev">▶</span>
           <span class="gid">KEEP</span>
           <span class="gsum">${esc(g.atoms[0].ref)} → ${esc(g.atoms[g.atoms.length - 1].ref)} verbatim</span>
-          <span class="gstat">${g.atoms.length} atoms · ~${fmt(tok)}</span>
+          <span class="gstat">${g.atoms.length} atoms · ${fmt(chars)} chars · ${images} img</span>
         </button>
         <div class="gbody">${body}</div>
       </section>`;
@@ -540,7 +624,7 @@ function renderTimeline() {
         <span class="chev">▶</span>
         <span class="gid">${esc(r.id)}</span>
         <span class="gsum">${hl(d.topic || d.summary, query)}</span>
-        <span class="gstat">${r.atomCount} atoms · ~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)} <em>−${fmt(saveOf(r))}</em></span>
+        <span class="gstat">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} chars <em>−${fmt(saveOf(r))}</em></span>
       </button>
       <div class="gbody">${body}</div>
     </section>`;
@@ -550,28 +634,57 @@ function renderTimeline() {
   $('tl-stat').textContent = query || policy !== 'all' ? `${shown}/${state.atoms.length} atoms` : `${state.atoms.length} atoms`;
 }
 
+function toolTag(name) {
+  const tone = ['read', 'write', 'edit', 'bash'].includes(String(name).toLowerCase()) ? ` ${String(name).toLowerCase()}` : '';
+  return `<span class="tag tool${tone}">${esc(name)}</span>`;
+}
+
 function atomRow(a) {
   const tags = [
-    ...(a.toolNames ?? []).slice(0, 3).map(t => `<span class="tag">${esc(t)}</span>`),
+    ...(a.toolNames ?? []).slice(0, 3).map(toolTag),
     ...(a.roles ?? []).slice(0, 2).map(t => `<span class="tag">${esc(t)}</span>`),
     a.compressible === false ? '<span class="tag lock">not compressible</span>' : '',
     a.protocolClosed === false ? '<span class="tag lock">open protocol</span>' : '',
     a.compressedBlockId ? `<span class="tag">blk ${esc(a.compressedBlockId)}</span>` : '',
   ].filter(Boolean).join('');
   const open = openAtoms.has(a.ref);
-  return `<div class="atom ${open ? 'open' : ''}" data-atom="${esc(a.ref)}">
+  const selected = selectionRefs.has(a.ref);
+  const kept = keepRefs.has(a.ref) || !a.compressible;
+  const actions = isSelection() ? `<div class="atom-actions">
+    <button class="btn btn-sm" data-toggle-atom="${esc(a.ref)}" ${!a.compressible ? 'disabled' : ''}>${selected ? 'Remove' : 'Add'}</button>
+    <button class="btn btn-sm" data-keep-atom="${esc(a.ref)}" ${!a.compressible ? 'disabled' : ''}>${kept ? 'KEEP' : 'Keep'}</button>
+  </div>` : '';
+  return `<div class="atom ${open ? 'open' : ''} ${selected ? 'selected-atom' : ''} ${kept ? 'kept-atom' : ''}" data-atom="${esc(a.ref)}">
     <span class="aref">${hl(a.ref, query)}</span>
     <span class="akind">${hl(a.kind ?? '', query)}</span>
-    <span class="atok">~${fmt(a.approxTokens)}</span>
+    <span class="atok">${fmt(a.contentChars)} chars<br>${a.imageCount ?? 0} img</span>
     <div>
       <div class="abody">${hl(a.preview ?? '', query)}</div>
       ${tags ? `<div class="tags">${tags}</div>` : ''}
+      ${actions}
     </div>
   </div>`;
 }
 
 function renderEditor() {
   const panel = $('editor');
+  if (isSelection()) {
+    const selectedAtoms = state.atoms.filter(atom => selectionRefs.has(atom.ref));
+    const chars = selectedAtoms.reduce((sum, atom) => sum + (atom.contentChars ?? 0), 0);
+    const images = selectedAtoms.reduce((sum, atom) => sum + (atom.imageCount ?? 0), 0);
+    panel.innerHTML = `<div class="epad">
+      <div class="etitle"><span class="eid">Selection</span><span class="erefs">shared DraftPlan</span></div>
+      <div class="estats">
+        <div class="estat"><label>atoms</label><span>${selectedAtoms.length}</span></div>
+        <div class="estat"><label>chars</label><span>${fmt(chars)}</span></div>
+        <div class="estat"><label>images</label><span>${images}</span></div>
+      </div>
+      <div class="hint">Add a whole user group or individual atoms. KEEP creates a hole; protected atoms stay verbatim. Save writes normalized, non-overlapping ranges to the same DraftPlan used by Agent.</div>
+      <button class="btn btn-primary" id="selection-save-side">Save selection</button>
+      <button class="btn" id="selection-clear">Clear selection</button>
+    </div>`;
+    return;
+  }
   const r = selectedId ? rangeById(selectedId) : null;
   if (!r) {
     panel.innerHTML = `<div class="empty">${state.draft.ranges.length
@@ -581,7 +694,7 @@ function renderEditor() {
   }
   const d = draftOf(r);
   const dirty = isDirty(r);
-  const ratio = r.originalApproxTokens ? Math.round((1 - r.compressedApproxTokens / r.originalApproxTokens) * 100) : 0;
+  const ratio = r.originalContentChars ? Math.round((1 - (r.replacementContentChars ?? 0) / r.originalContentChars) * 100) : 0;
   panel.innerHTML = `<div class="epad">
     <div>
       <div class="etitle">
@@ -590,8 +703,8 @@ function renderEditor() {
       </div>
       <div class="estats">
         <div class="estat"><label>atoms</label><span>${r.atomCount}</span></div>
-        <div class="estat"><label>tokens</label><span>~${fmt(r.originalApproxTokens)}→~${fmt(r.compressedApproxTokens)}</span></div>
-        <div class="estat"><label>save</label><span style="color:var(--keep)">−${fmt(saveOf(r))} (${ratio}%)</span></div>
+        <div class="estat"><label>chars</label><span>${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)}</span></div>
+        <div class="estat"><label>images</label><span>${r.originalImageCount ?? 0}</span></div>
       </div>
     </div>
     <div class="field" id="f-topic">
@@ -619,7 +732,7 @@ function updateCount() {
   const ta = $('summary');
   if (!ta) return;
   const len = ta.value.length;
-  $('sum-count').textContent = `${len} chars · ~${Math.ceil(len / 4)} tok`;
+  $('sum-count').textContent = `${len} chars`;
 }
 
 /* ---------- state mutation ---------- */
@@ -641,6 +754,55 @@ async function post(path, body) {
     throw new Error(msg);
   }
   return res.json();
+}
+
+async function saveSelection() {
+  const indices = state.atoms.map((atom, index) => selectionRefs.has(atom.ref) ? index : -1).filter(index => index >= 0);
+  const spans = [];
+  for (const index of indices) {
+    const last = spans.at(-1);
+    if (last && last.endIndex + 1 === index) {
+      last.endRef = state.atoms[index].ref;
+      last.endIndex = index;
+    } else spans.push({ startRef: state.atoms[index].ref, endRef: state.atoms[index].ref, endIndex: index });
+  }
+  try {
+    state = await post('/api/selection', { spans: spans.map(({ startRef, endRef }) => ({ startRef, endRef })), keepRefs: [...keepRefs] });
+    selectionDirty = false;
+    selectedId = state.draft.ranges[0]?.id ?? null;
+    render();
+    toast('DraftPlan saved. Tell the Agent to continue when ready.', 'ok');
+    return true;
+  } catch (err) { toast(String(err.message ?? err), 'err'); return false; }
+}
+
+function toggleSelectionAtom(ref) {
+  const atom = atomByRef(ref);
+  if (!atom || !atom.compressible) return;
+  if (selectionRefs.has(ref)) { selectionRefs.delete(ref); keepRefs.delete(ref); }
+  else selectionRefs.add(ref);
+  selectionDirty = true;
+  render();
+}
+
+function toggleKeepAtom(ref) {
+  const atom = atomByRef(ref);
+  if (!atom || !atom.compressible) return;
+  selectionRefs.add(ref);
+  if (keepRefs.has(ref)) keepRefs.delete(ref); else keepRefs.add(ref);
+  selectionDirty = true;
+  render();
+}
+
+function toggleSelectionGroup(groupRef) {
+  const atoms = state.atoms.filter(atom => atom.groupRef === groupRef);
+  const allSelected = atoms.every(atom => selectionRefs.has(atom.ref));
+  for (const atom of atoms) {
+    if (allSelected) { selectionRefs.delete(atom.ref); keepRefs.delete(atom.ref); }
+    else selectionRefs.add(atom.ref);
+  }
+  selectionDirty = true;
+  render();
 }
 
 async function saveRange(id) {
@@ -666,6 +828,9 @@ async function refresh() {
     const res = await fetch('/api/state');
     if (!res.ok) throw new Error('state fetch failed');
     state = await res.json();
+    selectionRefs = new Set(state.draft.ranges.flatMap(range => rangeAtoms(range).map(atom => atom.ref)));
+    keepRefs.clear();
+    selectionDirty = false;
     if (!rangeById(selectedId)) selectedId = state.draft.ranges[0]?.id ?? null;
     render();
     toast('Reloaded', 'ok');
@@ -674,6 +839,14 @@ async function refresh() {
 
 /* ---------- events ---------- */
 $('range-list').addEventListener('click', e => {
+  const remove = e.target.closest('[data-remove-proposed]');
+  if (remove) {
+    const range = proposedRanges()[Number(remove.dataset.removeProposed)];
+    range?.atoms.forEach(atom => { selectionRefs.delete(atom.ref); keepRefs.delete(atom.ref); });
+    selectionDirty = true;
+    render();
+    return;
+  }
   const item = e.target.closest('[data-range]');
   if (item) select(item.dataset.range);
 });
@@ -683,6 +856,12 @@ $('range-list').addEventListener('keydown', e => {
 });
 
 $('timeline').addEventListener('click', e => {
+  const atomToggle = e.target.closest('[data-toggle-atom]');
+  if (atomToggle) { toggleSelectionAtom(atomToggle.dataset.toggleAtom); return; }
+  const keepToggle = e.target.closest('[data-keep-atom]');
+  if (keepToggle) { toggleKeepAtom(keepToggle.dataset.keepAtom); return; }
+  const groupToggle = e.target.closest('[data-select-group]');
+  if (groupToggle) { toggleSelectionGroup(groupToggle.dataset.selectGroup); return; }
   const atom = e.target.closest('[data-atom]');
   if (atom && e.target.closest('.abody')) {
     const ref = atom.dataset.atom;
@@ -741,7 +920,12 @@ $('editor').addEventListener('input', e => {
   if (e.target.id === 'topic') renderTimeline();
 });
 
+$('save-selection').addEventListener('click', saveSelection);
 $('editor').addEventListener('click', async e => {
+  if (e.target.closest('#selection-save-side')) { await saveSelection(); return; }
+  if (e.target.closest('#selection-clear')) {
+    selectionRefs.clear(); keepRefs.clear(); selectionDirty = true; render(); return;
+  }
   const r = rangeById(selectedId);
   if (!r) return;
   if (e.target.closest('#save-btn')) { await saveCurrent(); return; }
@@ -774,19 +958,37 @@ $('save-all').addEventListener('click', async () => {
 
 $('refresh').addEventListener('click', refresh);
 
-$('close').addEventListener('click', async () => {
-  const d = dirtyIds();
-  if (d.length && !closeArmed) {
-    closeArmed = true;
-    $('close').textContent = `Discard ${d.length} unsaved & close`;
-    setTimeout(() => { closeArmed = false; $('close').textContent = 'Close & return'; }, 4000);
-    toast('Unsaved edits — click again to discard and close', 'err');
-    return;
-  }
+async function closeWorkbench() {
   try {
     await post('/api/close', {});
-    document.body.innerHTML = '<div class="closed">Review closed.<br>Return to your terminal.</div>';
+    document.body.innerHTML = `<div class="closed">${isSelection() ? 'Selection' : 'Review'} closed.<br>Return to your terminal.</div>`;
   } catch (err) { toast(String(err.message ?? err), 'err'); }
+}
+
+$('close').addEventListener('click', () => {
+  if (dirtyIds().length || selectionDirty) {
+    $('close-dialog').classList.add('show');
+    return;
+  }
+  closeWorkbench();
+});
+$('close-stay').addEventListener('click', () => $('close-dialog').classList.remove('show'));
+$('close-discard').addEventListener('click', () => {
+  edits.clear();
+  selectionDirty = false;
+  $('close-dialog').classList.remove('show');
+  closeWorkbench();
+});
+$('close-save').addEventListener('click', async () => {
+  let saved = true;
+  if (isSelection()) saved = await saveSelection();
+  else {
+    try { for (const id of dirtyIds()) saved = (await saveRange(id)) && saved; }
+    catch (err) { toast(String(err.message ?? err), 'err'); saved = false; }
+  }
+  if (!saved) return;
+  $('close-dialog').classList.remove('show');
+  await closeWorkbench();
 });
 
 /* theme */
@@ -815,7 +1017,12 @@ function moveSel(delta) {
 document.addEventListener('keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveCurrent(); return; }
-  if (e.key === 'Escape') { help.classList.remove('show'); if (typing) e.target.blur(); return; }
+  if (e.key === 'Escape') {
+    help.classList.remove('show');
+    $('close-dialog').classList.remove('show');
+    if (typing) e.target.blur();
+    return;
+  }
   if (typing) return;
   if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
   if (e.key === '?') { help.classList.toggle('show'); return; }
@@ -838,7 +1045,10 @@ function toast(msg, kind) {
   toastTimer = setTimeout(() => t.classList.remove('show'), kind === 'err' ? 3200 : 1800);
 }
 
-window.addEventListener('beforeunload', e => { if (dirtyIds().length) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (dirtyIds().length || selectionDirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('pagehide', () => {
+  if (!dirtyIds().length && !selectionDirty) navigator.sendBeacon('/api/close', new Blob(['{}'], { type: 'application/json' }));
+});
 
 render();
 </script>

@@ -1,7 +1,6 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
-import { formatPercent, formatTokenCount } from "./telemetry.js";
 import type { Atom, DraftPlan, DraftRange, DraftTelemetry, ReviewAction } from "./types.js";
 
 /**
@@ -63,22 +62,22 @@ export async function showReviewUi(
             if (head) {
               rangeLineStarts.set(head.id, body.length);
               const isSel = Boolean(range && range.id === head.id);
-              const save = Math.max(0, head.originalApproxTokens - head.compressedApproxTokens);
+              const savedChars = Math.max(0, head.originalContentChars - head.replacementContentChars);
               const atomCount = head.endIndex - head.startIndex + 1;
               const caret = isSel ? (expandSelected ? "▾" : "▸") : "▸";
               const caretCol = isSel ? accent(caret) : dim(caret);
               const idCol = isSel ? theme.bold(warning(head.id)) : warning(head.id);
               const span = dim(`${head.startRef}→${head.endRef} · ${atomCount} atoms`);
-              const tok = dim(`~${formatTokenCount(head.originalApproxTokens)}→~${formatTokenCount(head.compressedApproxTokens)}`);
-              const saveCol = success(`save ~${formatTokenCount(save)}`);
+              const chars = dim(`${formatCount(head.originalContentChars)}→${formatCount(head.replacementContentChars)} chars`);
+              const saved = success(`−${formatCount(savedChars)}`);
               const topicCol = head.topic ? `${accent(head.topic)} ` : "";
               const sumCol = dim(firstLine(head.summary, 48));
-              const headText = `${caretCol} ${idCol} ${span} ${tok} ${saveCol} ${topicCol}${sumCol}`;
+              const headText = `${caretCol} ${idCol} ${span} ${chars} ${saved} ${topicCol}${sumCol}`;
               body.push(framed(isSel ? accent(headText) : headText));
 
               if (isSel) {
                 body.push(framed(dim(`  topic: ${head.topic ?? "—"}`)));
-                body.push(framed(dim(`  tokens: ~${formatTokenCount(head.originalApproxTokens)} → ~${formatTokenCount(head.compressedApproxTokens)} (save ~${formatTokenCount(save)})`)));
+                body.push(framed(dim(`  chars: ${formatCount(head.originalContentChars)} → ${formatCount(head.replacementContentChars)} (−${formatCount(savedChars)}) · ${head.originalImageCount} images`)));
                 const wrapWidth = Math.max(10, inner - 6);
                 for (const line of wrapTextWithAnsi(`${accent("summary:")} ${head.summary}`, wrapWidth)) {
                   body.push(framed(`  ${line}`));
@@ -99,9 +98,9 @@ export async function showReviewUi(
                   : "│"
               : " ";
             const policy = owner ? warning(owner.id) : success("KEEP");
-            const tok = dim(`~${formatTokenCount(atom.approxTokens)}`);
+            const facts = dim(`${formatCount(atom.metrics.contentChars)} chars${atom.metrics.imageCount ? ` · ${atom.metrics.imageCount} img` : ""}`);
             const oneLine = dim(firstLine(atom.preview, 80));
-            body.push(framed(`${mark} ${policy} ${atom.ref} [${atom.kind}] ${tok}  ${oneLine}`));
+            body.push(framed(`${mark} ${policy} ${atom.ref} [${atom.kind}] ${facts}  ${oneLine}`));
           }
           if (!body.length) body.push(framed(dim("(No atoms in anchor snapshot.)")));
 
@@ -203,7 +202,7 @@ export function buildReviewText(atoms: Atom[], draft: DraftPlan, telemetry: Draf
   ];
   for (const atom of atoms) {
     const owner = owningRange(atom.index, draft.ranges);
-    lines.push(`${owner ? owner.id : "KEEP"} ${atom.ref} [${atom.kind}] ~${formatTokenCount(atom.approxTokens)} ${firstLine(atom.preview, 120)}`);
+    lines.push(`${owner ? owner.id : "KEEP"} ${atom.ref} [${atom.kind}] ${formatCount(atom.metrics.contentChars)} chars${atom.metrics.imageCount ? ` · ${atom.metrics.imageCount} images` : ""} ${firstLine(atom.preview, 120)}`);
   }
   if (draft.ranges.length) {
     lines.push("", "Proposed summaries:");
@@ -227,13 +226,15 @@ function hint(text: string, theme: ExtensionCommandContext["ui"]["theme"]): stri
 }
 
 function plainUsageLine(telemetry: DraftTelemetry): string {
-  const anchor = telemetry.contextWindow === null
-    ? "anchor usage unavailable"
-    : `${formatTokenCount(telemetry.anchorTokens)}/${formatTokenCount(telemetry.contextWindow)} (${formatPercent(telemetry.anchorPercent)})`;
-  const projected = telemetry.projectedTokens === null || telemetry.contextWindow === null
-    ? "projected unavailable"
-    : `~${formatTokenCount(telemetry.projectedTokens)}/${formatTokenCount(telemetry.contextWindow)} (${formatPercent(telemetry.projectedPercent, true)})`;
-  return `Anchor ${anchor} · Draft selected ~${formatTokenCount(telemetry.selectedOriginalApproxTokens)}→~${formatTokenCount(telemetry.selectedCompressedApproxTokens)} · Projected ${projected}`;
+  const usage = telemetry.anchorUsage;
+  const anchor = usage
+    ? `${usage.tokens === null ? "unavailable" : formatCount(usage.tokens)}/${formatCount(usage.contextWindow)} tokens (${usage.percent === null ? "unavailable" : `${usage.percent}%`}, Pi reported)`
+    : "Pi reported anchor usage unavailable";
+  return `Anchor ${anchor} · Draft ${telemetry.rangeCount} ranges · ${formatCount(telemetry.selectedOriginalContentChars)}→${formatCount(telemetry.selectedReplacementContentChars)} chars · ${telemetry.selectedImageCount} images · ${telemetry.pendingSummaryCount} pending`;
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString("en-US");
 }
 
 function usageLine(telemetry: DraftTelemetry, theme: ExtensionCommandContext["ui"]["theme"]): string {
