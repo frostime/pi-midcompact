@@ -194,6 +194,7 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
     action: "plan", op: "add", start: "a0001", end: "a0002", summary: "Old requirement and exploration summarized."
   }, null, null, toolCtx);
   assert.match(planned.content[0].text, /d1:/);
+  assert.doesNotMatch(planned.content[0].text, /summary:/);
   assert.match(planned.content[0].text, /Context awareness/);
   assert.match(planned.content[0].text, /projected if committed now/);
   assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);

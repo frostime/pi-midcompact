@@ -85,7 +85,6 @@ export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry): strin
   for (const range of draft.ranges) {
     lines.push(`\n${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${range.topic}` : ""}`);
     lines.push(`~${range.originalApproxTokens} → ~${range.compressedApproxTokens} tokens`);
-    lines.push(`summary: ${range.summary}`);
     lines.push(`start: ${range.startPreview}`);
     if (range.endRef !== range.startRef) lines.push(`end: ${range.endPreview}`);
   }
