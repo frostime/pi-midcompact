@@ -7,6 +7,7 @@ async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } =
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   // Start chooser defaults to Agent direct.
   await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
+  assert.match(pi.sentUserMessages.at(-1), /read the `midcompact` skill before doing any planning work/i);
   const tool = pi.tools.get("midcompact");
 
   // Agent inspects first.

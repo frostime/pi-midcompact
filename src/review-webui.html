@@ -492,15 +492,22 @@ function renderMetrics() {
   const t = state.telemetry ?? {};
   const usage = t.anchorUsage;
   const usageLabel = usage?.tokens == null ? 'unavailable' : `${fmt(usage.tokens)} / ${fmt(usage.contextWindow)} (${pct(usage.percent)})`;
-  const selected = isSelection() ? state.atoms.filter(a => selectionRefs.has(a.ref)) : state.atoms.filter(a => a.owningRangeId);
+  const selected = isSelection()
+    ? state.atoms.filter(a => selectionRefs.has(a.ref) && a.compressible && !keepRefs.has(a.ref))
+    : state.atoms.filter(a => a.owningRangeId);
   const chars = selected.reduce((sum, a) => sum + (a.contentChars ?? 0), 0);
+  const totalChars = state.atoms.reduce((sum, a) => sum + (a.contentChars ?? 0), 0);
+  const selectedShare = totalChars > 0 ? clamp((chars / totalChars) * 100) : 0;
   const images = selected.reduce((sum, a) => sum + (a.imageCount ?? 0), 0);
   const pending = state.draft.ranges.filter(r => !r.summary.trim()).length;
   const usagePercent = usage?.percent == null ? 0 : clamp(usage.percent);
+  const contentMetric = isSelection()
+    ? `<div class="metric"><label>Selected content chars</label><div class="val">${fmt(chars)} / ${fmt(totalChars)} <small>${pct(selectedShare)} of anchor</small></div><div class="track"><i class="proj" style="width:${selectedShare}%"></i></div><div class="legend"><span>up to <b>${pct(selectedShare)}</b> fewer anchor chars · actual is lower after summaries</span></div></div>`
+    : `<div class="metric"><label>Content chars</label><div class="val">${fmt(chars)}</div><div class="legend"><span>${selected.length} selected atoms</span></div></div>`;
   $('metrics').innerHTML = `
     <div class="metric"><label>Pi reported anchor</label><div class="val">${usageLabel}</div><div class="track"><i class="anchor" style="width:${usagePercent}%"></i></div><div class="legend"><span>provider usage fact · no local token estimate</span></div></div>
     <div class="metric"><label>Draft ranges</label><div class="val">${state.draft.ranges.length} <small>${pending ? `${pending} pending` : 'ready for review'}</small></div><div class="legend"><span>revision <b>${state.draft.revision}</b></span></div></div>
-    <div class="metric"><label>Content chars</label><div class="val">${fmt(chars)}</div><div class="legend"><span>${selected.length} selected atoms</span></div></div>
+    ${contentMetric}
     <div class="metric"><label>Images</label><div class="val">${images}</div><div class="legend"><span>payload facts only</span></div></div>`;
 }
 

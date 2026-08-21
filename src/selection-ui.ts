@@ -122,12 +122,16 @@ export async function showSelectionUi(
         tui.requestRender();
       };
 
+      const totalChars = atoms.reduce((sum, atom) => sum + atom.metrics.contentChars, 0);
       const component = {
         render(width: number): string[] {
           const w = widthOf(width);
           const budget = Math.max(18, Math.floor(tui.terminal.rows * 0.82));
-          const selectedAtoms = [...selected].map((index) => atoms[index]).filter(Boolean) as Atom[];
+          const selectedAtoms = [...selected]
+            .map((index) => atoms[index])
+            .filter((atom): atom is Atom => Boolean(atom?.compressible && !keep.has(atom.ref)));
           const chars = selectedAtoms.reduce((sum, atom) => sum + atom.metrics.contentChars, 0);
+          const charShare = percentage(chars, totalChars);
           const images = selectedAtoms.reduce((sum, atom) => sum + atom.metrics.imageCount, 0);
           const body: string[] = [];
           const lineStarts = new Map<number, number>();
@@ -156,13 +160,14 @@ export async function showSelectionUi(
           const header = [
             rule(w, "+", "+"),
             frame(accent(theme.bold(`Midcompact Selection | Draft v${draft.revision}`)), w),
-            frame(dim(`Anchor Pi usage: ${usageLine(telemetry)} | selected ${selected.size} atoms | ${chars} chars | ${images} images`), w),
+            frame(dim(`Anchor Pi usage: ${usageLine(telemetry)}`), w),
+            frame(dim(`Selected ${selectedAtoms.length}/${atoms.length} atoms | ${chars}/${totalChars} chars (${charShare} of anchor) | up to ${charShare} fewer anchor chars | ${images} images`), w),
             rule(w, "+", "+"),
           ];
           const footer = [
             rule(w, "+", "+"),
             frame(dim("j/k move | space select | K KEEP | G add group | D remove range | S save | Esc save & close"), w),
-            frame(dim(`requested spans ${spans().length} | keep ${keep.size} | ${selected.size} selected`), w),
+            frame(dim(`requested spans ${spans().length} | keep ${keep.size} | ${selectedAtoms.length} planned`), w),
             rule(w, "+", "+"),
           ];
           const viewport = Math.max(4, budget - header.length - footer.length);
@@ -198,6 +203,12 @@ export async function showSelectionUi(
     },
     { overlay: true, overlayOptions: { width: "94%", maxHeight: "88%", anchor: "center" } },
   ) as Promise<SelectionUiAction>;
+}
+
+function percentage(part: number, total: number): string {
+  if (total <= 0) return "0%";
+  const value = Math.round((part / total) * 1_000) / 10;
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
 }
 
 function usageLine(telemetry: DraftTelemetry): string {

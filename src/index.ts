@@ -133,7 +133,7 @@ export default function (pi: ExtensionAPI) {
         content: [
           "An active midcompact transaction exists with a persisted DraftPlan.",
           `Draft revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
-          "If the current user request asks to continue midcompact, call midcompact(action=\"plan\", op=\"show\") first, treat the existing plan as the initial proposal, and continue from it.",
+          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(action=\"plan\", op=\"show\") before any other midcompact action. Treat the existing plan as the initial proposal and continue from it.",
         ].join("\n"),
         display: false,
       },
@@ -329,11 +329,11 @@ export default function (pi: ExtensionAPI) {
     if (customInstructions) promptLines.push(`User focus: ${customInstructions}`);
     if (mode === "agent") {
       promptLines.push(
-        "FINAL STATE: AGENT DIRECT. Begin now: call inspect first; if a DraftPlan already exists, call plan show first; then use locate and plan to create or refine ranges and summaries. Stop before commit.",
+        "FINAL STATE: AGENT DIRECT. Read the `midcompact` skill before doing any planning work. Then begin: call inspect first; if a DraftPlan already exists, call plan show first; then use locate and plan to create or refine ranges and summaries. Stop before commit.",
       );
     } else {
       promptLines.push(
-        "FINAL STATE: USER MANUAL. The user is about to edit the initial DraftPlan. Acknowledge with OK only. Do not call any midcompact tool, inspect, locate, plan, or recall; do not change the draft or commit. Wait until the user finishes editing and sends a later request.",
+        "FINAL STATE: USER MANUAL. The user is about to edit the initial DraftPlan. Acknowledge with OK only. Do not call any midcompact tool, inspect, locate, plan, or recall; do not change the draft or commit. Wait until the user finishes editing and sends a later request. On that later request, read the `midcompact` skill before doing any planning work, then call plan show first.",
       );
     }
     await pi.sendUserMessage(promptLines.join("\n"));

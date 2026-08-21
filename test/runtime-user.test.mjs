@@ -16,6 +16,7 @@ test("User-first start sends a waiting prompt, then opens Selection without furt
   assert.equal(pi.sentUserMessages.length, 1, "User-first sends the shared setup prompt once");
   assert.match(pi.sentUserMessages[0], /FINAL STATE: USER MANUAL/);
   assert.match(pi.sentUserMessages[0], /Acknowledge with OK only/);
+  assert.match(pi.sentUserMessages[0], /later request, read the `midcompact` skill before doing any planning work/i);
   const startHandoff = await pi.emit("before_agent_start", { prompt: pi.sentUserMessages[0] }, toolCtx);
   assert.equal(startHandoff, undefined, "the startup prompt already carries its own guidance");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
@@ -42,6 +43,11 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   assert.equal(draftEntry.data.ranges[0].endRef, "a0001");
   assert.equal(draftEntry.data.ranges[0].summary, "");
   assert.equal(pi.sentUserMessages.length, 1);
+
+  toolCtx.ui.customInputs = ["s"];
+  await pi.commands.get("midcompact").handler("select", commandCtx);
+  const selectionFrame = toolCtx.ui.reviewFrames.at(-1).join("\n");
+  assert.match(selectionFrame, /Selected 1\/2 atoms \| 9\/24 chars \(37\.5% of anchor\) \| up to 37\.5% fewer anchor chars/);
 });
 
 test("User-first ESC closes without discarding the transaction, and select can reopen it", async () => {
@@ -87,6 +93,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   const handoff = await pi.emit("before_agent_start", { prompt: "continue the current midcompact draft" }, toolCtx);
   assert.match(handoff.message.content, /persisted DraftPlan/);
+  assert.match(handoff.message.content, /read the `midcompact` skill first/i);
   assert.match(handoff.message.content, /plan.*show/);
 
   // User hands off; Agent's first call is plan show and it sees the existing draft.
