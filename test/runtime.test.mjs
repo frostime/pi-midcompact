@@ -134,6 +134,52 @@ function setupRuntime(entries) {
   return { sm, pi, toolCtx, commandCtx };
 }
 
+/** Drive the full Agent-propose workflow end-to-end via the tool surface. */
+async function runAgentWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
+  const tool = pi.tools.get("midcompact");
+
+  // Agent must inspect first.
+  const inspected = await tool.execute("tc-inspect", { action: "inspect" }, null, null, toolCtx);
+  assert.match(inspected.content[0].text, /content chars/i);
+
+  // Agent persists a candidate Selection (unconfirmed).
+  const selected = await tool.execute("tc-select", {
+    action: "select",
+    spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]),
+    keep_refs: JSON.stringify([]),
+  }, null, null, toolCtx);
+  assert.match(selected.content[0].text, /Selection persisted \(unconfirmed\)/);
+
+  // Runtime guard: plan add is rejected before confirmation (selecting phase).
+  const guarded = await tool.execute("tc-guard", {
+    action: "plan", op: "add", start: "a0001", end: "a0002", summary: "x",
+  }, null, null, toolCtx);
+  assert.match(guarded.content[0].text, /selecting phase/);
+
+  // User confirms.
+  await pi.commands.get("midcompact").handler("confirm", commandCtx);
+
+  // User confirms.
+  await pi.commands.get("midcompact").handler("confirm", commandCtx);
+
+  // After confirmation, ranges are already materialized (pending). Fill summaries via plan update.
+  const draftState = await tool.execute("tc-after-confirm", { action: "plan", op: "show" }, null, null, toolCtx);
+  const rangeIds = [...draftState.content[0].text.matchAll(/d\d+:/g)].map(m => m[0].replace(/:$/, ""));
+  for (const id of rangeIds) {
+    await tool.execute(`tc-fill-${id}`, { action: "plan", op: "update", draft_id: id, summary: `Summary for ${id}.` }, null, null, toolCtx);
+  }
+  const planned = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
+  assert.match(planned.content[0].text, /d1:/);
+  // Agent-facing plan output echoes no summary text and no projected token claim.
+  assert.doesNotMatch(planned.content[0].text, /Summary for d1\./);
+  assert.doesNotMatch(planned.content[0].text, /projected if committed now/);
+  assert.match(planned.content[0].text, /content chars/);
+  assert.match(toolCtx.ui.statuses.get("midcompact"), /MC summarizing/);
+  return tool;
+}
+
 test("/midcompact start confirms and forwards an initial focus", async () => {
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
@@ -143,7 +189,9 @@ test("/midcompact start confirms and forwards an initial focus", async () => {
 
   assert.equal(toolCtx.ui.confirmations.length, 1);
   assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
+  assert.match(pi.sentUserMessages.at(-1), /action="inspect"/);
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
+  assert.equal(entries.some(e => e.customType === "midcompact-selection"), true);
 });
 
 test("/midcompact start cancellation leaves the session at its anchor", async () => {
@@ -166,10 +214,11 @@ test("/midcompact completes only the subcommand token", () => {
   const command = pi.commands.get("midcompact");
 
   assert.deepEqual(command.getArgumentCompletions("rev").map(item => item.value), ["review", "review-webui"]);
+  assert.deepEqual(command.getArgumentCompletions("con").map(item => item.value), ["confirm"]);
   assert.equal(command.getArgumentCompletions("start "), null);
 });
 
-test("/midcompact transaction commits state at anchor and tree rollback restores raw history", async () => {
+test("Agent propose workflow: inspect → select → confirm → plan → review → commit, then tree rollback restores raw history", async () => {
   const entries = [
     { type: "message", id: "e1", parentId: null, message: user("old requirement", 1) },
     { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
@@ -180,25 +229,10 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   const toolCtx = makeBaseCtx(sm);
   const commandCtx = makeCommandCtx(pi, sm, toolCtx);
   extensionFactory(pi);
-  await pi.emit("session_start", { reason: "startup" }, toolCtx);
 
-  await pi.commands.get("midcompact").handler("start", commandCtx);
-  assert.notEqual(sm.leafId, "e3");
-  assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), true);
+  const tool = await runAgentWorkflow(pi, toolCtx, commandCtx, { instructions: "Compress old exploration only" });
 
-  const tool = pi.tools.get("midcompact");
-  const located = await tool.execute("tc1", { action: "locate", pattern: "old exploration", source: "assistant" }, null, null, toolCtx);
-  assert.match(located.content[0].text, /a0002/);
-
-  const planned = await tool.execute("tc2", {
-    action: "plan", op: "add", start: "a0001", end: "a0002", summary: "Old requirement and exploration summarized."
-  }, null, null, toolCtx);
-  assert.match(planned.content[0].text, /d1:/);
-  assert.doesNotMatch(planned.content[0].text, /summary:/);
-  assert.match(planned.content[0].text, /Context awareness/);
-  assert.match(planned.content[0].text, /projected if committed now/);
-  assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);
-
+  // Review UI still maps ranges and KEEP holes.
   await pi.commands.get("midcompact").handler("review", commandCtx);
   assert.ok(toolCtx.ui.reviewFrames.length > 0);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /Midcompact Review/);
@@ -213,11 +247,15 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   assert.ok(committedEntry);
   assert.equal(committedEntry.parentId, "e3");
   assert.equal(sm.getBranch().some(e => e.customType === "midcompact-transaction"), false);
+  assert.equal(sm.getBranch().some(e => e.customType === "midcompact-selection"), false);
   assert.match(pi.labels.get(committedEntry.id), /^midcompact/);
   assert.equal(toolCtx.ui.statuses.has("midcompact"), false);
   assert.ok(pi.entryRenderers.has("midcompact-state"));
   assert.equal(committedEntry.data.lastCommit.anchorUsage.percent, 70);
   assert.equal(committedEntry.data.lastCommit.anchorUsage.contextWindow, 100000);
+  // Commit stats carry factual char/image fields.
+  assert.equal(typeof committedEntry.data.lastCommit.selectedOriginalContentChars, "number");
+  assert.equal(typeof committedEntry.data.lastCommit.selectedReplacementContentChars, "number");
 
   const rawMessages = [user("old requirement", 1), assistant("old exploration", 2), user("current work", 3)];
   const projected = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
@@ -233,7 +271,7 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   const restored = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
   assert.equal(restored.messages[0].customType, "midcompact-summary");
 
-  const search = await tool.execute("tc4", { action: "recall", pattern: "requirement" }, null, null, toolCtx);
+  const search = await tool.execute("tc4", { action: "recall" }, null, null, toolCtx);
   assert.match(search.content[0].text, /c0001/);
   const recalled = await tool.execute("tc5", { action: "recall", ref: "c0001", detail: "full" }, null, null, toolCtx);
   assert.match(recalled.content[0].text, /old requirement/);
@@ -250,14 +288,19 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   entries.push({ type: "message", id: newAssistantId, parentId: sm.leafId, message: assistant("new phase exploration", pi.counter) });
   sm.leafId = newAssistantId;
 
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
   await pi.commands.get("midcompact").handler("start", commandCtx);
-  const secondLocate = await tool.execute("tc6", { action: "locate", pattern: "new phase", source: "user" }, null, null, toolCtx);
-  assert.match(secondLocate.content[0].text, /a0003/);
-  const protectedOld = await tool.execute("tc7", { action: "locate", ref: "a0001", detail: "full" }, null, null, toolCtx);
-  assert.match(protectedOld.content[0].text, /compressed, protected/);
-  await tool.execute("tc8", {
-    action: "plan", op: "add", start: "a0003", end: "a0004", summary: "New phase summarized."
+  const inspect2 = await tool.execute("tc-inspect2", { action: "inspect" }, null, null, toolCtx);
+  assert.match(inspect2.content[0].text, /compressed.*protected|protected/);
+  await tool.execute("tc-select2", {
+    action: "select", spans: JSON.stringify([{ startRef: "a0003", endRef: "a0004" }]), keep_refs: JSON.stringify([]),
   }, null, null, toolCtx);
+  await pi.commands.get("midcompact").handler("confirm", commandCtx);
+  const draftState2 = await tool.execute("tc-after-confirm2", { action: "plan", op: "show" }, null, null, toolCtx);
+  const rangeIds2 = [...draftState2.content[0].text.matchAll(/d\d+:/g)].map(m => m[0].replace(/:$/, ""));
+  for (const id of rangeIds2) {
+    await tool.execute(`tc-fill2-${id}`, { action: "plan", op: "update", draft_id: id, summary: "New phase summarized." }, null, null, toolCtx);
+  }
   await pi.commands.get("midcompact").handler("commit", commandCtx);
 
   const latestStateEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
@@ -265,4 +308,84 @@ test("/midcompact transaction commits state at anchor and tree rollback restores
   assert.equal(latestStateEntry.data.blocks.length, 2);
   assert.equal(latestStateEntry.data.blocks[0].id, "c0001");
   assert.equal(latestStateEntry.data.blocks[1].id, "c0002");
+});
+
+test("User select workflow: start --user sends no Agent prompt until Selection is confirmed", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+    { type: "message", id: "e3", parentId: "e2", message: user("phase two", 3) },
+    { type: "message", id: "e4", parentId: "e3", message: assistant("more work", 4) },
+  ];
+  const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = pi.tools.get("midcompact");
+
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start --user", commandCtx);
+  // No Agent prompt yet.
+  assert.equal(pi.sentUserMessages.length, 0);
+  assert.match(toolCtx.ui.messages.at(-1).text, /User select mode/);
+
+  // User builds a Selection spanning a KEEP hole.
+  const selected = await tool.execute("tc-usel", {
+    action: "select",
+    spans: JSON.stringify([{ startRef: "a0001", endRef: "a0004" }]),
+    keep_refs: JSON.stringify(["a0003"]),
+  }, null, null, toolCtx);
+  assert.match(selected.content[0].text, /Selection persisted \(unconfirmed\)/);
+
+  // User select cannot edit a Selection after confirmation.
+  await pi.commands.get("midcompact").handler("confirm", commandCtx);
+  assert.ok(pi.sentUserMessages.length > 0, "summary prompt sent only after confirmation");
+  // Confirmed materialized ranges exclude the KEEP atom.
+  const showAfter = await tool.execute("tc-ushow", { action: "plan", op: "show" }, null, null, toolCtx);
+  assert.match(showAfter.content[0].text, /a0001 → a0002/);
+  assert.match(showAfter.content[0].text, /a0004 → a0004/);
+
+  const reSelect = await tool.execute("tc-uredo", {
+    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0001" }]), keep_refs: JSON.stringify([]),
+  }, null, null, toolCtx);
+  assert.match(reSelect.content[0].text, /already confirmed/);
+});
+
+test("commit rejects a pending (empty) summary", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = pi.tools.get("midcompact");
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await tool.execute("tc-sel", {
+    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]), keep_refs: JSON.stringify([]),
+  }, null, null, toolCtx);
+  await pi.commands.get("midcompact").handler("confirm", commandCtx);
+  // Confirmed ranges materialize with pending (empty) summaries; do not fill them.
+  await pi.commands.get("midcompact").handler("commit", commandCtx);
+  assert.match(toolCtx.ui.messages.at(-1).text, /empty.*summary|pending.*summary|commit rejected/i);
+});
+
+test("reload restores transaction mode, selection, and phase", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
+  const tool = pi.tools.get("midcompact");
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start --user", commandCtx);
+  await tool.execute("tc-sel", {
+    action: "select", spans: JSON.stringify([{ startRef: "a0001", endRef: "a0002" }]), keep_refs: JSON.stringify([]),
+  }, null, null, toolCtx);
+
+  // Simulate a reload by emitting session_start again on a fresh tool context.
+  const freshCtx = makeBaseCtx(sm);
+  const freshCommandCtx = makeCommandCtx(pi, sm, freshCtx);
+  await pi.emit("session_start", { reason: "reload" }, freshCtx);
+  await pi.commands.get("midcompact").handler("status", freshCommandCtx);
+  // Selection + phase restored: status notify reflects unconfirmed selection and selecting phase.
+  const statusNotify = freshCtx.ui.messages.at(-1).text;
+  assert.match(statusNotify, /unconfirmed/);
+  assert.match(statusNotify, /selecting/);
 });

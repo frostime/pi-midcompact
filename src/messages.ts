@@ -43,6 +43,12 @@ export function contentText(content: unknown): string {
       const name = typeof part.name === "string" ? part.name : "tool";
       const args = "arguments" in part ? part.arguments : {};
       out.push(`${name}(${safeJson(args)})`);
+    } else if (part.type === "image") {
+      // Image parts must not be silently dropped from rendered text; surface a
+      // placeholder so locate, preview and recall visibly account for them.
+      // Full image facts (payload bytes, dimensions) come from content-metrics.
+      const mime = typeof part.mimeType === "string" ? part.mimeType : "unknown";
+      out.push(`[image: ${mime}]`);
     }
   }
   return out.join("\n");

@@ -1,3 +1,6 @@
+// Shared data contracts. This module defines structures only; it owns no
+// metric, grouping, selection, or persistence rules.
+
 export interface MessageLike {
   role: string;
   content?: unknown;
@@ -9,6 +12,7 @@ export interface MessageLike {
   command?: string;
   output?: string;
   summary?: string;
+  display?: boolean;
 }
 
 export interface SessionEntryLike {
@@ -36,6 +40,26 @@ export type AtomKind =
   | "orphan_tool_result"
   | "other";
 
+/** Factual measurement of a single image content part. */
+export interface ImageFact {
+  /** Sequence within the owning message. */
+  index: number;
+  mimeType: string;
+  /** Decoded base64 payload length in bytes. */
+  payloadBytes: number;
+  /** Pixel dimensions when reliably readable; absent otherwise. */
+  width?: number;
+  height?: number;
+}
+
+/** Factual content statistics for a message, atom, group, or range. */
+export interface ContentMetrics {
+  /** Unicode code point count of visible content text fields. */
+  contentChars: number;
+  imageCount: number;
+  images: ImageFact[];
+}
+
 export interface Atom {
   ref: string;
   index: number;
@@ -45,6 +69,9 @@ export interface Atom {
   messageKeys: string[];
   preview: string;
   fullText: string;
+  /** Factual content metrics aggregated across this atom's messages. */
+  metrics: ContentMetrics;
+  /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   approxTokens: number;
   compressible: boolean;
   protocolClosed: boolean;
@@ -67,7 +94,17 @@ export interface CompressionBlock {
   entryIds: string[];
   messageKeys: string[];
   createdAt: string;
+  /** Factual original content chars replaced by this block. */
+  originalContentChars: number;
+  /** Factual image count in the original range. */
+  originalImageCount: number;
+  /** Factual decoded image payload bytes in the original range. */
+  originalImagePayloadBytes: number;
+  /** Factual replacement message content chars (midcompact wrapper + summary). */
+  replacementContentChars: number;
+  /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   originalApproxTokens: number;
+  /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   compressedApproxTokens: number;
 }
 
@@ -76,10 +113,16 @@ export interface CommitStats {
   committedAt: string;
   addedBlockIds: string[];
   addedRangeCount: number;
+  /** Factual totals for the committed ranges. */
+  selectedOriginalContentChars: number;
+  selectedReplacementContentChars: number;
+  selectedImageCount: number;
+  selectedImagePayloadBytes: number;
+  anchorUsage?: ContextUsageSnapshot;
+  /** @deprecated legacy approximate token fields; kept for old readers, not authoritative. */
   selectedOriginalApproxTokens: number;
   selectedCompressedApproxTokens: number;
   estimatedSavedTokens: number;
-  anchorUsage?: ContextUsageSnapshot;
   projectedTokens: number | null;
   projectedPercent: number | null;
 }
@@ -99,10 +142,19 @@ export interface DraftRange {
   startIndex: number;
   endIndex: number;
   topic?: string;
+  /** Empty until a summary is written; a range with empty summary is "pending". */
   summary: string;
   entryIds: string[];
   messageKeys: string[];
+  /** Factual original content chars in this range. */
+  originalContentChars: number;
+  originalImageCount: number;
+  originalImagePayloadBytes: number;
+  /** Factual replacement message content chars (wrapper + summary). */
+  replacementContentChars: number;
+  /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   originalApproxTokens: number;
+  /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   compressedApproxTokens: number;
   startPreview: string;
   endPreview: string;
@@ -115,19 +167,71 @@ export interface DraftPlan {
   ranges: DraftRange[];
 }
 
+export type TransactionMode = "agent" | "user";
+
+export type TransactionPhase =
+  | "selecting"
+  | "selection-confirmed"
+  | "summarizing"
+  | "ready_for_review";
+
 export interface TransactionState {
   version: 1;
   id: string;
   anchorEntryId: string;
   startedAt: string;
+  mode?: TransactionMode;
+  phase?: TransactionPhase;
   /** Frozen awareness captured when /midcompact starts; informational, never a target. */
   anchorUsage?: ContextUsageSnapshot;
 }
 
+/** A requested atom span in a Selection. May cross KEEP/protected atoms. */
+export interface SelectionSpan {
+  startRef: string;
+  endRef: string;
+}
+
+export interface SelectionState {
+  version: 1;
+  transactionId: string;
+  mode: TransactionMode;
+  confirmed: boolean;
+  /** Requested spans before KEEP/protected subtraction. */
+  spans: SelectionSpan[];
+  /** Atom refs the caller marked KEEP inside the spans. */
+  keepRefs: string[];
+  /** Atom refs of materialized pending ranges after confirmation (for restore). */
+  materializedRangeRefs?: Array<{ startRef: string; endRef: string }>;
+  updatedAt: string;
+}
+
+/** A finalized ordinary span after KEEP/protected subtraction. */
+export interface OrdinarySpan {
+  startRef: string;
+  endRef: string;
+  startIndex: number;
+  endIndex: number;
+}
+
 export interface DraftTelemetry {
-  anchorTokens: number | null;
+  /** Pi-reported usage at the frozen anchor; informational. */
+  anchorUsage?: ContextUsageSnapshot;
+  /** @deprecated Pi-reported anchor context window; use anchorUsage. Kept for UI readers. */
   contextWindow: number | null;
+  /** @deprecated Pi-reported anchor tokens; use anchorUsage. Kept for UI readers. */
+  anchorTokens: number | null;
+  /** @deprecated Pi-reported anchor percent; use anchorUsage. Kept for UI readers. */
   anchorPercent: number | null;
+  /** Factual selected metrics. */
+  selectedOriginalContentChars: number;
+  selectedReplacementContentChars: number;
+  selectedImageCount: number;
+  selectedImagePayloadBytes: number;
+  rangeCount: number;
+  /** Ranges still awaiting a non-empty summary. */
+  pendingSummaryCount: number;
+  /** @deprecated legacy approximate token fields; kept for old readers, not authoritative. */
   selectedOriginalApproxTokens: number;
   selectedCompressedApproxTokens: number;
   estimatedSavedTokens: number;
@@ -143,6 +247,56 @@ export interface LocateQuery {
   direction?: "oldest" | "newest";
   limit?: number;
   detail?: "brief" | "full";
+}
+
+export interface InventoryQuery {
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface InventoryGroup {
+  ref: string;
+  label: string;
+  isPrefix: boolean;
+  startAtomRef: string;
+  endAtomRef: string;
+  atomCount: number;
+  messageCount: number;
+  contentChars: number;
+  imageCount: number;
+  imagePayloadBytes: number;
+  imageMimeTypes: string[];
+  protectedAtomCount: number;
+  compressibleAtomCount: number;
+}
+
+export interface InventoryTotals {
+  atomCount: number;
+  messageCount: number;
+  contentChars: number;
+  imageCount: number;
+  imagePayloadBytes: number;
+  groupCount: number;
+  protectedAtomCount: number;
+  compressibleAtomCount: number;
+}
+
+export interface InventoryPiUsage {
+  available: boolean;
+  contextWindow: number | null;
+  tokens: number | null;
+  percent: number | null;
+  /** Provenance label, e.g. "Pi reported at anchor start". */
+  provenance: string;
+}
+
+export interface InventoryPage {
+  anchor: { transactionId: string; anchorEntryId: string };
+  piUsage: InventoryPiUsage;
+  totals: InventoryTotals;
+  groups: InventoryGroup[];
+  nextCursor: string | null;
+  pageSize: number;
 }
 
 export type ReviewAction =

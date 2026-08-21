@@ -1,4 +1,5 @@
 import type { Atom, LocateQuery, MessageLike, MessageRef, SessionEntryLike } from "./types.js";
+import { aggregateMetrics, measureMessage } from "./content-metrics.js";
 import { approxTokens, mapEntryIds, messageKey, renderMessage, toolCalls, truncate } from "./messages.js";
 
 export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntryLike[]): Atom[] {
@@ -70,6 +71,11 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
   return atoms;
 }
 
+/** A protected atom cannot be part of any compressible range. */
+export function isProtectedAtom(atom: Atom): boolean {
+  return !atom.compressible || !atom.protocolClosed || atom.kind === "compressed";
+}
+
 function hasEntry(ref: MessageRef): boolean {
   return typeof ref.entryId === "string" && ref.entryId.length > 0;
 }
@@ -105,6 +111,7 @@ function makeAtom(
     messageKeys: messages.map((ref) => ref.key),
     preview: truncate(fullText, 700),
     fullText,
+    metrics: aggregateMetrics(messages.map((ref) => measureMessage(ref.message))),
     approxTokens: approxTokens(fullText),
     compressible,
     protocolClosed,

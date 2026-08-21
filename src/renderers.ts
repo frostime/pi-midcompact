@@ -14,28 +14,27 @@ export function registerStateRenderer(pi: ExtensionAPI): void {
       return box;
     }
     const commit = state.lastCommit;
-    const saved = state.blocks.reduce(
-      (sum, block) => sum + Math.max(0, block.originalApproxTokens - block.compressedApproxTokens),
-      0,
-    );
+    const originalChars = state.blocks.reduce((sum, block) => sum + (block.originalContentChars ?? 0), 0);
+    const replacementChars = state.blocks.reduce((sum, block) => sum + (block.replacementContentChars ?? 0), 0);
+    const imageCount = state.blocks.reduce((sum, block) => sum + (block.originalImageCount ?? 0), 0);
     const added = commit?.addedRangeCount ?? 0;
     const headline = [
       theme.fg("success", "✓ MIDCOMPACT"),
       added ? `+${added} range${added === 1 ? "" : "s"}` : `${state.blocks.length} active block${state.blocks.length === 1 ? "" : "s"}`,
       `${state.blocks.length} active`,
-      `~${formatTokenCount(saved)} saved`,
-    ].join(" · ");
+      `${originalChars} → ${replacementChars} content chars`,
+      imageCount ? `${imageCount} images` : "",
+    ].filter(Boolean).join(" · ");
     box.addChild(new Text(headline, 0, 0));
 
-    if (commit?.anchorUsage?.contextWindow && commit.projectedTokens !== null) {
+    if (commit?.anchorUsage?.contextWindow) {
+      // Pi-reported awareness only; no local projected token percentage claim.
       box.addChild(new Text(
         theme.fg(
           "dim",
-          `anchor ${formatPercent(commit.anchorUsage.percent)} → projected ${formatPercent(commit.projectedPercent, true)} ` +
-            `(~${formatTokenCount(commit.projectedTokens)}/${formatTokenCount(commit.anchorUsage.contextWindow)})`,
+          `anchor ${formatPercent(commit.anchorUsage.percent)} [Pi reported] · ${commit.selectedOriginalContentChars} → ${commit.selectedReplacementContentChars} chars · ${commit.selectedImageCount} images`,
         ),
-        0,
-        0,
+        0, 0,
       ));
     }
 
@@ -43,7 +42,7 @@ export function registerStateRenderer(pi: ExtensionAPI): void {
       const addedSet = new Set(commit?.addedBlockIds ?? []);
       const blocks = addedSet.size ? state.blocks.filter((block) => addedSet.has(block.id)) : state.blocks;
       for (const block of blocks) {
-        const title = `${block.id}${block.topic ? ` · ${block.topic}` : ""} · ~${formatTokenCount(block.originalApproxTokens)} → ~${formatTokenCount(block.compressedApproxTokens)}`;
+        const title = `${block.id}${block.topic ? ` · ${block.topic}` : ""} · ${block.originalContentChars ?? 0} → ${block.replacementContentChars ?? 0} chars${block.originalImageCount ? ` · ${block.originalImageCount} images` : ""}`;
         box.addChild(new Text(theme.fg("accent", title), 0, 0));
         box.addChild(new Text(theme.fg("dim", block.summary), 1, 0));
       }
@@ -56,12 +55,10 @@ export function registerStateRenderer(pi: ExtensionAPI): void {
 export function stateTreeLabel(state: CompressionState): string {
   const commit = state.lastCommit;
   const added = commit?.addedRangeCount ?? 0;
-  const saved = commit?.estimatedSavedTokens ?? state.blocks.reduce(
-    (sum, block) => sum + Math.max(0, block.originalApproxTokens - block.compressedApproxTokens),
-    0,
-  );
-  const projection = commit?.projectedPercent === null || commit?.projectedPercent === undefined
+  const replacementChars = state.blocks.reduce((sum, block) => sum + (block.replacementContentChars ?? 0), 0);
+  const originalChars = state.blocks.reduce((sum, block) => sum + (block.originalContentChars ?? 0), 0);
+  const anchor = commit?.anchorUsage?.percent === null || commit?.anchorUsage?.percent === undefined
     ? ""
-    : ` · →~${formatPercent(commit.projectedPercent, false)}`;
-  return `midcompact${added ? ` +${added}` : ""} · ~${formatTokenCount(saved)} saved${projection}`;
+    : ` · anchor ${formatPercent(commit.anchorUsage.percent)} [Pi]`;
+  return `midcompact${added ? ` +${added}` : ""} · ${originalChars} → ${replacementChars} chars${anchor}`;
 }
