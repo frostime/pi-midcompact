@@ -1,4 +1,10 @@
-import type { CompressionBlock, CompressionState, MessageLike } from "./types.js";
+// Projection: replaces an exact persisted messageKeys subsequence with a
+// midcompact summary message and fails open when a sequence cannot be resolved.
+// Owns factual replacement-size calculation based on the actual summary message
+// wrapper text, not a fixed token heuristic.
+
+import type { CompressionBlock, CompressionState, ContentMetrics, MessageLike } from "./types.js";
+import { aggregateMetrics, measureMessage } from "./content-metrics.js";
 import { approxTokens, messageKey } from "./messages.js";
 
 export function summaryMessage(block: CompressionBlock, timestamp = Date.now()): MessageLike {
@@ -56,6 +62,42 @@ function findSubsequence(haystack: string[], needle: string[]): { start: number;
   return undefined;
 }
 
+/**
+ * Measure the actual replacement message produced for a block, so callers can
+ * report factual replacement content chars (midcompact wrapper + summary).
+ */
+export function replacementMetrics(block: CompressionBlock): ContentMetrics {
+  return measureMessage(summaryMessage(block));
+}
+
+/**
+ * Factual replacement content chars for a range, given its topic and summary.
+ * Computed from the actual summary message wrapper text that projection emits.
+ */
+export function replacementContentChars(summary: string, topic?: string): number {
+  const block: CompressionBlock = {
+    id: "draft",
+    summary,
+    topic,
+    entryIds: [],
+    messageKeys: [],
+    createdAt: new Date().toISOString(),
+    originalContentChars: 0,
+    originalImageCount: 0,
+    originalImagePayloadBytes: 0,
+    replacementContentChars: 0,
+    originalApproxTokens: 0,
+    compressedApproxTokens: 0,
+  };
+  return replacementMetrics(block).contentChars;
+}
+
+/** @deprecated legacy heuristic; kept only for old approximate-token field compat. */
 export function estimateCompressedTokens(summary: string, topic?: string): number {
   return approxTokens(`${topic ?? ""}\n${summary}`) + 40;
+}
+
+/** Factual metrics for a set of atoms that a range/block would replace. */
+export function rangeMetricsForAtoms(atoms: readonly { metrics: ContentMetrics }[]): ContentMetrics {
+  return aggregateMetrics(atoms.map((atom) => atom.metrics));
 }

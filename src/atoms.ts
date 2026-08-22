@@ -1,5 +1,6 @@
 import type { Atom, LocateQuery, MessageLike, MessageRef, SessionEntryLike } from "./types.js";
-import { approxTokens, mapEntryIds, messageKey, renderMessage, toolCalls, truncate } from "./messages.js";
+import { aggregateMetrics, measureMessage } from "./content-metrics.js";
+import { approxTokens, excerptAround, mapEntryIds, messageKey, renderMessage, toolCalls, truncateMiddle } from "./messages.js";
 
 export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntryLike[]): Atom[] {
   const entryIds = mapEntryIds(messages, branch);
@@ -70,6 +71,11 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
   return atoms;
 }
 
+/** A protected atom cannot be part of any compressible range. */
+export function isProtectedAtom(atom: Atom): boolean {
+  return !atom.compressible || !atom.protocolClosed || atom.kind === "compressed";
+}
+
 function hasEntry(ref: MessageRef): boolean {
   return typeof ref.entryId === "string" && ref.entryId.length > 0;
 }
@@ -103,8 +109,9 @@ function makeAtom(
     messages,
     entryIds: messages.flatMap((ref) => (ref.entryId ? [ref.entryId] : [])),
     messageKeys: messages.map((ref) => ref.key),
-    preview: truncate(fullText, 700),
+    preview: truncateMiddle(fullText, 700),
     fullText,
+    metrics: aggregateMetrics(messages.map((ref) => measureMessage(ref.message))),
     approxTokens: approxTokens(fullText),
     compressible,
     protocolClosed,
@@ -114,10 +121,17 @@ function makeAtom(
   };
 }
 
-export function locateAtoms(atoms: Atom[], query: LocateQuery): Atom[] {
+export const MAX_LOCATE_MATCHES = 3;
+
+export interface LocatedAtoms {
+  atoms: Atom[];
+  totalMatches: number;
+}
+
+export function locateAtomMatches(atoms: Atom[], query: LocateQuery): LocatedAtoms {
   if (query.ref) {
     const atom = atoms.find((candidate) => candidate.ref === query.ref);
-    return atom ? [atom] : [];
+    return { atoms: atom ? [atom] : [], totalMatches: atom ? 1 : 0 };
   }
   const pattern = query.pattern?.toLocaleLowerCase();
   const toolName = query.toolName?.toLocaleLowerCase();
@@ -129,7 +143,13 @@ export function locateAtoms(atoms: Atom[], query: LocateQuery): Atom[] {
     return Boolean(pattern || toolName || source !== "any");
   });
   if ((query.direction ?? "oldest") === "newest") matches = matches.reverse();
-  return matches.slice(0, Math.max(1, Math.min(query.limit ?? 5, 20)));
+  const totalMatches = matches.length;
+  const limit = Math.max(1, Math.min(query.limit ?? MAX_LOCATE_MATCHES, MAX_LOCATE_MATCHES));
+  return { atoms: matches.slice(0, limit), totalMatches };
+}
+
+export function locateAtoms(atoms: Atom[], query: LocateQuery): Atom[] {
+  return locateAtomMatches(atoms, query).atoms;
 }
 
 function matchesSource(atom: Atom, source: NonNullable<LocateQuery["source"]>): boolean {
@@ -141,9 +161,13 @@ function matchesSource(atom: Atom, source: NonNullable<LocateQuery["source"]>): 
   return false;
 }
 
-export function formatLocatedAtom(atom: Atom, detail: "brief" | "full" = "brief"): string {
+export function formatLocatedAtom(atom: Atom, detail: "brief" | "full" = "brief", pattern?: string): string {
   const flags = [atom.kind, atom.compressible ? "compressible" : "protected", atom.protocolClosed ? "closed" : "open"].join(", ");
-  const text = detail === "full" ? truncate(atom.fullText, 12_000) : atom.preview;
+  const text = detail === "full"
+    ? atom.fullText.length <= 12_000 ? atom.fullText : truncateMiddle(atom.fullText, 12_000)
+    : pattern
+      ? excerptAround(atom.fullText, pattern, 700)
+      : atom.preview;
   return [
     `${atom.ref} | position ${atom.index + 1} | ${flags}`,
     atom.toolNames.length ? `tools: ${atom.toolNames.join(", ")}` : "",

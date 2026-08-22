@@ -43,6 +43,12 @@ export function contentText(content: unknown): string {
       const name = typeof part.name === "string" ? part.name : "tool";
       const args = "arguments" in part ? part.arguments : {};
       out.push(`${name}(${safeJson(args)})`);
+    } else if (part.type === "image") {
+      // Image parts must not be silently dropped from rendered text; surface a
+      // placeholder so locate, preview and recall visibly account for them.
+      // Full image facts (payload bytes, dimensions) come from content-metrics.
+      const mime = typeof part.mimeType === "string" ? part.mimeType : "unknown";
+      out.push(`[image: ${mime}]`);
     }
   }
   return out.join("\n");
@@ -86,9 +92,58 @@ export function approxTokens(text: string): number {
 }
 
 export function truncate(text: string, limit: number): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
+  const normalized = normalizePreviewText(text);
   if (normalized.length <= limit) return normalized;
   return `${normalized.slice(0, Math.max(0, limit - 1))}…`;
+}
+
+/** Preserve both identifying ends of a bounded landmark or oversized body. */
+export function truncateMiddle(text: string, limit: number): string {
+  const normalized = normalizePreviewText(text);
+  if (normalized.length <= limit) return normalized;
+  if (limit < 32) return truncate(normalized, limit);
+
+  let marker = " … [middle omitted] … ";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const kept = Math.max(2, limit - marker.length);
+    const omitted = Math.max(0, normalized.length - kept);
+    marker = ` … [${omitted} chars omitted] … `;
+  }
+  const kept = Math.max(2, limit - marker.length);
+  const headLength = Math.ceil(kept / 2);
+  const tailLength = Math.floor(kept / 2);
+  return `${normalized.slice(0, headLength)}${marker}${normalized.slice(-tailLength)}`;
+}
+
+/** Return a bounded excerpt centered on a case-insensitive text match. */
+export function excerptAround(text: string, pattern: string, limit: number): string {
+  const normalized = normalizePreviewText(text);
+  const needle = normalizePreviewText(pattern);
+  if (!needle || normalized.length <= limit) return truncateMiddle(normalized, limit);
+  const matchIndex = normalized.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase());
+  if (matchIndex < 0) return truncateMiddle(normalized, limit);
+
+  const hasPrefix = matchIndex > 0;
+  const matchEnd = matchIndex + needle.length;
+  const hasSuffix = matchEnd < normalized.length;
+  const prefixMarker = hasPrefix ? "… " : "";
+  const suffixMarker = hasSuffix ? " …" : "";
+  const available = Math.max(1, limit - prefixMarker.length - suffixMarker.length);
+  if (needle.length >= available) {
+    return `${prefixMarker}${truncateMiddle(normalized.slice(matchIndex, matchEnd), available)}${suffixMarker}`;
+  }
+  const context = available - needle.length;
+  const before = Math.min(matchIndex, Math.floor(context / 2));
+  const after = Math.min(normalized.length - matchEnd, context - before);
+  const unused = context - before - after;
+  const extraBefore = Math.min(matchIndex - before, unused);
+  const start = matchIndex - before - extraBefore;
+  const end = Math.min(normalized.length, matchEnd + after + (unused - extraBefore));
+  return `${start > 0 ? "… " : ""}${normalized.slice(start, end)}${end < normalized.length ? " …" : ""}`;
+}
+
+function normalizePreviewText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 export function mapEntryIds(messages: MessageLike[], branch: readonly SessionEntryLike[]): Array<string | undefined> {

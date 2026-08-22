@@ -55,7 +55,7 @@ The raw session JSONL still contains:
 
 ### A reviewed draft can reclaim meaningful context
 
-The browser review captured below selects **42 of 73 atoms** in **2 ranges**: approximately **31.0k → 488 tokens**, for an estimated **30.6k-token reduction**. The other 31 atoms remain unselected and visible as raw context. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage separately from factual content chars and image counts; it does not derive projected token savings from local character estimates. Click either image to open it at full resolution.
 
 <p align="center">
   <a href="./figures/review-webui.png">
@@ -127,7 +127,7 @@ Run:
 /midcompact start
 ```
 
-Pi asks for confirmation, then creates a temporary transaction after the anchor and tells the Agent how to plan the compression. No conversation is changed yet. You can include the initial scope in the same command:
+Pi opens a three-way chooser before creating transaction state: **Drop**, **Agent direct**, or **User manual**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens. It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
 
 ```text
 /midcompact start Compress the early repository exploration, but keep user requirements verbatim.
@@ -161,7 +161,14 @@ For RPC, print, or other no-TUI modes, use the editable local browser interface 
 /midcompact review-webui
 ```
 
-You can edit a selected summary or topic, remove a range, and switch between compression ranges in either review surface. To change range boundaries or leave an important hole uncompressed, tell the Agent what to keep and ask it to revise the plan, then review it again.
+Use Selection to create or change ranges and KEEP holes:
+
+```text
+/midcompact select
+/midcompact select-webui
+```
+
+Use the TUI or local browser Review surface to edit summaries/topics and reject ranges. Review deliberately does not create or resize ranges; reopen Selection for boundary changes. To continue with Agent after a user-created plan, send a normal message asking it to continue the current midcompact draft; the Agent is prompted to read the existing plan first.
 
 ### 4. Commit the reviewed compression
 
@@ -204,9 +211,11 @@ Enter/Esc/q        close
 
 | Command | Result |
 | --- | --- |
-| `/midcompact start [instructions]` | Confirms and starts a transaction at the current session-tree leaf, optionally with an initial compression focus. |
-| `/midcompact review` | Opens the draft review timeline in the native TUI; in non-TUI modes, points to `review-webui`. |
-| `/midcompact review-webui` | Starts an editable local browser review page; works without a TUI. |
+| `/midcompact start [instructions]` | Opens Drop / Agent direct / User manual, then starts a transaction at the current session-tree leaf. |
+| `/midcompact select` | Opens the native TUI Selection workbench for range and KEEP editing. |
+| `/midcompact select-webui` | Opens the local browser Selection workbench. |
+| `/midcompact review` | Opens summary/topic review in the native TUI. |
+| `/midcompact review-webui` | Opens summary/topic review in a local browser. |
 | `/midcompact commit` | Commits the reviewed draft. Human only. |
 | `/midcompact abort` | Abandons the transaction and returns to the anchor. |
 | `/midcompact status` | Displays the current draft, or the committed compression state on this branch. |
@@ -224,4 +233,4 @@ The extension shows planning status in Pi's footer only while a transaction is a
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
 - **Provider and extension interoperability needs more real-session validation.** Unusual message shapes, third-party context-transform ordering, and long-lived exact message fingerprints have not been broadly exercised.
 - **Very long sessions are not stress-tested.** Large review snapshots and repeated block accumulation may eventually require consolidation.
-- **Browser review is local.** `review-webui` binds to loopback, opens an editable review page, and keeps the draft mutations in the same branch-local transaction as the native TUI.
+- **Browser workbenches are local.** `select-webui` and `review-webui` bind to loopback and mutate the same branch-local DraftPlan as the native TUI surfaces.

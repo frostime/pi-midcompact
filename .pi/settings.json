@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "source": "npm:pi-midcompact",
+      "autoload": false,
+      "extensions": [
+        "-src\\index.ts"
+      ],
+      "skills": [
+        "-skills\\midcompact\\SKILL.md"
+      ]
+    }
+  ],
+  "skills": []
+}

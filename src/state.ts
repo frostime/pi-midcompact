@@ -1,4 +1,16 @@
-import type { CompressionState, DraftPlan, SessionEntryLike, TransactionState } from "./types.js";
+// Persistence boundary. Owns restoration of CompressionState, TransactionState,
+// and DraftPlan from the session branch. Provides backward-compatible defaults
+// so old v1 state (without startMode) restores without migration. The runtime
+// planning lock is not persisted here; it lives only in memory.
+
+import type {
+  CompressionState,
+  DraftPlan,
+  DraftRange,
+  SessionEntryLike,
+  StartMode,
+  TransactionState,
+} from "./types.js";
 
 export const STATE_ENTRY = "midcompact-state";
 export const TXN_ENTRY = "midcompact-transaction";
@@ -12,6 +24,11 @@ export function emptyCompressionState(): CompressionState {
   return { version: 1, createdAt: new Date().toISOString(), blocks: [] };
 }
 
+/** Default routing for transactions persisted before startMode existed. */
+export function defaultStartMode(mode: StartMode | undefined): StartMode {
+  return mode ?? "agent";
+}
+
 export function restoreCompressionState(entries: readonly unknown[]): CompressionState | undefined {
   let latest: CompressionState | undefined;
   for (const raw of entries) {
@@ -22,7 +39,10 @@ export function restoreCompressionState(entries: readonly unknown[]): Compressio
   return latest;
 }
 
-export function restoreTransaction(entries: readonly unknown[]): { transaction?: TransactionState; draft?: DraftPlan } {
+export function restoreTransaction(entries: readonly unknown[]): {
+  transaction?: TransactionState;
+  draft?: DraftPlan;
+} {
   let transaction: TransactionState | undefined;
   let draft: DraftPlan | undefined;
   for (const raw of entries) {
@@ -61,4 +81,21 @@ function isDraft(value: unknown): value is DraftPlan {
   if (!value || typeof value !== "object") return false;
   const plan = value as Record<string, unknown>;
   return plan.version === 1 && typeof plan.transactionId === "string" && typeof plan.revision === "number" && Array.isArray(plan.ranges);
+}
+
+/**
+ * An old DraftRange may lack the factual char/image fields. Coerce to the
+ * current shape so callers always see the new fields; missing values default to
+ * 0 and are recomputed by the next mutation.
+ */
+export function coerceDraftRange(range: DraftRange): DraftRange {
+  return {
+    ...range,
+    originalContentChars: typeof range.originalContentChars === "number" ? range.originalContentChars : 0,
+    originalImageCount: typeof range.originalImageCount === "number" ? range.originalImageCount : 0,
+    originalImagePayloadBytes: typeof range.originalImagePayloadBytes === "number" ? range.originalImagePayloadBytes : 0,
+    replacementContentChars: typeof range.replacementContentChars === "number" ? range.replacementContentChars : 0,
+    originalApproxTokens: typeof range.originalApproxTokens === "number" ? range.originalApproxTokens : 0,
+    compressedApproxTokens: typeof range.compressedApproxTokens === "number" ? range.compressedApproxTokens : 0,
+  };
 }

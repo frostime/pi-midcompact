@@ -1,6 +1,6 @@
 {
   "name": "pi-midcompact",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Branch-aware mid-context compression for the Pi coding agent",
   "author": "frostime",
   "repository": {
@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/core.test.mjs test/runtime.test.mjs",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/core.test.mjs test/runtime-start.test.mjs test/runtime-agent.test.mjs test/runtime-user.test.mjs test/runtime-transaction.test.mjs test/runtime-lock.test.mjs",
     "typecheck:contract": "tsc -p tsconfig.test.json --noEmit",
     "pack:check": "npm pack --dry-run"
   },
