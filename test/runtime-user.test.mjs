@@ -95,10 +95,18 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   assert.match(handoff.message.content, /persisted DraftPlan/);
   assert.match(handoff.message.content, /read the `midcompact` skill first/i);
   assert.match(handoff.message.content, /plan.*show/);
+  assert.match(handoff.message.content, /current shared draft/);
+  assert.match(handoff.message.content, /preserve, refine, or extend/);
+  assert.doesNotMatch(handoff.message.content, /initial proposal/);
 
-  // User hands off; Agent's first call is plan show and it sees the existing draft.
+  // User hands off; one read-only show reveals the selected landmarks and does
+  // not persist a duplicate DraftPlan entry.
   await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
+  const draftEntriesBeforeShow = entries.filter(entry => entry.customType === "midcompact-draft").length;
   const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
   assert.match(shown.content[0].text, /d1:/);
-  assert.match(shown.content[0].text, /pending summary/);
+  assert.match(shown.content[0].text, /from: User: phase one/);
+  assert.match(shown.content[0].text, /to: Assistant: old exploration/);
+  assert.match(shown.content[0].text, /summary: <pending>/);
+  assert.equal(entries.filter(entry => entry.customType === "midcompact-draft").length, draftEntriesBeforeShow);
 });

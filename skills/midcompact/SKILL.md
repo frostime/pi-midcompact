@@ -42,7 +42,7 @@ Match effort to the requested fidelity. A quick or approximate request calls for
 
 #### 2. Form a bounded semantic view
 
-`inspect` returns a body-free inventory grouped by user message. Use it for structure and factual volume, not to invent semantic labels. Ground candidates in visible conversation or a few targeted `locate` calls, and stop paging after the potentially relevant region.
+`inspect` returns factual structure with bounded user landmarks, grouped by user message. Use it for structure and volume, not to invent semantics. Ground candidates in visible conversation or a few targeted `locate` calls, and stop paging after the potentially relevant region. When exact candidate spans are known and their relative volume could change the choice, use read-only `inspect` spans to compare them without mutating the DraftPlan.
 
 Segment by completed work phase, not message count. User-originated input and concluding Agent responses are useful landmarks for intent and outcome, but are not automatically KEEP. Intermediate tool exchanges may also contain decisions or evidence absent from the final response.
 

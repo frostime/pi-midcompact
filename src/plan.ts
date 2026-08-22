@@ -1,13 +1,14 @@
 // Draft plan ownership. Owns pending-to-summarized draft transitions and the
-// concise Agent-facing plan output. A DraftRange boundary can be fixed while
+// bounded Agent-facing plan output. A DraftRange boundary can be fixed while
 // its summary is still empty ("pending"); only ranges with non-empty summaries
-// form a review draft and can commit. Plan output never echoes summary text or
-// long previews.
+// form a review draft and can commit. Show and mutation formatters expose
+// bounded semantic landmarks without dumping the full shared plan repeatedly.
 
 import type { Atom, DraftPlan, DraftRange, DraftTelemetry } from "./types.js";
 import { isProtectedAtom } from "./atoms.js";
 import { estimateCompressedTokens, rangeMetricsForAtoms, replacementContentChars } from "./projection.js";
 import { formatTelemetry } from "./telemetry.js";
+import { truncateMiddle } from "./messages.js";
 
 export function emptyDraft(transactionId: string): DraftPlan {
   return { version: 1, transactionId, revision: 0, ranges: [] };
@@ -138,25 +139,111 @@ export function isReviewReady(draft: DraftPlan): boolean {
   return draft.ranges.length > 0 && draft.ranges.every((range) => range.summary.trim().length > 0);
 }
 
-/**
- * Concise Agent-facing plan output. Shows revision, range refs, factual
- * char/image stats, and pending state. Never echoes summary text or long
- * previews. Pi-reported awareness appears at the top as context only.
- */
-export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry): string {
+const BRIEF_LANDMARK_LIMIT = 180;
+const BRIEF_SUMMARY_LIMIT = 500;
+const DRAFT_OUTPUT_LIMIT = 12_000;
+const FULL_DRAFT_OUTPUT_LIMIT = 40_000;
+
+export interface DraftFormatOptions {
+  detail?: "brief" | "full";
+  draftId?: string;
+  atoms?: readonly Atom[];
+}
+
+/** Agent-facing plan output with bounded semantic landmarks and summaries. */
+export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry, options: DraftFormatOptions = {}): string {
+  if (options.detail === "full" && !options.draftId) {
+    throw new Error("plan show detail=full requires draft_id.");
+  }
+  const selected = options.draftId
+    ? draft.ranges.filter((range) => range.id === options.draftId)
+    : draft.ranges;
+  const atomsByRef = options.atoms ? new Map(options.atoms.map((atom) => [atom.ref, atom])) : undefined;
+  if (options.draftId && selected.length === 0) throw new Error(`Unknown draft range ${options.draftId}.`);
+
   const lines: string[] = [];
-  if (telemetry) lines.push(formatTelemetry(telemetry), "");
+  if (telemetry) lines.push(formatTelemetry(telemetry));
   if (draft.ranges.length === 0) {
     lines.push(`Draft v${draft.revision}: no compression ranges.`);
-    return lines.join("\n");
+    return lines.join("\n\n");
   }
+  lines.push(draftHeader(draft));
+
+  if (options.detail === "full") {
+    const remainingBudget = Math.max(1, FULL_DRAFT_OUTPUT_LIMIT - lines.join("\n\n").length - 2);
+    lines.push(formatRangeFull(selected[0]!, remainingBudget, atomsByRef));
+    return lines.join("\n\n");
+  }
+
+  let shown = 0;
+  for (const range of selected) {
+    const block = formatRangeBrief(range, atomsByRef);
+    const currentLength = lines.join("\n\n").length;
+    if (currentLength + 2 + block.length > DRAFT_OUTPUT_LIMIT) {
+      const notice = `Output budget reached: showed ${shown} of ${selected.length} range(s). Use draft_id to inspect one range.`;
+      if (currentLength + 2 + notice.length <= DRAFT_OUTPUT_LIMIT) lines.push(notice);
+      break;
+    }
+    lines.push(block);
+    shown += 1;
+  }
+  return lines.join("\n\n");
+}
+
+/** Concise confirmation for one DraftPlan mutation; explicit show owns full awareness. */
+export function formatPlanMutation(
+  draft: DraftPlan,
+  op: "add" | "update" | "remove",
+  changedId: string,
+  atoms?: readonly Atom[],
+): string {
+  const pendingCount = draft.ranges.filter((range) => range.summary.trim().length === 0).length;
+  const verb = op === "add" ? "added" : op === "update" ? "updated" : "removed";
+  const lines = [`Draft v${draft.revision}: ${verb} ${changedId} · ${draft.ranges.length} range(s) · ${pendingCount} pending summary.`];
+  if (op !== "remove") {
+    const changed = draft.ranges.find((range) => range.id === changedId);
+    const atomsByRef = atoms ? new Map(atoms.map((atom) => [atom.ref, atom])) : undefined;
+    if (changed) lines.push(formatRangeBrief(changed, atomsByRef));
+  }
+  return lines.join("\n\n");
+}
+
+function draftHeader(draft: DraftPlan): string {
   const pendingCount = draft.ranges.filter((range) => range.summary.trim().length === 0).length;
   const reviewState = pendingCount === 0 ? "ready for review" : `${pendingCount} pending summary`;
-  lines.push(`Draft v${draft.revision}: ${draft.ranges.length} range(s) (${reviewState}).`);
-  for (const range of draft.ranges) {
-    const status = range.summary.trim().length === 0 ? "pending summary" : "summarized";
-    lines.push(`\n${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${range.topic}` : ""} [${status}]`);
-    lines.push(`${range.originalContentChars} → ${range.replacementContentChars} content chars · ${range.originalImageCount} images (${range.originalImagePayloadBytes} payload bytes)`);
-  }
-  return lines.join("\n");
+  return `Draft v${draft.revision}: ${draft.ranges.length} range(s) (${reviewState}).`;
+}
+
+function formatRangeBrief(range: DraftRange, atomsByRef?: ReadonlyMap<string, Atom>): string {
+  const pending = range.summary.trim().length === 0;
+  return [
+    `${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${truncateMiddle(range.topic, BRIEF_LANDMARK_LIMIT)}` : ""} [${pending ? "pending summary" : "summarized"}]`,
+    `from: ${truncateMiddle(rangeEndpoint(range, "start", atomsByRef), BRIEF_LANDMARK_LIMIT)}`,
+    `to: ${truncateMiddle(rangeEndpoint(range, "end", atomsByRef), BRIEF_LANDMARK_LIMIT)}`,
+    `summary: ${pending ? "<pending>" : truncateMiddle(range.summary, BRIEF_SUMMARY_LIMIT)}`,
+    `metrics: ${range.originalContentChars} → ${range.replacementContentChars} content chars · ${range.originalImageCount} images (${range.originalImagePayloadBytes} payload bytes)`,
+  ].join("\n");
+}
+
+function formatRangeFull(range: DraftRange, outputLimit: number, atomsByRef?: ReadonlyMap<string, Atom>): string {
+  const prefix = [
+    `${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${truncateMiddle(range.topic, BRIEF_LANDMARK_LIMIT)}` : ""} [${range.summary.trim() ? "summarized" : "pending summary"}]`,
+    `from: ${truncateMiddle(rangeEndpoint(range, "start", atomsByRef), 700)}`,
+    `to: ${truncateMiddle(rangeEndpoint(range, "end", atomsByRef), 700)}`,
+    "summary: ",
+    `metrics: ${range.originalContentChars} → ${range.replacementContentChars} content chars · ${range.originalImageCount} images (${range.originalImagePayloadBytes} payload bytes)`,
+  ];
+  const fixedLength = prefix.join("\n").length;
+  const summaryBudget = Math.max(1, outputLimit - fixedLength);
+  const summary = range.summary.trim()
+    ? range.summary.length <= summaryBudget ? range.summary : truncateMiddle(range.summary, summaryBudget)
+    : "<pending>";
+  prefix[3] = `summary: ${summary}`;
+  return prefix.join("\n");
+}
+
+function rangeEndpoint(range: DraftRange, side: "start" | "end", atomsByRef?: ReadonlyMap<string, Atom>): string {
+  const ref = side === "start" ? range.startRef : range.endRef;
+  const stored = side === "start" ? range.startPreview : range.endPreview;
+  return atomsByRef?.get(ref)?.fullText || stored || ref;
 }

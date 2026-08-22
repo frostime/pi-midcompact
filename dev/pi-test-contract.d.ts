@@ -1,6 +1,7 @@
 declare module "@earendil-works/pi-ai" {
   export const Type: {
     Object(value: unknown): unknown;
+    Array(value: unknown): unknown;
     Union(value: unknown[]): unknown;
     Literal(value: string): unknown;
     Optional(value: unknown): unknown;

@@ -18,18 +18,25 @@ async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } =
   const added = await tool.execute("tc-add", {
     action: "plan", op: "add", start: "a0001", end: "a0002",
   }, null, null, toolCtx);
-  assert.match(added.content[0].text, /d1:/);
+  assert.match(added.content[0].text, /added d1/);
   assert.match(added.content[0].text, /pending summary/);
+  assert.doesNotMatch(added.content[0].text, /Context awareness/);
 
   // Agent fills the summary via update.
   const updated = await tool.execute("tc-update", {
     action: "plan", op: "update", draft_id: "d1", summary: "Phase one summarized.",
   }, null, null, toolCtx);
+  assert.match(updated.content[0].text, /updated d1/);
   assert.match(updated.content[0].text, /summarized/);
-  // Agent-facing plan output echoes no summary text and no projected token claim.
-  assert.doesNotMatch(updated.content[0].text, /Phase one summarized\./);
+  assert.match(updated.content[0].text, /summary: Phase one summarized\./);
+  assert.doesNotMatch(updated.content[0].text, /Context awareness/);
   assert.doesNotMatch(updated.content[0].text, /projected if committed now/);
   assert.match(updated.content[0].text, /content chars/);
+
+  // Explicit show owns full awareness and the complete current range list.
+  const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
+  assert.match(shown.content[0].text, /Context awareness/);
+  assert.match(shown.content[0].text, /summary: Phase one summarized\./);
   assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);
   return tool;
 }
@@ -111,4 +118,55 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   assert.equal(latestStateEntry.data.blocks.length, 2);
   assert.equal(latestStateEntry.data.blocks[0].id, "c0001");
   assert.equal(latestStateEntry.data.blocks[1].id, "c0002");
+});
+
+test("locate bounds ambiguous searches and full detail requires a direct ref", async () => {
+  const entries = Array.from({ length: 5 }, (_, index) => ({
+    type: "message",
+    id: `e${index + 1}`,
+    parentId: index === 0 ? null : `e${index}`,
+    message: user(`repeated landmark ${index}`, index + 1),
+  }));
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+  const tool = pi.tools.get("midcompact");
+
+  const inspected = await tool.execute("tc-spans", {
+    action: "inspect",
+    spans: [{ start: "a0001", end: "a0003" }, { start: "a0002", end: "a0005" }],
+  }, null, null, toolCtx);
+  assert.match(inspected.content[0].text, /Candidate span inspection: 2 requested/);
+  assert.match(inspected.content[0].text, /% of anchor factual content/);
+
+  const matches = await tool.execute("tc-locate", { action: "locate", pattern: "repeated landmark", limit: 20 }, null, null, toolCtx);
+  assert.match(matches.content[0].text, /Showing 3 of 5 matches/);
+  const fullSearch = await tool.execute("tc-locate-full", { action: "locate", pattern: "repeated", detail: "full" }, null, null, toolCtx);
+  assert.match(fullSearch.content[0].text, /Error: locate detail=full requires one direct atom ref/);
+  const mixed = await tool.execute("tc-locate-mixed", { action: "locate", ref: "a0001", pattern: "repeated" }, null, null, toolCtx);
+  assert.match(mixed.content[0].text, /Error: locate accepts either one direct ref or search filters/);
+});
+
+test("plan mutations return only the changed range or removed id", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("range one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: user("range two", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact").handler("start", commandCtx);
+  const tool = pi.tools.get("midcompact");
+  await tool.execute("tc-add-1", { action: "plan", op: "add", start: "a0001", end: "a0001", summary: "one" }, null, null, toolCtx);
+  await tool.execute("tc-add-2", { action: "plan", op: "add", start: "a0002", end: "a0002", summary: "two" }, null, null, toolCtx);
+
+  const updated = await tool.execute("tc-update", { action: "plan", op: "update", draft_id: "d1", summary: "one updated" }, null, null, toolCtx);
+  assert.match(updated.content[0].text, /updated d1/);
+  assert.match(updated.content[0].text, /summary: one updated/);
+  assert.doesNotMatch(updated.content[0].text, /d2:/);
+  assert.doesNotMatch(updated.content[0].text, /Context awareness/);
+
+  const removed = await tool.execute("tc-remove", { action: "plan", op: "remove", draft_id: "d1" }, null, null, toolCtx);
+  assert.match(removed.content[0].text, /removed d1 · 1 range/);
+  assert.doesNotMatch(removed.content[0].text, /d2:/);
+  assert.doesNotMatch(removed.content[0].text, /Context awareness/);
 });

@@ -8,10 +8,10 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
-import { buildAtoms, formatLocatedAtom, isProtectedAtom, locateAtoms } from "./atoms.js";
-import { buildInventory, formatInventory } from "./inventory.js";
+import { buildAtoms, formatLocatedAtom, isProtectedAtom, locateAtomMatches } from "./atoms.js";
+import { buildInventory, formatInventory, formatSpanInspection } from "./inventory.js";
 import { messageText } from "./messages.js";
-import { addDraftRange, emptyDraft, formatDraft, removeDraftRange, replaceDraftRanges, updateDraftRange } from "./plan.js";
+import { addDraftRange, emptyDraft, formatDraft, formatPlanMutation, removeDraftRange, replaceDraftRanges, updateDraftRange } from "./plan.js";
 import { expandSelection } from "./selection.js";
 import { projectMessages } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
@@ -72,9 +72,10 @@ const Params = Type.Object({
   draft_id: Type.Optional(Type.String()),
   topic: Type.Optional(Type.String()),
   summary: Type.Optional(Type.String()),
-  // inspect pagination
+  // inspect inventory pagination or explicit candidate-span measurement
   page_size: Type.Optional(Type.Number()),
   cursor: Type.Optional(Type.String()),
+  spans: Type.Optional(Type.Array(Type.Object({ start: Type.String(), end: Type.String() }))),
 });
 
 type ParamsType = Static<typeof Params>;
@@ -133,7 +134,7 @@ export default function (pi: ExtensionAPI) {
         content: [
           "An active midcompact transaction exists with a persisted DraftPlan.",
           `Draft revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
-          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(action=\"plan\", op=\"show\") before any other midcompact action. Treat the existing plan as the initial proposal and continue from it.",
+          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(action=\"plan\", op=\"show\") before any other midcompact action. Treat the existing plan as the current shared draft. Infer from the user's request whether to preserve, refine, or extend it; ask only if materially ambiguous.",
         ].join("\n"),
         display: false,
       },
@@ -539,10 +540,18 @@ export default function (pi: ExtensionAPI) {
         if (params.action === "inspect") return toolResult(handleInspect(params, snapshot.atoms, currentTx));
         if (params.action === "locate") return toolResult(handleLocate(params, snapshot.atoms));
         if (params.action === "plan") {
-          draft = handlePlan(params, draft!, snapshot.atoms);
+          const result = handlePlan(params, draft!, snapshot.atoms);
+          if (result.op === "show") {
+            return toolResult(formatDraft(draft!, draftTelemetry(transaction, draft), {
+              detail: params.detail,
+              draftId: params.draft_id,
+              atoms: snapshot.atoms,
+            }));
+          }
+          draft = result.draft;
           pi.appendEntry(DRAFT_ENTRY, draft);
           updateStatus(ctx, transaction, draft, planningLock.owner);
-          return toolResult(formatDraft(draft, draftTelemetry(transaction, draft)));
+          return toolResult(formatPlanMutation(draft, result.op, result.changedId, snapshot.atoms));
         }
         return toolResult("Unknown action.");
       } catch (error) {
@@ -552,6 +561,12 @@ export default function (pi: ExtensionAPI) {
   });
 
   function handleInspect(params: ParamsType, atoms: Atom[], tx: TransactionState): string {
+    if (params.spans) {
+      if (params.page_size !== undefined || params.cursor !== undefined) {
+        throw new Error("inspect spans cannot be combined with inventory pagination.");
+      }
+      return formatSpanInspection(atoms, params.spans);
+    }
     const page = buildInventory(atoms, { pageSize: params.page_size, cursor: params.cursor }, { transaction: tx });
     return formatInventory(page);
   }
@@ -593,7 +608,14 @@ export default function (pi: ExtensionAPI) {
 // ---- Pure handlers ----
 
 function handleLocate(params: ParamsType, atoms: Atom[]): string {
-  const matches = locateAtoms(atoms, {
+  const hasFilter = Boolean(params.pattern || params.tool_name || (params.source && params.source !== "any"));
+  if (params.ref && hasFilter) {
+    throw new Error("locate accepts either one direct ref or search filters, not both.");
+  }
+  if (params.detail === "full" && !params.ref) {
+    throw new Error("locate detail=full requires one direct atom ref.");
+  }
+  const result = locateAtomMatches(atoms, {
     ref: params.ref,
     pattern: params.pattern,
     source: params.source,
@@ -602,24 +624,42 @@ function handleLocate(params: ParamsType, atoms: Atom[]): string {
     limit: params.limit,
     detail: params.detail,
   });
-  if (!matches.length) return "No matching atoms in the frozen anchor snapshot.";
-  return matches.map((atom) => formatLocatedAtom(atom, params.detail ?? "brief")).join("\n\n---\n\n");
+  if (!result.atoms.length) return "No matching atoms in the frozen anchor snapshot.";
+  const rendered = result.atoms
+    .map((atom) => formatLocatedAtom(atom, params.detail ?? "brief", params.pattern))
+    .join("\n\n---\n\n");
+  if (result.totalMatches <= result.atoms.length) return rendered;
+  return [
+    `Showing ${result.atoms.length} of ${result.totalMatches} matches (${params.direction ?? "oldest"} first). Refine pattern or add source, tool_name, or direction.`,
+    rendered,
+  ].join("\n\n");
 }
 
-function handlePlan(params: ParamsType, current: DraftPlan, atoms: Atom[]): DraftPlan {
+type PlanHandleResult =
+  | { op: "show"; draft: DraftPlan }
+  | { op: "add" | "update" | "remove"; draft: DraftPlan; changedId: string };
+
+function handlePlan(params: ParamsType, current: DraftPlan, atoms: Atom[]): PlanHandleResult {
   const op = params.op ?? "show";
-  if (op === "show") return current;
+  if (op === "show") return { op, draft: current };
   if (op === "remove") {
     if (!params.draft_id) throw new Error("plan remove requires draft_id.");
-    return removeDraftRange(current, params.draft_id);
+    return { op, draft: removeDraftRange(current, params.draft_id), changedId: params.draft_id };
   }
   if (op === "update") {
     if (!params.draft_id) throw new Error("plan update requires draft_id.");
     if (params.summary === undefined && params.topic === undefined) throw new Error("plan update requires summary or topic.");
-    return updateDraftRange(current, params.draft_id, { summary: params.summary, topic: params.topic });
+    return {
+      op,
+      draft: updateDraftRange(current, params.draft_id, { summary: params.summary, topic: params.topic }),
+      changedId: params.draft_id,
+    };
   }
   if (!params.start || !params.end) throw new Error("plan add requires start and end.");
-  return addDraftRange(current, atoms, { start: params.start, end: params.end, summary: params.summary, topic: params.topic });
+  const next = addDraftRange(current, atoms, { start: params.start, end: params.end, summary: params.summary, topic: params.topic });
+  const previousIds = new Set(current.ranges.map((range) => range.id));
+  const changedId = next.ranges.find((range) => !previousIds.has(range.id))!.id;
+  return { op, draft: next, changedId };
 }
 
 function validateDraftForCommit(draft: DraftPlan, atoms: Atom[]): void {

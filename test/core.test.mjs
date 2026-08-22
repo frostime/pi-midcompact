@@ -14,13 +14,22 @@ const reviewMod = await import(new URL("review-ui.js", ROOT));
 const reviewWebMod = await import(new URL("review-webui.js", ROOT));
 const planningLockMod = await import(new URL("planning-lock.js", ROOT));
 
-const { buildAtoms, locateAtoms } = atomsMod;
-const { addDraftRange, addPendingRanges, emptyDraft, isReviewReady, replaceDraftRanges } = planMod;
+const { buildAtoms, locateAtoms, locateAtomMatches, formatLocatedAtom, MAX_LOCATE_MATCHES } = atomsMod;
+const { addDraftRange, addPendingRanges, emptyDraft, formatDraft, isReviewReady, replaceDraftRanges } = planMod;
 const { projectMessages } = projectionMod;
 const { restoreCompressionState, STATE_ENTRY, coerceDraftRange, defaultStartMode } = stateMod;
 const { draftTelemetry } = telemetryMod;
 const { measureMessage, measureContentParts, codePointCount, readImageDimensions, aggregateMetrics } = contentMetricsMod;
-const { buildInventory, formatInventory, encodeCursor, decodeCursor, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = inventoryMod;
+const {
+  buildInventory,
+  formatInventory,
+  formatSpanInspection,
+  encodeCursor,
+  decodeCursor,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  SPAN_INSPECTION_OUTPUT_LIMIT,
+} = inventoryMod;
 const { expandSelection, SelectionError } = selectionMod;
 const { buildReviewText } = reviewMod;
 const { serializeReviewState, showReviewWebUi } = reviewWebMod;
@@ -78,6 +87,23 @@ test("locator returns semantic matches without permanent message ids", () => {
   assert.equal(matches[0].ref, "a0002");
 });
 
+test("locator bounds ambiguous searches and renders useful landmarks", () => {
+  const messages = Array.from({ length: 5 }, (_, index) => assistant([
+    { type: "text", text: `start ${index} ${"x".repeat(800)} distinctive needle ${"y".repeat(800)} end ${index}` },
+  ], index + 1));
+  const atoms = buildAtoms(messages, messages.map((message, index) => entry(`e${index + 1}`, message)));
+  const located = locateAtomMatches(atoms, { pattern: "distinctive needle", limit: 20 });
+  assert.equal(located.atoms.length, MAX_LOCATE_MATCHES);
+  assert.equal(located.totalMatches, 5);
+
+  const searchPreview = formatLocatedAtom(located.atoms[0], "brief", "distinctive needle");
+  assert.match(searchPreview, /distinctive needle/);
+  const directPreview = formatLocatedAtom(located.atoms[0], "brief");
+  assert.match(directPreview, /start 0/);
+  assert.match(directPreview, /end 0/);
+  assert.match(directPreview, /chars omitted/);
+});
+
 test("draft range can compress multiple atoms and rejects overlap", () => {
   const messages = [user("one", 1), assistant([{ type: "text", text: "two" }], 2), user("three", 3)];
   const branch = messages.map((m, i) => entry(`e${i + 1}`, m));
@@ -86,6 +112,34 @@ test("draft range can compress multiple atoms and rejects overlap", () => {
   draft = addDraftRange(draft, atoms, { start: "a0001", end: "a0002", summary: "one-two" });
   assert.equal(draft.ranges.length, 1);
   assert.throws(() => addDraftRange(draft, atoms, { start: "a0002", end: "a0003", summary: "overlap" }), /overlaps/);
+});
+
+test("plan show exposes bounded landmarks and stored summaries", () => {
+  const messages = [user(`start ${"x".repeat(300)} user constraint`, 1), assistant([{ type: "text", text: `result ${"y".repeat(300)} final conclusion` }], 2)];
+  const atoms = buildAtoms(messages, messages.map((message, index) => entry(`e${index + 1}`, message)));
+  const longSummary = `summary start ${"z".repeat(50_000)} summary end`;
+  const draft = addDraftRange(emptyDraft("tx"), atoms, { start: "a0001", end: "a0002", summary: longSummary, topic: "phase" });
+
+  const brief = formatDraft(draft);
+  assert.match(brief, /from: User: start/);
+  assert.match(brief, /user constraint/);
+  assert.match(brief, /to: Assistant: result/);
+  assert.match(brief, /final conclusion/);
+  assert.match(brief, /summary: summary start/);
+  assert.match(brief, /summary end/);
+
+  const full = formatDraft(draft, undefined, { detail: "full", draftId: "d1" });
+  assert.ok(full.length <= 40_000);
+  assert.match(full, /chars omitted/);
+  assert.throws(() => formatDraft(draft, undefined, { detail: "full" }), /requires draft_id/);
+
+  const legacy = {
+    ...draft,
+    ranges: draft.ranges.map(range => ({ ...range, startPreview: "legacy prefix only", endPreview: "legacy prefix only" })),
+  };
+  const refreshed = formatDraft(legacy, undefined, { atoms });
+  assert.match(refreshed, /user constraint/);
+  assert.match(refreshed, /final conclusion/);
 });
 
 test("projection replaces only exact persisted message sequence", () => {
@@ -404,6 +458,8 @@ test("inventory groups by user message with a prefix group before the first user
   assert.doesNotMatch(text, /system intro/);
   assert.doesNotMatch(text, /iVBOR/);
   assert.match(text, /content chars/);
+  assert.match(text, /bounded user landmarks/);
+  assert.doesNotMatch(text, /no preview/);
 });
 
 test("inventory pagination defaults to 20 and caps at 50, cursor continues without gaps", () => {
@@ -425,6 +481,32 @@ test("inventory pagination defaults to 20 and caps at 50, cursor continues witho
   // Cursor over max page size is capped.
   const big = buildInventory(atoms, { pageSize: 999 }, ctx);
   assert.equal(big.pageSize, MAX_PAGE_SIZE);
+});
+
+test("inspect spans compares overlapping candidates within one output budget", () => {
+  const messages = [
+    user("begin implementation", 1),
+    assistant([
+      { type: "text", text: "checking" },
+      { type: "toolCall", id: "t1", name: "read", arguments: { path: "a" } },
+      { type: "toolCall", id: "t2", name: "bash", arguments: { command: "test" } },
+    ], 2),
+    result("t1", "read", "A", 3),
+    result("t2", "bash", "ok", 4),
+    assistant([{ type: "text", text: "implementation complete" }], 5),
+  ];
+  const atoms = buildAtoms(messages, messages.map((message, index) => entry(`e${index + 1}`, message)));
+  const spans = Array.from({ length: 100 }, () => ({ start: "a0001", end: "a0003" }));
+  const text = formatSpanInspection(atoms, spans);
+
+  assert.match(text, /100 requested/);
+  assert.match(text, /1 tool exchanges · 2 tool calls/);
+  assert.match(text, /user 1/);
+  assert.match(text, /% of anchor factual content/);
+  assert.match(text, /no per-span token estimate/);
+  assert.match(text, /Output budget reached/);
+  assert.ok((text.match(/a0001 → a0003/g) ?? []).length > 3, "span inspection must be budget-bound, not capped at three");
+  assert.ok(text.length <= SPAN_INSPECTION_OUTPUT_LIMIT);
 });
 
 test("inventory reports Pi usage provenance and unavailable when absent", () => {

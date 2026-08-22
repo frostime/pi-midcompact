@@ -1,11 +1,10 @@
-// Inventory aggregation over the frozen visible atom snapshot. Owns the
-// first-user-message prefix group, user-message grouping, global totals, and
-// bounded pagination with an opaque cursor. Inventory output is bounded and
-// never returns atom preview, summary text, tool body, or image base64.
+// Read-only inspection over the frozen visible atom snapshot. Owns the
+// user-led inventory and factual measurement of explicit candidate spans.
+// Output is bounded and never returns full message or tool bodies.
 
 import { isProtectedAtom } from "./atoms.js";
 import { aggregateMetrics } from "./content-metrics.js";
-import { truncate } from "./messages.js";
+import { toolCalls, truncateMiddle } from "./messages.js";
 import type {
   Atom,
   InventoryGroup,
@@ -18,8 +17,15 @@ import type {
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 50;
+export const SPAN_INSPECTION_OUTPUT_LIMIT = 12_000;
 
 const USER_GROUP_LABEL_LIMIT = 80;
+const SPAN_LANDMARK_LIMIT = 180;
+
+export interface InspectSpan {
+  start: string;
+  end: string;
+}
 
 /** Opaque cursor encoding the next group index to start from. */
 export function encodeCursor(nextGroupIndex: number): string {
@@ -121,7 +127,7 @@ function groupLabel(firstAtom: Atom, isPrefix: boolean): string {
   if (isPrefix) return "context before first user message";
   const userMessage = firstAtom.messages.find((ref) => ref.message.role === "user");
   if (!userMessage) return firstAtom.ref;
-  return truncate(renderUserLabel(userMessage.message), USER_GROUP_LABEL_LIMIT);
+  return truncateMiddle(renderUserLabel(userMessage.message), USER_GROUP_LABEL_LIMIT);
 }
 
 function renderUserLabel(message: import("./types.js").MessageLike): string {
@@ -183,7 +189,7 @@ function clampPageSize(requested: number | undefined): number {
   return Math.min(rounded, MAX_PAGE_SIZE);
 }
 
-/** Format an inventory page into a bounded, preview-free tool result string. */
+/** Format an inventory page with bounded user landmarks and no full bodies. */
 export function formatInventory(page: InventoryPage): string {
   const lines: string[] = [];
   const usage = page.piUsage;
@@ -205,8 +211,82 @@ export function formatInventory(page: InventoryPage): string {
     );
   }
   if (page.nextCursor) lines.push(`next cursor: ${page.nextCursor}`);
-  lines.push("Note: inventory shows facts only; no preview, summary, tool body, or image base64. Use locate for specific content.");
+  lines.push("Note: inventory shows factual structure and bounded user landmarks only; no full message body, assistant/tool preview, summary, or image base64. Use locate for specific content.");
   return lines.join("\n");
+}
+
+/** Measure explicit, possibly overlapping candidate spans without mutating the DraftPlan. */
+export function formatSpanInspection(atoms: readonly Atom[], spans: readonly InspectSpan[]): string {
+  if (spans.length === 0) throw new Error("inspect spans requires at least one start/end span.");
+  const byRef = new Map(atoms.map((atom) => [atom.ref, atom]));
+  const anchorChars = aggregateMetrics(atoms.map((atom) => atom.metrics)).contentChars;
+  const lines = [
+    `Candidate span inspection: ${spans.length} requested · factual content measurements only; no per-span token estimate.`,
+  ];
+  let shown = 0;
+
+  for (const span of spans) {
+    const start = byRef.get(span.start);
+    const end = byRef.get(span.end);
+    if (!start || !end) throw new Error(`Unknown span ref ${!start ? span.start : span.end}; re-run inspect against the current snapshot.`);
+    if (start.index > end.index) throw new Error(`Span ${span.start} → ${span.end} is reversed.`);
+
+    const selected = atoms.slice(start.index, end.index + 1);
+    const block = formatSpanBlock(selected, start, end, anchorChars);
+    const currentLength = lines.join("\n\n").length;
+    if (currentLength + 2 + block.length > SPAN_INSPECTION_OUTPUT_LIMIT) {
+      const notice = `Output budget reached: showed ${shown} of ${spans.length} requested spans. Inspect the remainder in another call.`;
+      if (currentLength + 2 + notice.length <= SPAN_INSPECTION_OUTPUT_LIMIT) lines.push(notice);
+      break;
+    }
+    lines.push(block);
+    shown += 1;
+  }
+  return lines.join("\n\n");
+}
+
+function formatSpanBlock(selected: readonly Atom[], start: Atom, end: Atom, anchorChars: number): string {
+  const metrics = aggregateMetrics(selected.map((atom) => atom.metrics));
+  const roleCounts = new Map<string, number>();
+  const toolCounts = new Map<string, number>();
+  let messageCount = 0;
+  let toolCallCount = 0;
+  let toolExchangeCount = 0;
+  let protectedCount = 0;
+
+  for (const atom of selected) {
+    if (atom.kind === "tool_exchange") toolExchangeCount += 1;
+    if (isProtectedAtom(atom)) protectedCount += 1;
+    for (const ref of atom.messages) {
+      messageCount += 1;
+      roleCounts.set(ref.message.role, (roleCounts.get(ref.message.role) ?? 0) + 1);
+      for (const call of toolCalls(ref.message)) {
+        toolCallCount += 1;
+        toolCounts.set(call.name, (toolCounts.get(call.name) ?? 0) + 1);
+      }
+    }
+  }
+
+  const roleSummary = [...roleCounts.entries()].map(([role, count]) => `${role} ${count}`).join(" · ") || "none";
+  const toolSummary = [...toolCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => `${name} ${count}`)
+    .join(" · ");
+  const imageMimes = [...new Set(metrics.images.map((image) => image.mimeType))].sort();
+  const imageBytes = metrics.images.reduce((sum, image) => sum + image.payloadBytes, 0);
+  const charShare = anchorChars > 0 ? round1((metrics.contentChars / anchorChars) * 100) : "0";
+  const protectedRefs = selected.filter(isProtectedAtom).map((atom) => atom.ref).join(", ");
+
+  return [
+    `${start.ref} → ${end.ref}`,
+    `from: ${truncateMiddle(start.fullText, SPAN_LANDMARK_LIMIT)}`,
+    `to: ${truncateMiddle(end.fullText, SPAN_LANDMARK_LIMIT)}`,
+    `scope: ${selected.length} atoms · ${messageCount} messages (${roleSummary})`,
+    `work: ${toolExchangeCount} tool exchanges · ${toolCallCount} tool calls${toolSummary ? ` (${truncateMiddle(toolSummary, SPAN_LANDMARK_LIMIT)})` : ""}`,
+    `content: ${metrics.contentChars} chars · ${charShare}% of anchor factual content`,
+    `images: ${metrics.imageCount}${imageMimes.length ? ` (${truncateMiddle(imageMimes.join("/"), SPAN_LANDMARK_LIMIT)}, ${imageBytes} payload bytes)` : ""}`,
+    `selection: ${selected.length - protectedCount} compressible · ${protectedCount} protected${protectedRefs ? ` (${truncateMiddle(protectedRefs, SPAN_LANDMARK_LIMIT)})` : ""}`,
+  ].join("\n");
 }
 
 function round1(value: number): string {
