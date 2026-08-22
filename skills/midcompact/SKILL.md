@@ -1,6 +1,6 @@
 ---
 name: midcompact
-description: Use when a midcompact runtime prompt starts or hands off a compression-planning transaction, or when current work needs details from an active committed midcompact block. Guides candidate discovery, inspect/locate/plan, replacement-summary writing, and recall.
+description: Use when a midcompact runtime prompt starts or hands off a compression-planning transaction, or when current work needs details from an active committed midcompact block. Guides user-aligned candidate discovery, effort-scaled inspect/locate/plan work, replacement-summary writing, and recall.
 ---
 
 # Midcompact
@@ -12,15 +12,17 @@ This skill handles two independent tasks: planning compression and recalling com
 | Signal | Immediate duty | First action |
 |--------|----------------|--------------|
 | Runtime prompt says `FINAL STATE: USER MANUAL` | Let the user create the initial DraftPlan | Reply exactly `OK`; call no midcompact tool |
-| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Plan from the new empty draft | `action="inspect"` |
-| A handoff reports a persisted DraftPlan and the user asks to continue | Refine the shared draft | `action="plan", op="show"` |
+| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Start from the new empty draft | `action="inspect"` |
+| A handoff reports a persisted DraftPlan and the user asks to continue | Read the shared selection and determine what help the user wants | `action="plan", op="show"` |
 | The user or a projected summary needs detail from a committed block | Retrieve that history only | Follow **Recall workflow** |
 
-The state-specific runtime prompt is authoritative. Recall does not enter planning or mutate the DraftPlan. During the User manual acknowledgement turn, the no-tool instruction overrides every other route.
+The state-specific runtime prompt is authoritative. Recall does not enter planning or mutate the DraftPlan. During the User-manual acknowledgement turn, the no-tool instruction overrides every other route.
 
 ## Plan compression
 
-Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one DraftPlan; only the user chooses the final depth and runs `/midcompact commit`.
+Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one DraftPlan; the user retains final control through review and `/midcompact commit`.
+
+The start mode controls how the first draft is created. It does not determine whether a user selection is final, how much initiative the Agent should take, or how deeply the history should be investigated.
 
 Apply one invariant:
 
@@ -28,41 +30,54 @@ Apply one invariant:
 
 ### Planning workflow
 
-#### 1. Inventory and segment
+#### 1. Read the entry state and user intent
 
-For a fresh Agent-direct transaction, call `action="inspect"`. It returns a bounded, body-free inventory of the frozen anchor, grouped by user message. Page only until the relevant region is covered.
+For a fresh Agent-direct transaction, begin with `action="inspect"`. For a handed-off DraftPlan, begin with `action="plan", op="show"`; inspect the anchor only if the requested work needs broader context.
 
-Segment by completed work phase, not message count:
+Establish the user's desired scope, fidelity, and planning effort from their words, current selection, `User focus: ...`, and surrounding interaction. Treat answers collected through question, questionnaire, or similar tools as user-originated input even when represented as tool results.
 
-| Usually compress | Keep verbatim or preserve in the summary |
-|------------------|------------------------------------------|
+A manual selection records what the user selected, not whether they mean "only this" or "help me refine it." Follow a clear intent directly. If different interpretations would materially change the work, ask briefly whether to limit work to the selection or inspect and suggest changes. Do not force clarification when the user has already expressed a preference or delegated the judgment.
+
+Match effort to the requested fidelity. A quick or approximate request calls for bounded planning; a precision-sensitive request may justify deeper work after alignment.
+
+#### 2. Form a bounded semantic view
+
+`inspect` returns a body-free inventory grouped by user message. Use it for structure and factual volume, not to invent semantic labels. Ground candidates in visible conversation or a few targeted `locate` calls, and stop paging after the potentially relevant region.
+
+Segment by completed work phase, not message count. User-originated input and concluding Agent responses are useful landmarks for intent and outcome, but are not automatically KEEP. Intermediate tool exchanges may also contain decisions or evidence absent from the final response.
+
+| Often able to yield to a summary | Often load-bearing |
+|-----------------------------------|--------------------|
 | Repetitive or superseded exploration | Current intent and active constraints |
 | Tool output absorbed into a conclusion | Exact errors, evidence, or wording whose form matters |
 | A completed subtask's intermediate process | Decisions and rationale still governing the work |
 | A rejected attempt's mechanics | Its still-relevant failure reason |
 
-Treat `User focus: ...` as scope or depth guidance. Ask only when a remaining choice would materially change what stays visible; otherwise proceed. Inventory counts inform the proposal but are not compression targets.
+Use little or no `locate` during this reconnaissance. If a phase cannot yet be described faithfully, omit it from the proposal or mark it as needing confirmation rather than exploring the anchor broadly.
 
-#### 2. Confirm content and boundaries
+#### 3. Present semantic options and align
 
-Use `action="locate"` for targeted content or boundary checks, not exploratory rereading. Search by a known atom `ref`, text `pattern`, `tool_name`, or source; request `detail="full"` only when needed.
+Before deep `locate` work or substantial DraftPlan mutation, establish the user's compression preference through explicit instruction, a reliable implication, or concise clarification.
 
-An atom is the smallest selectable unit. A tool call and its matching results form one indivisible `tool_exchange` atom. Keep source text outside a range when exact wording or provenance matters and a summary cannot preserve it equivalently. If you cannot state confidently what a phase established, do not compress it.
+Describe each proposal in recognizable conversation terms:
 
-#### 3. Build or refine the DraftPlan
+> From `<semantic start>` to `<semantic end>`, `<replace the whole phase / keep the endpoints and compress the work between>`; preserve `<load-bearing information>` in the summary.
 
-A handed-off DraftPlan is the initial proposal. Show it first, preserve valid existing ranges, then refine it as needed.
+Use short recognizable excerpts when available and clear paraphrases otherwise. State whether the endpoint messages remain verbatim, what intermediate work disappears, and what the summary carries. Do not identify a user-facing range primarily by atom refs, DraftPlan ids, or arbitrary item numbers.
 
-| Operation | Purpose |
-|-----------|---------|
-| `plan add` | Add `start`...`end`, preferably with its `summary` and optional `topic` |
-| `plan update` | Fill or revise a range's `summary` or `topic` by `draft_id` |
-| `plan remove` | Remove a range before replacing its boundaries |
-| `plan show` | Inspect the shared draft, pending state, and telemetry |
+When treatments involve a meaningful tradeoff, present concise alternatives and recommend one. A clear quick request may need only one proportionate proposal. Add factual content or image measurements only when they help the choice, and do not convert them into unsupported token-savings claims.
 
-Use separate ranges for non-contiguous phases. Anything outside a range is KEEP; split around an important atom to leave a KEEP hole. User-created ranges may have pending empty summaries, which require `plan update`. If an operation is rejected or exact parameter behavior matters, read `references/tool-interface.md` before retrying.
+#### 4. Resolve boundaries and build the DraftPlan
 
-#### 4. Write replacement summaries
+After the intended treatment is clear, use `action="locate"` for targeted content and boundary checks. An atom is the smallest selectable unit; a tool call and its matching results form one indivisible `tool_exchange` atom. Keep source text outside a range when exact wording or provenance matters and a summary cannot preserve it equivalently.
+
+Choose boundaries from the information that must survive, not from a fixed category. A range may replace a whole semantic phase, including its initiating and concluding messages. It may instead retain a load-bearing user instruction and concluding Agent response while replacing only the execution between them. It may split around important material to leave KEEP holes. These are reasoning patterns, not rules tied to start mode, message age, or one prescribed kind of work.
+
+Build or refine the shared DraftPlan with `plan add`, `update`, `remove`, and `show`. A handed-off selection may be preserved or revised as the user's intent permits. Use separate ranges for non-contiguous phases; fill pending summaries before commit. If deeper inspection would materially change the agreed treatment, surface the change instead of silently applying it.
+
+Read `references/tool-interface.md` before retrying a rejected operation or when exact parameters, protected-atom causes, or measurements matter.
+
+#### 5. Write replacement summaries
 
 A replacement summary is successor context for a future Agent, not a transcript or a prompt to perform compression. State the resulting knowledge and working state directly.
 
@@ -75,7 +90,7 @@ Preserve, when applicable:
 - rejected approaches only when their failure reason still matters;
 - unresolved issues and any established next step or continuation state.
 
-Remove repetitive exploration, superseded hypotheses, raw output captured by a conclusion, and chronology with no remaining consequence. Do not turn uncertainty into fact, invent a next action, or use references that only make sense inside the removed text. Keep literal source text outside the range when its wording, structure, or provenance is load-bearing.
+Remove repetitive exploration, superseded hypotheses, raw output captured by a conclusion, and chronology with no remaining consequence. Do not turn uncertainty into fact, invent a next action, or use references that only make sense inside the removed text. If retained endpoint messages already carry part of the intended context, do not duplicate them mechanically; use the summary to preserve what would otherwise be lost.
 
 Organize by future utility rather than original chronology. When useful, use this compact frame without forcing empty fields:
 
@@ -88,11 +103,11 @@ Open issues and established next state:
 
 Length follows the information that must survive, not a target ratio. Final test: could a fresh Agent continue correctly from this summary plus retained context, without repeating work or violating a prior decision?
 
-#### 5. Verify and hand off
+#### 6. Verify and hand off
 
-Call `action="plan", op="show"`. Check that the intended phases are covered, KEEP holes remain outside ranges, every range has a summary, and the summaries conserve the future working state. Treat factual content/image measurements and Pi-provided usage as awareness, not unsupported token-savings claims.
+Call `action="plan", op="show"`. Check that the intended semantic phases are covered, KEEP holes remain outside ranges, every range has a summary, and the summaries conserve the future working state.
 
-Describe the proposal by content and consequence, not only atom IDs. Direct the user to `/midcompact select` or `/midcompact select-webui` for boundaries and KEEP holes, and to `/midcompact review` or `/midcompact review-webui` for summary inspection or rejection. Use the browser variants when the TUI is unavailable or the user prefers them. Ask the user to run `/midcompact commit` when ready; never commit for them.
+Describe the completed proposal with the same recognizable landmarks used during alignment. Direct the user to `/midcompact select` or `/midcompact select-webui` for boundaries and KEEP holes, and to `/midcompact review` or `/midcompact review-webui` for summary inspection or rejection. Use browser variants when the TUI is unavailable or preferred. Ask the user to run `/midcompact commit` when ready; never commit for them.
 
 ## Recall compressed content
 
@@ -110,9 +125,8 @@ Call `action="recall", ref="c0001"`. If the readable, structure-flattened result
 
 ## Tool conventions
 
-- `g0001` labels an inventory group; use its `a...` span as landmarks.
-- `a0001` is an atom ref local to the current transaction; never reuse it after commit.
-- `d1` is a DraftPlan range id for update/remove; `c0001` is an active committed-block id for recall.
+- `g0001` labels an inventory group; use its `a...` span as internal landmarks.
+- `a0001` is a transaction-local atom ref; `d1` is a DraftPlan range id; `c0001` is an active committed-block id.
 - Protected atoms cannot enter a range. Split around them.
 
-Read `references/tool-interface.md` for exact defaults and limits, rejected operations, protected-atom causes, telemetry, repeated compression, or recall truncation.
+These refs are planning handles, not the primary way to explain compression to the user. Read `references/tool-interface.md` for exact defaults and limits, rejected operations, protected-atom causes, measurements, repeated compression, or recall truncation.
