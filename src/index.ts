@@ -53,7 +53,7 @@ import {
 
 const TOOL_NAME = "midcompact";
 const TOOL_DESCRIPTION =
-  "Inventory, locate, draft, or recall mid-context compression. Agent and user share one DraftPlan. If a transaction already has a DraftPlan, call action=\"plan\", op=\"show\" first to discover it. Use the `midcompact` skill for workflow guidance.";
+  "Inventory, locate, draft, or recall mid-context compression. Use the `midcompact` skill to route planning versus recall; during an active transaction, follow the runtime prompt for the state-specific first action.";
 const STATUS_KEY = "midcompact";
 const START_PROMPT_PREFIX = "A mid-compaction transaction is active on a frozen anchor snapshot.";
 
@@ -329,7 +329,7 @@ export default function (pi: ExtensionAPI) {
     if (customInstructions) promptLines.push(`User focus: ${customInstructions}`);
     if (mode === "agent") {
       promptLines.push(
-        "FINAL STATE: AGENT DIRECT. Read the `midcompact` skill before doing any planning work. Then begin: call inspect first; if a DraftPlan already exists, call plan show first; then use locate and plan to create or refine ranges and summaries. Stop before commit.",
+        "FINAL STATE: AGENT DIRECT. The new DraftPlan is empty. Read the `midcompact` skill before doing any planning work, then call inspect first and use locate and plan to create ranges and summaries. Stop before commit.",
       );
     } else {
       promptLines.push(
