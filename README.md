@@ -127,7 +127,7 @@ Run:
 /midcompact start
 ```
 
-Pi opens a three-way chooser before creating transaction state: **Drop**, **Agent direct**, or **User manual**. It is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
+Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
 
 ```text
 /midcompact start Compress the early repository exploration, but keep user requirements verbatim.
@@ -211,7 +211,7 @@ Enter/Esc/q        close
 
 | Command | Result |
 | --- | --- |
-| `/midcompact start [instructions]` | Opens Drop / Agent direct / User manual, then starts a transaction at the current session-tree leaf. |
+| `/midcompact start [instructions]` | Opens Agent direct / User manual / Drop, then starts a transaction at the current session-tree leaf. |
 | `/midcompact select` | Opens the native TUI Selection workbench for range and KEEP editing. |
 | `/midcompact select-webui` | Opens the local browser Selection workbench. |
 | `/midcompact review` | Opens summary/topic review in the native TUI. |

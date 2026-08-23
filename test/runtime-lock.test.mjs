@@ -4,7 +4,7 @@ import { makeBaseCtx, setupRuntime, user, assistant } from "./runtime-helpers.mj
 
 async function startAgentFirst(pi, toolCtx, commandCtx) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // Agent direct
+  toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact").handler("start", commandCtx);
   return pi.tools.get("midcompact");
 }

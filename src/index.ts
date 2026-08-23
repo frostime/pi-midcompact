@@ -238,6 +238,10 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Midcompact start cancelled.", "info");
       return;
     }
+    if (modeChoice === "unrecognized") {
+      ctx.ui.notify("Midcompact start cancelled: the dialog returned an unrecognized choice.", "warning");
+      return;
+    }
     const startMode: StartMode = modeChoice;
     transaction = {
       version: 1,
@@ -264,7 +268,7 @@ export default function (pi: ExtensionAPI) {
     await openSelectionUi(ctx);
   }
 
-  async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled"> {
+  async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled" | "unrecognized"> {
     // The standard `select` dialog works identically in TUI and RPC; modes
     // without any UI (json/print) cannot prompt and default to Agent-first.
     if (!ctx.hasUI) return "agent";
