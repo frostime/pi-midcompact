@@ -5,7 +5,7 @@ import { setupRuntime, user, assistant } from "./runtime-helpers.mjs";
 /** Drive the Agent-first workflow end-to-end via the tool surface. */
 async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  // Start chooser defaults to Agent direct.
+  toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
   assert.match(pi.sentUserMessages.at(-1), /read the `midcompact` skill before doing any planning work/i);
   const tool = pi.tools.get("midcompact");
@@ -104,7 +104,7 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   sm.leafId = newAssistantId;
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.confirmSequence = [true, true];
+  toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact").handler("start", commandCtx);
   const inspect2 = await tool.execute("tc-inspect2", { action: "inspect" }, null, null, toolCtx);
   assert.match(inspect2.content[0].text, /compressed.*protected|protected/);
@@ -129,6 +129,7 @@ test("locate bounds ambiguous searches and full detail requires a direct ref", a
   }));
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact").handler("start", commandCtx);
   const tool = pi.tools.get("midcompact");
 
@@ -154,6 +155,7 @@ test("plan mutations return only the changed range or removed id", async () => {
   ];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact").handler("start", commandCtx);
   const tool = pi.tools.get("midcompact");
   await tool.execute("tc-add-1", { action: "plan", op: "add", start: "a0001", end: "a0001", summary: "one" }, null, null, toolCtx);

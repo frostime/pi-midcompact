@@ -10,7 +10,8 @@ test("User-first start sends a waiting prompt, then opens Selection without furt
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.customInputs = ["3", "s"];
+  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
   assert.equal(pi.sentUserMessages.length, 1, "User-first sends the shared setup prompt once");
@@ -33,7 +34,8 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   ];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.customInputs = ["3", [" ", "s"]];
+  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.customInputs = [[" ", "s"]];
 
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
@@ -57,7 +59,8 @@ test("User-first ESC closes without discarding the transaction, and select can r
   ];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.customInputs = ["3", "\x1b"];
+  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.customInputs = ["\x1b"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
   assert.equal(entries.some(entry => entry.customType === "midcompact-transaction"), true);
@@ -82,7 +85,8 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
 
   // User-first start.
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.customInputs = ["3", "s"];
+  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
 
   // Simulate the user having pre-selected a range (written into DraftPlan by the

@@ -72,6 +72,7 @@ declare module "@earendil-works/pi-coding-agent" {
     setStatus(key: string, text: string | undefined): void;
     editor(title: string, prefill?: string): Promise<string | undefined>;
     input(title: string, placeholder?: string): Promise<string | undefined>;
+    select(title: string, options: string[], opts?: { signal?: AbortSignal; timeout?: number }): Promise<string | undefined>;
     confirm(title: string, message: string): Promise<boolean>;
     custom<T>(factory: (tui: import("@earendil-works/pi-tui").TUI, theme: ThemeContract, keybindings: unknown, done: (result: T) => void) => import("@earendil-works/pi-tui").Component | Promise<import("@earendil-works/pi-tui").Component>, options?: { overlay?: boolean; overlayOptions?: Record<string, unknown>; onHandle?: (handle: unknown) => void }): Promise<T>;
     readonly theme: ThemeContract;

@@ -1,5 +1,8 @@
 import extensionFactory from "../.test-dist/src/index.js";
 
+/** Test seam: keep web workbench suites from spawning a system browser. */
+export { setOpenReviewWebBrowser } from "../.test-dist/src/index.js";
+
 class FakeSessionManager {
   constructor(entries, leafId) {
     this.entries = entries;
@@ -79,6 +82,10 @@ function makeBaseCtx(sm) {
       // Sequence of confirm results: first answer chooses Agent/User first, etc.
       confirmSequence: [],
       confirmResult: true,
+      // Message-dialog answers for select: a number selects options[n], a string
+      // is the raw answer, and an empty queue means the client never answers.
+      selectResults: [],
+      selectCalls: [],
       statuses: new Map(),
       theme: {
         fg(_color, text) { return text; },
@@ -89,6 +96,11 @@ function makeBaseCtx(sm) {
       setStatus(key, text) { if (text === undefined) this.statuses.delete(key); else this.statuses.set(key, text); },
       async editor(_title, prefill) { return prefill; },
       async input(_title, placeholder) { return placeholder; },
+      async select(title, options, opts) {
+        this.selectCalls.push({ title, options, opts });
+        const next = this.selectResults.length ? this.selectResults.shift() : undefined;
+        return typeof next === "number" ? options[next] : next;
+      },
       async confirm(title, message) {
         this.confirmations.push({ title, message });
         if (this.confirmSequence.length > 0) return this.confirmSequence.shift();
