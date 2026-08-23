@@ -17,8 +17,20 @@ import { projectMessages } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
 import { showSelectionUi } from "./selection-ui.js";
-import { showStartChoiceUi } from "./start-ui.js";
+import { showStartChoice } from "./start-ui.js";
 import { showReviewWebUi } from "./review-webui.js";
+
+/**
+ * Browser opener for the web workbenches. Tests override it to keep the suites
+ * from spawning a system browser; production leaves it undefined and opens the
+ * default browser.
+ */
+export let openReviewWebBrowser: ((url: string) => void) | undefined;
+
+/** Test seam setter; see `openReviewWebBrowser`. */
+export function setOpenReviewWebBrowser(opener?: (url: string) => void): void {
+  openReviewWebBrowser = opener;
+}
 import {
   DRAFT_ENTRY,
   STATE_ENTRY,
@@ -218,18 +230,9 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Cannot start midcompact without a session leaf.", "error");
       return;
     }
-    if (ctx.hasUI && ctx.mode !== "tui") {
-      const ok = await ctx.ui.confirm(
-        "Start midcompact transaction?",
-        "The current context snapshot will be frozen as an anchor. You will need to review and explicitly commit or abort later.",
-      );
-      if (!ok) {
-        ctx.ui.notify("Midcompact start cancelled.", "info");
-        return;
-      }
-    }
     // Mode choice: Agent-first or User-first. Both operate on the same DraftPlan;
-    // neither freezes boundaries. No mode flags on the command line.
+    // neither freezes boundaries. Drop maps to cancellation, so this one chooser
+    // replaces the separate confirmation. No mode flags on the command line.
     const modeChoice = await chooseStartMode(ctx);
     if (modeChoice === "cancelled") {
       ctx.ui.notify("Midcompact start cancelled.", "info");
@@ -262,8 +265,10 @@ export default function (pi: ExtensionAPI) {
   }
 
   async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled"> {
-    if (!ctx.hasUI || ctx.mode !== "tui") return "agent";
-    return showStartChoiceUi(ctx);
+    // The standard `select` dialog works identically in TUI and RPC; modes
+    // without any UI (json/print) cannot prompt and default to Agent-first.
+    if (!ctx.hasUI) return "agent";
+    return showStartChoice(ctx);
   }
 
   async function openSelectionUi(ctx: ExtensionCommandContext, mode: "auto" | "tui" | "web" = "auto"): Promise<void> {
@@ -312,7 +317,7 @@ export default function (pi: ExtensionAPI) {
           pi.appendEntry(DRAFT_ENTRY, draft);
           updateStatus(ctx, currentTx, draft, planningLock.owner);
         },
-      }, "selection");
+      }, "selection", { openBrowser: openReviewWebBrowser });
       ctx.ui.notify("Selection closed. The DraftPlan is saved; tell the Agent to continue when ready.", "info");
     } finally {
       releaseUi(planningLock);
@@ -457,7 +462,7 @@ export default function (pi: ExtensionAPI) {
         editSummary: (id, summary) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { summary })),
         editTopic: (id, topic) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { topic: topic || undefined })),
         remove: (id) => commitMutation(removeDraftRange(draft ?? emptyDraft(currentTx.id), id)),
-      });
+      }, undefined, { openBrowser: openReviewWebBrowser });
       ctx.ui.notify("Midcompact review-webui closed.", "info");
       return;
     }

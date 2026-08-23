@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `/midcompact start` now uses the standard `select` dialog for its three-way entry choice (Drop / Agent direct / User manual), identically in interactive and RPC mode. RPC carries it as an extension UI `select` message with a bounded timeout; print/JSON modes still default to Agent direct.
+
 ## [0.5.0] - 2026-08-22
 
 ### Added

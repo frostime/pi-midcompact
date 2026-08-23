@@ -10,7 +10,7 @@ test("commit rejects a pending (empty) summary", async () => {
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.confirmSequence = [true, true];
+  toolCtx.ui.selectResults = [1]; // Agent direct
   await pi.commands.get("midcompact").handler("start", commandCtx);
   // Add a range but leave its summary empty (pending).
   await tool.execute("tc-add", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
@@ -27,7 +27,8 @@ test("reload restores transaction startMode and draft", async () => {
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.customInputs = ["3", "s"];
+  toolCtx.ui.selectResults = [2]; // User manual
+  toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact").handler("start", commandCtx);
   await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
 
