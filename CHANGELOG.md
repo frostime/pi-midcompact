@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Grouped tool parameters by action as a discriminated union: `action` now selects the only parameter group that applies, so inspect/locate/plan/recall each expose just their own fields and cross-action parameters are rejected. The skill reference documents the per-action field lists. This is a breaking change to the model-facing tool contract.
+
 ## [0.5.1] - 2026-08-24
 
 ### Changed

@@ -69,8 +69,20 @@ const TOOL_DESCRIPTION =
 const STATUS_KEY = "midcompact";
 const START_PROMPT_PREFIX = "A mid-compaction transaction is active on a frozen anchor snapshot.";
 
-const Params = Type.Object({
-  action: StringEnum(["inspect", "locate", "plan", "recall"] as const),
+// The tool is a discriminated union: `action` selects the only parameter
+// group that applies. The schema exposes just that group's fields, so a call
+// cannot mix parameters from different actions, and cross-action misuse
+// becomes a compile-time error in the handler types rather than a runtime rule.
+const InspectParams = Type.Object({
+  action: Type.Literal("inspect"),
+  // inventory pagination or explicit candidate-span measurement
+  spans: Type.Optional(Type.Array(Type.Object({ start: Type.String(), end: Type.String() }))),
+  page_size: Type.Optional(Type.Number()),
+  cursor: Type.Optional(Type.String()),
+});
+
+const LocateParams = Type.Object({
+  action: Type.Literal("locate"),
   ref: Type.Optional(Type.String()),
   pattern: Type.Optional(Type.String()),
   source: Type.Optional(StringEnum(["any", "user", "assistant", "tool_call", "tool_result"] as const)),
@@ -78,19 +90,34 @@ const Params = Type.Object({
   direction: Type.Optional(StringEnum(["oldest", "newest"] as const)),
   limit: Type.Optional(Type.Number()),
   detail: Type.Optional(StringEnum(["brief", "full"] as const)),
+});
+
+const PlanParams = Type.Object({
+  action: Type.Literal("plan"),
   op: Type.Optional(StringEnum(["show", "add", "update", "remove"] as const)),
   start: Type.Optional(Type.String()),
   end: Type.Optional(Type.String()),
   draft_id: Type.Optional(Type.String()),
   topic: Type.Optional(Type.String()),
   summary: Type.Optional(Type.String()),
-  // inspect inventory pagination or explicit candidate-span measurement
-  page_size: Type.Optional(Type.Number()),
-  cursor: Type.Optional(Type.String()),
-  spans: Type.Optional(Type.Array(Type.Object({ start: Type.String(), end: Type.String() }))),
+  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
 });
 
+const RecallParams = Type.Object({
+  action: Type.Literal("recall"),
+  ref: Type.Optional(Type.String()),
+  pattern: Type.Optional(Type.String()),
+  limit: Type.Optional(Type.Number()),
+  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
+});
+
+const Params = Type.Union([InspectParams, LocateParams, PlanParams, RecallParams]);
+
 type ParamsType = Static<typeof Params>;
+type InspectParamsType = Static<typeof InspectParams>;
+type LocateParamsType = Static<typeof LocateParams>;
+type PlanParamsType = Static<typeof PlanParams>;
+type RecallParamsType = Static<typeof RecallParams>;
 
 type RuntimeSnapshot = { atoms: Atom[]; anchorState?: CompressionState };
 
@@ -569,7 +596,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  function handleInspect(params: ParamsType, atoms: Atom[], tx: TransactionState): string {
+  function handleInspect(params: InspectParamsType, atoms: Atom[], tx: TransactionState): string {
     if (params.spans) {
       if (params.page_size !== undefined || params.cursor !== undefined) {
         throw new Error("inspect spans cannot be combined with inventory pagination.");
@@ -580,7 +607,7 @@ export default function (pi: ExtensionAPI) {
     return formatInventory(page);
   }
 
-  function handleRecall(params: ParamsType, ctx: ExtensionContext): string {
+  function handleRecall(params: RecallParamsType, ctx: ExtensionContext): string {
     const sm = ctx.sessionManager;
     const branchState = restoreCompressionState(sm.getBranch() as SessionEntry[]) ?? activeState;
     if (!branchState?.blocks.length) return "No compressed blocks are active on this branch.";
@@ -616,7 +643,7 @@ export default function (pi: ExtensionAPI) {
 
 // ---- Pure handlers ----
 
-function handleLocate(params: ParamsType, atoms: Atom[]): string {
+function handleLocate(params: LocateParamsType, atoms: Atom[]): string {
   const hasFilter = Boolean(params.pattern || params.tool_name || (params.source && params.source !== "any"));
   if (params.ref && hasFilter) {
     throw new Error("locate accepts either one direct ref or search filters, not both.");
@@ -648,7 +675,7 @@ type PlanHandleResult =
   | { op: "show"; draft: DraftPlan }
   | { op: "add" | "update" | "remove"; draft: DraftPlan; changedId: string };
 
-function handlePlan(params: ParamsType, current: DraftPlan, atoms: Atom[]): PlanHandleResult {
+function handlePlan(params: PlanParamsType, current: DraftPlan, atoms: Atom[]): PlanHandleResult {
   const op = params.op ?? "show";
   if (op === "show") return { op, draft: current };
   if (op === "remove") {
