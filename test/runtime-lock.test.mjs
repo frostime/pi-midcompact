@@ -5,7 +5,7 @@ import { makeBaseCtx, setupRuntime, user, assistant } from "./runtime-helpers.mj
 async function startAgentFirst(pi, toolCtx, commandCtx) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
   return pi.tools.get("midcompact");
 }
 
@@ -19,13 +19,13 @@ test("planning lock: Agent turn blocks Selection until the turn settles", async 
   const frameCount = toolCtx.ui.reviewFrames.length;
 
   await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
-  await pi.commands.get("midcompact").handler("select", commandCtx);
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
   assert.equal(toolCtx.ui.reviewFrames.length, frameCount);
   assert.match(toolCtx.ui.messages.at(-1).text, /Agent is currently processing/i);
 
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   toolCtx.ui.customInputs = ["\x1b"];
-  await pi.commands.get("midcompact").handler("select", commandCtx);
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
   assert.equal(toolCtx.ui.reviewFrames.length, frameCount + 1);
   assert.match(toolCtx.ui.messages.at(-1).text, /Selection closed/i);
 });

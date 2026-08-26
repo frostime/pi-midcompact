@@ -178,7 +178,7 @@ export interface TransactionState {
   startedAt: string;
   /** Initial routing chosen at start: Agent-first prompt or User-first UI. */
   startMode?: StartMode;
-  /** Frozen awareness captured when /midcompact starts; informational, never a target. */
+  /** Frozen awareness captured when /midcompact:start runs; informational, never a target. */
   anchorUsage?: ContextUsageSnapshot;
 }
 

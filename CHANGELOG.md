@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-08-27
+
+### Changed
+
+- Grouped tool parameters by action as a discriminated union: `action` now selects the only parameter group that applies, so inspect/locate/plan/recall each expose just their own fields and cross-action parameters are rejected. The skill reference documents the per-action field lists. This is a breaking change to the model-facing tool contract.
+- Split the composite `/midcompact <subcommand>` command into standalone slash commands `/midcompact:start`, `/midcompact:abort`, `/midcompact:commit`, `/midcompact:review`, `/midcompact:review-webui`, `/midcompact:select`, `/midcompact:select-webui`, `/midcompact:status` (`name:sub` follows the same convention as Pi's own `skill:<name>` commands). Each command carries its own description; the hand-written subcommand parsing is gone.
+
 ## [0.5.1] - 2026-08-24
 
 ### Changed
@@ -32,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/frostime/pi-midcompact/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/frostime/pi-midcompact/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/frostime/pi-midcompact/compare/v0.4.0...v0.5.0

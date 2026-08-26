@@ -18,9 +18,11 @@ This skill handles two independent tasks: planning compression and recalling com
 
 The state-specific runtime prompt is authoritative. Recall does not enter planning or mutate the DraftPlan. During the User-manual acknowledgement turn, the no-tool instruction overrides every other route.
 
+The tool groups parameters by `action`: each action accepts only its own fields, and fields from other actions are rejected. Read `references/tool-interface.md` before adding workload-specific parameters, and treat the action-specific field lists there as exhaustive.
+
 ## Plan compression
 
-Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one DraftPlan; the user retains final control through review and `/midcompact commit`.
+Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one DraftPlan; the user retains final control through review and `/midcompact:commit`.
 
 The start mode controls how the first draft is created. It does not determine whether a user selection is final, how much initiative the Agent should take, or how deeply the history should be investigated.
 
@@ -107,7 +109,7 @@ Length follows the information that must survive, not a target ratio. Final test
 
 Call `action="plan", op="show"`. Check that the intended semantic phases are covered, KEEP holes remain outside ranges, every range has a summary, and the summaries conserve the future working state.
 
-Describe the completed proposal with the same recognizable landmarks used during alignment. Direct the user to `/midcompact select` or `/midcompact select-webui` for boundaries and KEEP holes, and to `/midcompact review` or `/midcompact review-webui` for summary inspection or rejection. Use browser variants when the TUI is unavailable or preferred. Ask the user to run `/midcompact commit` when ready; never commit for them.
+Describe the completed proposal with the same recognizable landmarks used during alignment. Direct the user to `/midcompact:select` or `/midcompact:select-webui` for boundaries and KEEP holes, and to `/midcompact:review` or `/midcompact:review-webui` for summary inspection or rejection. Use browser variants when the TUI is unavailable or preferred. Ask the user to run `/midcompact:commit` when ready; never commit for them.
 
 ## Recall compressed content
 

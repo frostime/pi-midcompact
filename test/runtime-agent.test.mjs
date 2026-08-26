@@ -6,7 +6,7 @@ import { setupRuntime, user, assistant } from "./runtime-helpers.mjs";
 async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } = {}) {
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler(`start ${instructions ?? ""}`.trim(), commandCtx);
+  await pi.commands.get("midcompact:start").handler((instructions ?? "").trim(), commandCtx);
   assert.match(pi.sentUserMessages.at(-1), /read the `midcompact` skill before doing any planning work/i);
   const tool = pi.tools.get("midcompact");
 
@@ -53,14 +53,14 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
 
   // Review UI still maps ranges and KEEP holes.
-  await pi.commands.get("midcompact").handler("review", commandCtx);
+  await pi.commands.get("midcompact:review").handler("", commandCtx);
   assert.ok(toolCtx.ui.reviewFrames.length > 0);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /Midcompact Review/);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /d1/);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /KEEP/);
 
   assert.equal("navigateTree" in toolCtx, false, "tool context must not expose command-only session navigation");
-  await pi.commands.get("midcompact").handler("commit", commandCtx);
+  await pi.commands.get("midcompact:commit").handler("", commandCtx);
 
   const committedLeaf = sm.leafId;
   const committedEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
@@ -105,13 +105,13 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
   const inspect2 = await tool.execute("tc-inspect2", { action: "inspect" }, null, null, toolCtx);
   assert.match(inspect2.content[0].text, /compressed.*protected|protected/);
   await tool.execute("tc-add2", { action: "plan", op: "add", start: "a0003", end: "a0004" }, null, null, toolCtx);
   await tool.execute("tc-update2", { action: "plan", op: "update", draft_id: "d1", summary: "New phase summarized." }, null, null, toolCtx);
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
-  await pi.commands.get("midcompact").handler("commit", commandCtx);
+  await pi.commands.get("midcompact:commit").handler("", commandCtx);
 
   const latestStateEntry = [...entries].reverse().find(e => e.customType === "midcompact-state");
   assert.ok(latestStateEntry);
@@ -130,7 +130,7 @@ test("locate bounds ambiguous searches and full detail requires a direct ref", a
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
   const tool = pi.tools.get("midcompact");
 
   const inspected = await tool.execute("tc-spans", {
@@ -156,7 +156,7 @@ test("plan mutations return only the changed range or removed id", async () => {
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
   const tool = pi.tools.get("midcompact");
   await tool.execute("tc-add-1", { action: "plan", op: "add", start: "a0001", end: "a0001", summary: "one" }, null, null, toolCtx);
   await tool.execute("tc-add-2", { action: "plan", op: "add", start: "a0002", end: "a0002", summary: "two" }, null, null, toolCtx);

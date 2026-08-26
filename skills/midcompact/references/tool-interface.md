@@ -2,6 +2,10 @@
 
 Read this reference when exact call requirements, limits, rejection behavior, repeated compression, or recall truncation matters. The main workflow remains in `../SKILL.md`.
 
+## Parameter grouping
+
+The tool schema is a discriminated union on `action`: selecting an action admits exactly the fields documented in that action's section, and no fields from other actions. A call that mixes actions (for example `locate` fields on `plan`) is invalid; do not repair it by dropping fields, re-issue the call with only the selected action's parameters. Shared field names (`ref`, `pattern`, `limit`, `detail`) are defined independently per action with the meaning documented in that section.
+
 ## Inspect
 
 Without `spans`, `action="inspect"` inventories the frozen anchor. It returns factual structure and bounded user landmarks, not full message bodies, assistant/tool previews, summaries, or image base64.
