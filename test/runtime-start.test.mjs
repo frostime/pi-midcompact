@@ -18,7 +18,7 @@ test("/midcompact start [instructions] no longer accepts --user/--agent flags", 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   // "--user" is treated as instructions text, not a mode flag.
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
-  await pi.commands.get("midcompact").handler("start --user", commandCtx);
+  await pi.commands.get("midcompact:start").handler("--user", commandCtx);
   assert.match(pi.sentUserMessages.at(-1), /User focus: --user/);
 });
 
@@ -28,7 +28,7 @@ test("/midcompact start chooser forwards an initial focus (Agent-first)", async 
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start Compress old exploration only", commandCtx);
+  await pi.commands.get("midcompact:start").handler("Compress old exploration only", commandCtx);
 
   assert.equal(toolCtx.ui.confirmations.length, 0);
   assert.equal(toolCtx.ui.reviewFrames.length, 0, "start uses the standard select dialog, not a custom component");
@@ -48,7 +48,7 @@ test("/midcompact start cancellation leaves the session at its anchor", async ()
   toolCtx.ui.selectResults = [2]; // Drop (third option)
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(sm.leafId, "e1");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), false);
@@ -63,7 +63,7 @@ test("/midcompact start in RPC mode asks via message dialog and starts Agent dir
   commandCtx.ui.selectResults = [0]; // Agent direct (first option)
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   // One message dialog carries the whole decision: no TUI custom component, no separate confirm.
   assert.equal(toolCtx.ui.reviewFrames.length, 0);
@@ -84,7 +84,7 @@ test("/midcompact start in RPC mode cancels when the client never answers", asyn
   commandCtx.ui.selectResults = []; // no response (timeout / no dialog support)
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(sm.leafId, "e1");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), false);
@@ -99,7 +99,7 @@ test("/midcompact start in RPC mode flags an unrecognized dialog answer instead 
   commandCtx.ui.selectResults = ["not-an-offered-option"]; // protocol mismatch
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(sm.leafId, "e1");
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), false);
@@ -117,7 +117,7 @@ test("/midcompact start in RPC mode can pick User manual and opens the browser w
   setOpenReviewWebBrowser(() => {}); // keep the test from spawning a system browser
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  const pending = pi.commands.get("midcompact").handler("start", commandCtx);
+  const pending = pi.commands.get("midcompact:start").handler("", commandCtx);
 
   // User manual hands over to the local Selection workbench; close it through its API.
   const ready = await waitFor(() => {
@@ -143,7 +143,7 @@ test("/midcompact start without UI (json/print) defaults to Agent direct and nev
   commandCtx.hasUI = false;
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(toolCtx.ui.reviewFrames.length, 0);
   assert.equal(toolCtx.ui.confirmations.length, 0);

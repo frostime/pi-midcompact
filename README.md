@@ -29,7 +29,7 @@ That is planning guidance, not an enforced token target: semantic importance win
 
 ### A selective projection, prepared on a temporary branch
 
-`/midcompact start` freezes the current session leaf as an **anchor**. Planning happens on a disposable child branch, so the discussion used to create and edit the draft never becomes part of the committed working context.
+`/midcompact:start` freezes the current session leaf as an **anchor**. Planning happens on a disposable child branch, so the discussion used to create and edit the draft never becomes part of the committed working context.
 
 ```text
 Frozen anchor: raw session history
@@ -42,7 +42,7 @@ Planning is isolated on a temporary branch:
   ... [latest work] ──┬── [transaction] ── [draft v1] ── [draft v2]  ◀ review / edit
                       │                    (abandoned at commit)
                       └── [midcompact-state]                         ◀ committed leaf
-                            (reviewed selection metadata, not a model message; written only by /midcompact commit)
+                            (reviewed selection metadata, not a model message; written only by /midcompact:commit)
 
 Later model requests see a selective projection:
 
@@ -91,10 +91,10 @@ pi-midcompact — mid-context compression, review, then human commit
 
 | | Pi `/compact` | `pi-midcompact` |
 | --- | --- | --- |
-| Starts | Automatically near the context limit, or with `/compact` | At an explicit natural checkpoint with `/midcompact start` |
+| Starts | Automatically near the context limit, or with `/compact` | At an explicit natural checkpoint with `/midcompact:start` |
 | Selects | One older contiguous prefix; keeps a recent token-budgeted tail | One or more reviewed ranges, including non-contiguous ranges and `KEEP` holes |
 | Planning | Optional one-shot instruction to focus the generated summary | User states scope and retention depth; the Agent discusses trade-offs and drafts selective ranges and summaries |
-| Decision gate | Generates a compaction checkpoint directly | Draft → TUI or browser review → explicit human `/midcompact commit` |
+| Decision gate | Generates a compaction checkpoint directly | Draft → TUI or browser review → explicit human `/midcompact:commit` |
 | Best fit | Automatic context maintenance and overflow recovery | Deliberate cleanup of completed phases while retaining specific decisions verbatim |
 
 `pi-midcompact` does not disable or replace Pi's automatic compaction; it gives you a separate, human-reviewed way to make selective reductions. See [Pi's compaction documentation](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/compaction.md) for the built-in mechanism.
@@ -124,13 +124,13 @@ Start a transaction at a natural breakpoint: the current work is complete enough
 Run:
 
 ```text
-/midcompact start
+/midcompact:start
 ```
 
 Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
 
 ```text
-/midcompact start Compress the early repository exploration, but keep user requirements verbatim.
+/midcompact:start Compress the early repository exploration, but keep user requirements verbatim.
 ```
 
 ### 2. Discuss what to compress with the Agent
@@ -150,7 +150,7 @@ The Agent locates relevant parts of the frozen conversation, proposes one or mor
 Run:
 
 ```text
-/midcompact review
+/midcompact:review
 ```
 
 In interactive mode, the native TUI displays the frozen conversation as a linear timeline. Each item is marked either `KEEP` or as belonging to a proposed range. Review the range boundaries and the summary that will replace each range.
@@ -158,14 +158,14 @@ In interactive mode, the native TUI displays the frozen conversation as a linear
 For RPC, print, or other no-TUI modes, use the editable local browser interface instead:
 
 ```text
-/midcompact review-webui
+/midcompact:review-webui
 ```
 
 Use Selection to create or change ranges and KEEP holes:
 
 ```text
-/midcompact select
-/midcompact select-webui
+/midcompact:select
+/midcompact:select-webui
 ```
 
 Use the TUI or local browser Review surface to edit summaries/topics and reject ranges. Review deliberately does not create or resize ranges; reopen Selection for boundary changes. To continue with Agent after a user-created plan, send a normal message asking it to continue the current midcompact draft; the Agent is prompted to read the existing plan first.
@@ -175,7 +175,7 @@ Use the TUI or local browser Review surface to edit summaries/topics and reject 
 When the plan is correct, run:
 
 ```text
-/midcompact commit
+/midcompact:commit
 ```
 
 This is deliberately a human command. The Agent cannot commit compression itself.
@@ -187,14 +187,14 @@ Pi returns to the anchor, discards the temporary planning branch, stores the rev
 Keep working normally after committing. If you decide not to compress, run:
 
 ```text
-/midcompact abort
+/midcompact:abort
 ```
 
 This returns to the anchor and discards the transaction without changing the active context.
 
 ## Native TUI Controls
 
-Inside `/midcompact review`:
+Inside `/midcompact:review`:
 
 ```text
 n/p or Left/Right  select a proposed range
@@ -211,14 +211,14 @@ Enter/Esc/q        close
 
 | Command | Result |
 | --- | --- |
-| `/midcompact start [instructions]` | Opens Agent direct / User manual / Drop, then starts a transaction at the current session-tree leaf. |
-| `/midcompact select` | Opens the native TUI Selection workbench for range and KEEP editing. |
-| `/midcompact select-webui` | Opens the local browser Selection workbench. |
-| `/midcompact review` | Opens summary/topic review in the native TUI. |
-| `/midcompact review-webui` | Opens summary/topic review in a local browser. |
-| `/midcompact commit` | Commits the reviewed draft. Human only. |
-| `/midcompact abort` | Abandons the transaction and returns to the anchor. |
-| `/midcompact status` | Displays the current draft, or the committed compression state on this branch. |
+| `/midcompact:start [instructions]` | Opens Agent direct / User manual / Drop, then starts a transaction at the current session-tree leaf. |
+| `/midcompact:select` | Opens the native TUI Selection workbench for range and KEEP editing. |
+| `/midcompact:select-webui` | Opens the local browser Selection workbench. |
+| `/midcompact:review` | Opens summary/topic review in the native TUI. |
+| `/midcompact:review-webui` | Opens summary/topic review in a local browser. |
+| `/midcompact:commit` | Commits the reviewed draft. Human only. |
+| `/midcompact:abort` | Abandons the transaction and returns to the anchor. |
+| `/midcompact:status` | Displays the current draft, or the committed compression state on this branch. |
 
 The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
 
@@ -227,7 +227,7 @@ The extension shows planning status in Pi's footer only while a transaction is a
 - **Original history is retained.** Compression changes what later model requests see, not the stored Pi messages.
 - **Fail-open projection.** If an exact reviewed sequence no longer resolves, the extension sends the raw history unchanged rather than removing uncertain content.
 - **State is branch-local.** Navigating with `/tree` to a point before a committed state restores raw history; returning to its descendant restores the projection.
-- **Human review is required.** The Agent can propose a plan but cannot execute `/midcompact commit`.
+- **Human review is required.** The Agent can propose a plan but cannot execute `/midcompact:commit`.
 - **Tool protocol is protected.** Unknown, incomplete, or orphaned tool exchanges are not compressible.
 - **Repeated transactions work.** Later transactions can compress newly accumulated raw context; existing summaries remain protected.
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.

@@ -12,7 +12,7 @@ test("User-first start sends a waiting prompt, then opens Selection without furt
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [1]; // User manual (second option)
   toolCtx.ui.customInputs = ["s"];
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(pi.sentUserMessages.length, 1, "User-first sends the shared setup prompt once");
   assert.match(pi.sentUserMessages[0], /FINAL STATE: USER MANUAL/);
@@ -37,7 +37,7 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   toolCtx.ui.selectResults = [1]; // User manual (second option)
   toolCtx.ui.customInputs = [[" ", "s"]];
 
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   const draftEntry = [...entries].reverse().find(entry => entry.customType === "midcompact-draft");
   assert.equal(draftEntry.data.ranges.length, 1);
@@ -47,7 +47,7 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   assert.equal(pi.sentUserMessages.length, 1);
 
   toolCtx.ui.customInputs = ["s"];
-  await pi.commands.get("midcompact").handler("select", commandCtx);
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
   const selectionFrame = toolCtx.ui.reviewFrames.at(-1).join("\n");
   assert.match(selectionFrame, /Selected 1\/2 atoms \| 9\/24 chars \(37\.5% of anchor\) \| up to 37\.5% fewer anchor chars/);
 });
@@ -61,13 +61,13 @@ test("User-first ESC closes without discarding the transaction, and select can r
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [1]; // User manual (second option)
   toolCtx.ui.customInputs = ["\x1b"];
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   assert.equal(entries.some(entry => entry.customType === "midcompact-transaction"), true);
   assert.equal([...entries].reverse().find(entry => entry.customType === "midcompact-draft").data.ranges.length, 0);
 
   toolCtx.ui.customInputs = [[" ", "s"]];
-  await pi.commands.get("midcompact").handler("select", commandCtx);
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
   const draftEntry = [...entries].reverse().find(entry => entry.customType === "midcompact-draft");
   assert.equal(draftEntry.data.ranges.length, 1);
   assert.equal(pi.sentUserMessages.length, 1);
@@ -87,7 +87,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [1]; // User manual (second option)
   toolCtx.ui.customInputs = ["s"];
-  await pi.commands.get("midcompact").handler("start", commandCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
 
   // Simulate the user having pre-selected a range (written into DraftPlan by the
   // future Selection UI). Here we drive it through the Agent tool as a stand-in,

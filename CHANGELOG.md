@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Grouped tool parameters by action as a discriminated union: `action` now selects the only parameter group that applies, so inspect/locate/plan/recall each expose just their own fields and cross-action parameters are rejected. The skill reference documents the per-action field lists. This is a breaking change to the model-facing tool contract.
+- Split the composite `/midcompact <subcommand>` command into standalone slash commands `/midcompact:start`, `/midcompact:abort`, `/midcompact:commit`, `/midcompact:review`, `/midcompact:review-webui`, `/midcompact:select`, `/midcompact:select-webui`, `/midcompact:status` (`name:sub` follows the same convention as Pi's own `skill:<name>` commands). Each command carries its own description; the hand-written subcommand parsing is gone.
 
 ## [0.5.1] - 2026-08-24
 
