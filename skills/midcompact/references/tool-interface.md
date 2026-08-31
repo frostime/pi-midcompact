@@ -4,11 +4,11 @@ Read this reference when exact call requirements, limits, rejection behavior, re
 
 ## Parameter grouping
 
-The tool schema is a discriminated union on `action`: selecting an action admits exactly the fields documented in that action's section, and no fields from other actions. A call that mixes actions (for example `locate` fields on `plan`) is invalid; do not repair it by dropping fields, re-issue the call with only the selected action's parameters. Shared field names (`ref`, `pattern`, `limit`, `detail`) are defined independently per action with the meaning documented in that section.
+The parameters are one object with a single `request` field; `request` is a discriminated union where each branch binds one `action` value to exactly that action's fields and is closed (`additionalProperties: false`). A call that mixes actions (for example `locate` fields on `plan`) is rejected by the schema itself; do not repair it by dropping fields, re-issue the call with only the selected action's parameters. Shared field names (`ref`, `pattern`, `limit`, `detail`) are defined independently per action with the meaning documented in that section.
 
 ## Inspect
 
-Without `spans`, `action="inspect"` inventories the frozen anchor. It returns factual structure and bounded user landmarks, not full message bodies, assistant/tool previews, summaries, or image base64.
+Without `spans`, `request.action="inspect"` inventories the frozen anchor. It returns factual structure and bounded user landmarks, not full message bodies, assistant/tool previews, summaries, or image base64.
 
 - `page_size`: default 20 groups, maximum 50.
 - `cursor`: opaque value returned by the previous page.
@@ -19,17 +19,17 @@ Stop paging after the candidate regions are covered.
 To compare explicit candidates without mutating the DraftPlan, pass one or more possibly overlapping spans:
 
 ```text
-midcompact(action="inspect", spans=[
+midcompact(request={action:"inspect", spans=[
   {"start":"a0006","end":"a0014"},
   {"start":"a0006","end":"a0020"}
-])
+]})
 ```
 
 Span inspection reports bounded endpoint landmarks, atom/message and role counts, tool exchanges and calls, factual content share, images, and protected/compressible counts. It has a 12,000-character total output budget and reports how many requested spans fit. It does not report per-span tokens: Pi supplies usage for the whole anchor, not token attribution by range. Do not combine `spans` with `page_size` or `cursor`.
 
 ## Locate
 
-`action="locate"` returns atoms from the frozen anchor. Supply either:
+`request.action="locate"` returns atoms from the frozen anchor. Supply either:
 
 - `ref`: one direct atom lookup; or
 - at least one real filter: `pattern`, `tool_name`, or `source` other than `any`.
@@ -42,7 +42,7 @@ A `g...` inventory ref is not a locate ref; use the group's `a...` start/end lan
 
 ## Plan
 
-`action="plan"` uses `op="show"` by default. Agent and user mutate the same DraftPlan.
+`request.action="plan"` uses `op="show"` by default. Agent and user mutate the same DraftPlan.
 
 | op | Required fields |
 |----|-----------------|
@@ -78,7 +78,7 @@ Committed blocks appear as protected atoms in later transaction snapshots and ca
 
 ## Recall
 
-`action="recall"` works independently of a planning transaction and reads committed blocks active on the current branch.
+`request.action="recall"` works independently of a planning transaction and reads committed blocks active on the current branch.
 
 - Without `ref`, `pattern` searches block topics and summaries; `limit` defaults to 8 and has a maximum of 20.
 - With `ref="c0001"`, the tool renders that block's stored messages.

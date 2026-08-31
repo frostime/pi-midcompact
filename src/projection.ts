@@ -17,7 +17,7 @@ export function summaryMessage(block: CompressionBlock, timestamp = Date.now()):
       block.summary,
       "",
       `Original block: ${block.id}`,
-      `Use midcompact(action=\"recall\", ref=\"${block.id}\") if exact details are needed.`,
+      `Use midcompact(request={action:\"recall\", ref:\"${block.id}\"}) if exact details are needed.`,
     ].join("\n"),
     display: true,
     details: {

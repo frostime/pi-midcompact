@@ -40,11 +40,11 @@ test("planning lock: UI holding the lock blocks Agent plan mutation and returns 
   // Simulate the user opening a UI first.
   assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), true);
   // Agent plan mutation is rejected.
-  const res = await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  const res = await tool.execute("tc1", { request: { action: "plan", op: "add", start: "a0001", end: "a0002" } }, null, null, toolCtx);
   assert.match(res.content[0].text, /blocked.*planning lock|UI.*editing/i);
   assert.match(toolCtx.ui.messages.at(-1).text, /UI is currently editing/i);
   // The DraftPlan is unchanged.
-  const show = await tool.execute("tc2", { action: "plan", op: "show" }, null, null, toolCtx);
+  const show = await tool.execute("tc2", { request: { action: "plan", op: "show" } }, null, null, toolCtx);
   assert.doesNotMatch(show.content[0].text, /d1:/);
 });
 
@@ -55,15 +55,15 @@ test("planning lock: reload does not restore the old lock but DraftPlan is resto
   ];
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = await startAgentFirst(pi, toolCtx, commandCtx);
-  await tool.execute("tc1", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
-  await tool.execute("tc2", { action: "plan", op: "update", draft_id: "d1", summary: "filled." }, null, null, toolCtx);
+  await tool.execute("tc1", { request: { action: "plan", op: "add", start: "a0001", end: "a0002" } }, null, null, toolCtx);
+  await tool.execute("tc2", { request: { action: "plan", op: "update", draft_id: "d1", summary: "filled." } }, null, null, toolCtx);
   // Simulate reload on a fresh context.
   const freshCtx = makeBaseCtx(sm);
   await pi.emit("session_start", { reason: "reload" }, freshCtx);
   // The old Agent lock is gone, so UI access is available; the DraftPlan remains.
   assert.equal(pi.midcompactPlanningLock.tryAcquireUi(), true);
   pi.midcompactPlanningLock.releaseUi();
-  const show = await tool.execute("tc3", { action: "plan", op: "show" }, null, null, freshCtx);
+  const show = await tool.execute("tc3", { request: { action: "plan", op: "show" } }, null, null, freshCtx);
   assert.match(show.content[0].text, /d1:/);
   assert.match(show.content[0].text, /summarized/);
 });

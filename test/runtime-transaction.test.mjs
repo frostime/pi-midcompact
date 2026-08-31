@@ -13,7 +13,7 @@ test("commit rejects a pending (empty) summary", async () => {
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact:start").handler("", commandCtx);
   // Add a range but leave its summary empty (pending).
-  await tool.execute("tc-add", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  await tool.execute("tc-add", { request: { action: "plan", op: "add", start: "a0001", end: "a0002" } }, null, null, toolCtx);
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   await pi.commands.get("midcompact:commit").handler("", commandCtx);
   assert.match(toolCtx.ui.messages.at(-1).text, /empty.*summary|pending.*summary|commit rejected/i);
@@ -30,7 +30,7 @@ test("reload restores transaction startMode and draft", async () => {
   toolCtx.ui.selectResults = [1]; // User manual (second option)
   toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact:start").handler("", commandCtx);
-  await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  await tool.execute("tc-preadd", { request: { action: "plan", op: "add", start: "a0001", end: "a0002" } }, null, null, toolCtx);
 
   // Simulate a reload on a fresh context.
   const freshCtx = makeBaseCtx(sm);

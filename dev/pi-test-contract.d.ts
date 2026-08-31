@@ -1,12 +1,12 @@
 declare module "@earendil-works/pi-ai" {
   export const Type: {
-    Object(value: unknown): unknown;
-    Array(value: unknown): unknown;
+    Object(value: unknown, options?: unknown): unknown;
+    Array(value: unknown, options?: unknown): unknown;
     Union(value: unknown[]): unknown;
-    Literal(value: string): unknown;
+    Literal(value: string, options?: unknown): unknown;
     Optional(value: unknown): unknown;
-    String(): unknown;
-    Number(): unknown;
+    String(options?: unknown): unknown;
+    Number(options?: unknown): unknown;
   };
   export function StringEnum<T extends readonly string[]>(values: T, options?: { description?: string; default?: T[number] }): unknown;
   export type Static<T> = any;

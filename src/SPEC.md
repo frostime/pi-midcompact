@@ -65,8 +65,13 @@ package.json → `pi.extensions`).
 
 ## External contracts (reference, don't duplicate)
 
-- Tool: one `midcompact` tool, discriminated union on `action`
-  (inspect/locate/plan/recall), cross-action parameters schema-rejected.
+- Tool: one `midcompact` tool whose parameters are `{ request: <union> }` —
+  a root `type: "object"` wrapping a discriminated union on `action`
+  (inspect/locate/plan/recall); each branch is closed
+  (`additionalProperties: false`), so cross-action parameters are
+  schema-rejected. The `request` wrapper exists because some providers
+  (e.g. DeepSeek) reject a root-level `anyOf` before the model sees the
+  schema.
   Details: `skills/midcompact/references/tool-interface.md`.
 - Commands: `midcompact:start|abort|commit|review|review-webui|select|select-webui|status`;
   no composite `/midcompact`; native naming convention `name:sub` (Pi's
@@ -76,9 +81,9 @@ package.json → `pi.extensions`).
 
 ## Change rules
 
-- Adding a tool action → new union variant + handler type + tool-interface
-  section + SKILL.md routing; adding parameters to an action → its variant
-  only (schema stays discriminated).
+- Adding a tool action → new request branch + handler type + tool-interface
+  section + SKILL.md routing; adding parameters to an action → its branch
+  only (the union stays nested under `request`).
 - Changing persistence shapes → keep `version: 1` readable (coerce) or add
   a migration; restore predicates (`state.ts`) are the compatibility gate.
 - Renaming commands → update SKILL.md/README/tests together; the stale-name

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.3] - 2026-09-01
+
+### Changed
+
+- Wrapped the `midcompact` tool's parameters in a `request` field: the wire schema is now `{ request: <discriminated union> }` with a root `type: "object"`. Providers that validate tool schemas server-side (e.g. DeepSeek) reject a root-level `anyOf` before the model ever sees the request, which made every call fail there; the wrapper keeps the full branch structure visible to models while passing the root-object gate. Model-facing call shape changes from `{action, ...}` to `{request: {action, ...}}` (breaking); each branch is closed (`additionalProperties: false`) and uses single-value `enum` discriminants instead of `const` for provider portability.
+
 ## [0.5.2] - 2026-08-27
 
 ### Changed
@@ -39,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/frostime/pi-midcompact/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/frostime/pi-midcompact/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/frostime/pi-midcompact/compare/v0.4.0...v0.5.0

@@ -11,12 +11,12 @@ async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } =
   const tool = pi.tools.get("midcompact");
 
   // Agent inspects first.
-  const inspected = await tool.execute("tc-inspect", { action: "inspect" }, null, null, toolCtx);
+  const inspected = await tool.execute("tc-inspect", { request: { action: "inspect" } }, null, null, toolCtx);
   assert.match(inspected.content[0].text, /content chars/i);
 
   // Agent adds a range with an empty (pending) summary — allowed without confirm/select.
   const added = await tool.execute("tc-add", {
-    action: "plan", op: "add", start: "a0001", end: "a0002",
+    request: { action: "plan", op: "add", start: "a0001", end: "a0002" },
   }, null, null, toolCtx);
   assert.match(added.content[0].text, /added d1/);
   assert.match(added.content[0].text, /pending summary/);
@@ -24,7 +24,7 @@ async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } =
 
   // Agent fills the summary via update.
   const updated = await tool.execute("tc-update", {
-    action: "plan", op: "update", draft_id: "d1", summary: "Phase one summarized.",
+    request: { action: "plan", op: "update", draft_id: "d1", summary: "Phase one summarized." },
   }, null, null, toolCtx);
   assert.match(updated.content[0].text, /updated d1/);
   assert.match(updated.content[0].text, /summarized/);
@@ -34,7 +34,7 @@ async function runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions } =
   assert.match(updated.content[0].text, /content chars/);
 
   // Explicit show owns full awareness and the complete current range list.
-  const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
+  const shown = await tool.execute("tc-show", { request: { action: "plan", op: "show" } }, null, null, toolCtx);
   assert.match(shown.content[0].text, /Context awareness/);
   assert.match(shown.content[0].text, /summary: Phase one summarized\./);
   assert.match(toolCtx.ui.statuses.get("midcompact"), /MC planning/);
@@ -89,9 +89,9 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   const restored = await pi.emit("context", { messages: structuredClone(rawMessages) }, toolCtx);
   assert.equal(restored.messages[0].customType, "midcompact-summary");
 
-  const search = await tool.execute("tc4", { action: "recall" }, null, null, toolCtx);
+  const search = await tool.execute("tc4", { request: { action: "recall" } }, null, null, toolCtx);
   assert.match(search.content[0].text, /c0001/);
-  const recalled = await tool.execute("tc5", { action: "recall", ref: "c0001", detail: "full" }, null, null, toolCtx);
+  const recalled = await tool.execute("tc5", { request: { action: "recall", ref: "c0001", detail: "full" } }, null, null, toolCtx);
   assert.match(recalled.content[0].text, /old requirement/);
   assert.match(recalled.content[0].text, /old exploration/);
 
@@ -106,10 +106,10 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact:start").handler("", commandCtx);
-  const inspect2 = await tool.execute("tc-inspect2", { action: "inspect" }, null, null, toolCtx);
+  const inspect2 = await tool.execute("tc-inspect2", { request: { action: "inspect" } }, null, null, toolCtx);
   assert.match(inspect2.content[0].text, /compressed.*protected|protected/);
-  await tool.execute("tc-add2", { action: "plan", op: "add", start: "a0003", end: "a0004" }, null, null, toolCtx);
-  await tool.execute("tc-update2", { action: "plan", op: "update", draft_id: "d1", summary: "New phase summarized." }, null, null, toolCtx);
+  await tool.execute("tc-add2", { request: { action: "plan", op: "add", start: "a0003", end: "a0004" } }, null, null, toolCtx);
+  await tool.execute("tc-update2", { request: { action: "plan", op: "update", draft_id: "d1", summary: "New phase summarized." } }, null, null, toolCtx);
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   await pi.commands.get("midcompact:commit").handler("", commandCtx);
 
@@ -134,17 +134,19 @@ test("locate bounds ambiguous searches and full detail requires a direct ref", a
   const tool = pi.tools.get("midcompact");
 
   const inspected = await tool.execute("tc-spans", {
-    action: "inspect",
-    spans: [{ start: "a0001", end: "a0003" }, { start: "a0002", end: "a0005" }],
+    request: {
+      action: "inspect",
+      spans: [{ start: "a0001", end: "a0003" }, { start: "a0002", end: "a0005" }],
+    },
   }, null, null, toolCtx);
   assert.match(inspected.content[0].text, /Candidate span inspection: 2 requested/);
   assert.match(inspected.content[0].text, /% of anchor factual content/);
 
-  const matches = await tool.execute("tc-locate", { action: "locate", pattern: "repeated landmark", limit: 20 }, null, null, toolCtx);
+  const matches = await tool.execute("tc-locate", { request: { action: "locate", pattern: "repeated landmark", limit: 20 } }, null, null, toolCtx);
   assert.match(matches.content[0].text, /Showing 3 of 5 matches/);
-  const fullSearch = await tool.execute("tc-locate-full", { action: "locate", pattern: "repeated", detail: "full" }, null, null, toolCtx);
+  const fullSearch = await tool.execute("tc-locate-full", { request: { action: "locate", pattern: "repeated", detail: "full" } }, null, null, toolCtx);
   assert.match(fullSearch.content[0].text, /Error: locate detail=full requires one direct atom ref/);
-  const mixed = await tool.execute("tc-locate-mixed", { action: "locate", ref: "a0001", pattern: "repeated" }, null, null, toolCtx);
+  const mixed = await tool.execute("tc-locate-mixed", { request: { action: "locate", ref: "a0001", pattern: "repeated" } }, null, null, toolCtx);
   assert.match(mixed.content[0].text, /Error: locate accepts either one direct ref or search filters/);
 });
 
@@ -158,16 +160,16 @@ test("plan mutations return only the changed range or removed id", async () => {
   toolCtx.ui.selectResults = [0]; // Agent direct (first option)
   await pi.commands.get("midcompact:start").handler("", commandCtx);
   const tool = pi.tools.get("midcompact");
-  await tool.execute("tc-add-1", { action: "plan", op: "add", start: "a0001", end: "a0001", summary: "one" }, null, null, toolCtx);
-  await tool.execute("tc-add-2", { action: "plan", op: "add", start: "a0002", end: "a0002", summary: "two" }, null, null, toolCtx);
+  await tool.execute("tc-add-1", { request: { action: "plan", op: "add", start: "a0001", end: "a0001", summary: "one" } }, null, null, toolCtx);
+  await tool.execute("tc-add-2", { request: { action: "plan", op: "add", start: "a0002", end: "a0002", summary: "two" } }, null, null, toolCtx);
 
-  const updated = await tool.execute("tc-update", { action: "plan", op: "update", draft_id: "d1", summary: "one updated" }, null, null, toolCtx);
+  const updated = await tool.execute("tc-update", { request: { action: "plan", op: "update", draft_id: "d1", summary: "one updated" } }, null, null, toolCtx);
   assert.match(updated.content[0].text, /updated d1/);
   assert.match(updated.content[0].text, /summary: one updated/);
   assert.doesNotMatch(updated.content[0].text, /d2:/);
   assert.doesNotMatch(updated.content[0].text, /Context awareness/);
 
-  const removed = await tool.execute("tc-remove", { action: "plan", op: "remove", draft_id: "d1" }, null, null, toolCtx);
+  const removed = await tool.execute("tc-remove", { request: { action: "plan", op: "remove", draft_id: "d1" } }, null, null, toolCtx);
   assert.match(removed.content[0].text, /removed d1 · 1 range/);
   assert.doesNotMatch(removed.content[0].text, /d2:/);
   assert.doesNotMatch(removed.content[0].text, /Context awareness/);

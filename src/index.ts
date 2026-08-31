@@ -67,55 +67,79 @@ const TOOL_DESCRIPTION =
 const STATUS_KEY = "midcompact";
 const START_PROMPT_PREFIX = "A mid-compaction transaction is active on a frozen anchor snapshot.";
 
-// The tool is a discriminated union: `action` selects the only parameter
-// group that applies. The schema exposes just that group's fields, so a call
-// cannot mix parameters from different actions, and cross-action misuse
-// becomes a compile-time error in the handler types rather than a runtime rule.
-const InspectParams = Type.Object({
-  action: Type.Literal("inspect"),
-  // inventory pagination or explicit candidate-span measurement
-  spans: Type.Optional(Type.Array(Type.Object({ start: Type.String(), end: Type.String() }))),
-  page_size: Type.Optional(Type.Number()),
-  cursor: Type.Optional(Type.String()),
-});
+// Canonical request model: one branch per action, and each branch owns exactly
+// its own fields (additionalProperties: false). The discriminant is a
+// single-value StringEnum instead of Type.Literal so it serializes as
+// string+enum, which restricted JSON-Schema subsets (e.g. DeepSeek) accept
+// more readily than const.
+//
+// The union sits under a root `request` property instead of being the
+// parameters root: some providers validate that a tool's parameters root is
+// `type: "object"` and reject a root-level anyOf before the model ever sees
+// the schema (observed on DeepSeek). Field descriptions stay in sync with
+// skills/midcompact/references/tool-interface.md.
+const InspectRequest = Type.Object(
+  {
+    action: StringEnum(["inspect"] as const, { description: "Inventory the frozen anchor, or measure explicit candidate spans." }),
+    spans: Type.Optional(Type.Array(Type.Object({ start: Type.String(), end: Type.String() }), { description: "Candidate spans to measure, as {start,end} atom refs." })),
+    page_size: Type.Optional(Type.Number({ description: "Inventory groups per page (default 20, max 50)." })),
+    cursor: Type.Optional(Type.String({ description: "Pagination cursor from the previous page." })),
+  },
+  { additionalProperties: false },
+);
 
-const LocateParams = Type.Object({
-  action: Type.Literal("locate"),
-  ref: Type.Optional(Type.String()),
-  pattern: Type.Optional(Type.String()),
-  source: Type.Optional(StringEnum(["any", "user", "assistant", "tool_call", "tool_result"] as const)),
-  tool_name: Type.Optional(Type.String()),
-  direction: Type.Optional(StringEnum(["oldest", "newest"] as const)),
-  limit: Type.Optional(Type.Number()),
-  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
-});
+const LocateRequest = Type.Object(
+  {
+    action: StringEnum(["locate"] as const, { description: "Locate atoms in the frozen anchor by ref or filters." }),
+    ref: Type.Optional(Type.String({ description: "One direct atom ref; mutually exclusive with search filters." })),
+    pattern: Type.Optional(Type.String({ description: "Content filter over anchor atoms." })),
+    source: Type.Optional(StringEnum(["any", "user", "assistant", "tool_call", "tool_result"] as const, { description: "Filter by entry source." })),
+    tool_name: Type.Optional(Type.String({ description: "Filter by originating tool name." })),
+    direction: Type.Optional(StringEnum(["oldest", "newest"] as const, { description: "Match ordering, oldest (default) or newest." })),
+    limit: Type.Optional(Type.Number({ description: "1-3 results for filtered searches." })),
+    detail: Type.Optional(StringEnum(["brief", "full"] as const, { description: "brief (default) or full atom output." })),
+  },
+  { additionalProperties: false },
+);
 
-const PlanParams = Type.Object({
-  action: Type.Literal("plan"),
-  op: Type.Optional(StringEnum(["show", "add", "update", "remove"] as const)),
-  start: Type.Optional(Type.String()),
-  end: Type.Optional(Type.String()),
-  draft_id: Type.Optional(Type.String()),
-  topic: Type.Optional(Type.String()),
-  summary: Type.Optional(Type.String()),
-  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
-});
+const PlanRequest = Type.Object(
+  {
+    action: StringEnum(["plan"] as const, { description: "Show or mutate the shared DraftPlan." }),
+    op: Type.Optional(StringEnum(["show", "add", "update", "remove"] as const, { description: "show (default) / add / update / remove." })),
+    start: Type.Optional(Type.String({ description: "add: range start atom ref." })),
+    end: Type.Optional(Type.String({ description: "add: range end atom ref." })),
+    draft_id: Type.Optional(Type.String({ description: "show/update/remove: target draft range id." })),
+    topic: Type.Optional(Type.String({ description: "add/update: range topic." })),
+    summary: Type.Optional(Type.String({ description: "add/update: range summary (omitted or empty = pending range)." })),
+    detail: Type.Optional(StringEnum(["brief", "full"] as const, { description: "show: brief (default) or full range output." })),
+  },
+  { additionalProperties: false },
+);
 
-const RecallParams = Type.Object({
-  action: Type.Literal("recall"),
-  ref: Type.Optional(Type.String()),
-  pattern: Type.Optional(Type.String()),
-  limit: Type.Optional(Type.Number()),
-  detail: Type.Optional(StringEnum(["brief", "full"] as const)),
-});
+const RecallRequest = Type.Object(
+  {
+    action: StringEnum(["recall"] as const, { description: "Read committed compression blocks; works without a transaction." }),
+    ref: Type.Optional(Type.String({ description: "One committed block id, e.g. c0001; renders its messages." })),
+    pattern: Type.Optional(Type.String({ description: "Filter block topics and summaries." })),
+    limit: Type.Optional(Type.Number({ description: "Blocks to list (default 8, max 20)." })),
+    detail: Type.Optional(StringEnum(["brief", "full"] as const, { description: "full raises the rendering cap on truncated blocks." })),
+  },
+  { additionalProperties: false },
+);
 
-const Params = Type.Union([InspectParams, LocateParams, PlanParams, RecallParams]);
+const Params = Type.Object(
+  { request: Type.Union([InspectRequest, LocateRequest, PlanRequest, RecallRequest]) },
+  {
+    additionalProperties: false,
+    description: "`request.action` selects exactly one request shape; fields of the other actions are not valid.",
+  },
+);
 
-type ParamsType = Static<typeof Params>;
-type InspectParamsType = Static<typeof InspectParams>;
-type LocateParamsType = Static<typeof LocateParams>;
-type PlanParamsType = Static<typeof PlanParams>;
-type RecallParamsType = Static<typeof RecallParams>;
+type ToolParams = Static<typeof Params>;
+type InspectRequestType = Static<typeof InspectRequest>;
+type LocateRequestType = Static<typeof LocateRequest>;
+type PlanRequestType = Static<typeof PlanRequest>;
+type RecallRequestType = Static<typeof RecallRequest>;
 
 type RuntimeSnapshot = { atoms: Atom[]; anchorState?: CompressionState };
 
@@ -171,7 +195,7 @@ export default function (pi: ExtensionAPI) {
         content: [
           "An active midcompact transaction exists with a persisted DraftPlan.",
           `Draft revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
-          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(action=\"plan\", op=\"show\") before any other midcompact action. Treat the existing plan as the current shared draft. Infer from the user's request whether to preserve, refine, or extend it; ask only if materially ambiguous.",
+          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(request={action:\"plan\", op:\"show\"}) before any other midcompact action. Treat the existing plan as the current shared draft. Infer from the user's request whether to preserve, refine, or extend it; ask only if materially ambiguous.",
         ].join("\n"),
         display: false,
       },
@@ -573,9 +597,10 @@ export default function (pi: ExtensionAPI) {
     label: "Midcompact",
     description: TOOL_DESCRIPTION,
     parameters: Params,
-    async execute(_id: string, params: ParamsType, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
+    async execute(_id: string, params: ToolParams, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
       try {
-        if (params.action === "recall") return toolResult(handleRecall(params, ctx));
+        const request = params.request;
+        if (request.action === "recall") return toolResult(handleRecall(request, ctx));
         const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
         const currentTx = withCompatDefaults(restored.transaction ?? transaction);
         if (!currentTx) return toolResult("No active midcompact transaction. Ask the user to run `/midcompact:start` first.");
@@ -586,14 +611,14 @@ export default function (pi: ExtensionAPI) {
         }
         const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
 
-        if (params.action === "inspect") return toolResult(handleInspect(params, snapshot.atoms, currentTx));
-        if (params.action === "locate") return toolResult(handleLocate(params, snapshot.atoms));
-        if (params.action === "plan") {
-          const result = handlePlan(params, draft!, snapshot.atoms);
+        if (request.action === "inspect") return toolResult(handleInspect(request, snapshot.atoms, currentTx));
+        if (request.action === "locate") return toolResult(handleLocate(request, snapshot.atoms));
+        if (request.action === "plan") {
+          const result = handlePlan(request, draft!, snapshot.atoms);
           if (result.op === "show") {
             return toolResult(formatDraft(draft!, draftTelemetry(transaction, draft), {
-              detail: params.detail,
-              draftId: params.draft_id,
+              detail: request.detail,
+              draftId: request.draft_id,
               atoms: snapshot.atoms,
             }));
           }
@@ -609,7 +634,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  function handleInspect(params: InspectParamsType, atoms: Atom[], tx: TransactionState): string {
+  function handleInspect(params: InspectRequestType, atoms: Atom[], tx: TransactionState): string {
     if (params.spans) {
       if (params.page_size !== undefined || params.cursor !== undefined) {
         throw new Error("inspect spans cannot be combined with inventory pagination.");
@@ -620,7 +645,7 @@ export default function (pi: ExtensionAPI) {
     return formatInventory(page);
   }
 
-  function handleRecall(params: RecallParamsType, ctx: ExtensionContext): string {
+  function handleRecall(params: RecallRequestType, ctx: ExtensionContext): string {
     const sm = ctx.sessionManager;
     const branchState = restoreCompressionState(sm.getBranch() as SessionEntry[]) ?? activeState;
     if (!branchState?.blocks.length) return "No compressed blocks are active on this branch.";
@@ -656,7 +681,7 @@ export default function (pi: ExtensionAPI) {
 
 // ---- Pure handlers ----
 
-function handleLocate(params: LocateParamsType, atoms: Atom[]): string {
+function handleLocate(params: LocateRequestType, atoms: Atom[]): string {
   const hasFilter = Boolean(params.pattern || params.tool_name || (params.source && params.source !== "any"));
   if (params.ref && hasFilter) {
     throw new Error("locate accepts either one direct ref or search filters, not both.");
@@ -688,7 +713,7 @@ type PlanHandleResult =
   | { op: "show"; draft: DraftPlan }
   | { op: "add" | "update" | "remove"; draft: DraftPlan; changedId: string };
 
-function handlePlan(params: PlanParamsType, current: DraftPlan, atoms: Atom[]): PlanHandleResult {
+function handlePlan(params: PlanRequestType, current: DraftPlan, atoms: Atom[]): PlanHandleResult {
   const op = params.op ?? "show";
   if (op === "show") return { op, draft: current };
   if (op === "remove") {

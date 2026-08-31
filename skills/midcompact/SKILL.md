@@ -12,8 +12,8 @@ This skill handles two independent tasks: planning compression and recalling com
 | Signal | Immediate duty | First action |
 |--------|----------------|--------------|
 | Runtime prompt says `FINAL STATE: USER MANUAL` | Let the user create the initial DraftPlan | Reply exactly `OK`; call no midcompact tool |
-| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Start from the new empty draft | `action="inspect"` |
-| A handoff reports a persisted DraftPlan and the user asks to continue | Read the shared selection and determine what help the user wants | `action="plan", op="show"` |
+| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Start from the new empty draft | `request={action:"inspect"}` |
+| A handoff reports a persisted DraftPlan and the user asks to continue | Read the shared selection and determine what help the user wants | `request={action:"plan", op:"show"}` |
 | The user or a projected summary needs detail from a committed block | Retrieve that history only | Follow **Recall workflow** |
 
 The state-specific runtime prompt is authoritative. Recall does not enter planning or mutate the DraftPlan. During the User-manual acknowledgement turn, the no-tool instruction overrides every other route.
@@ -34,7 +34,7 @@ Apply one invariant:
 
 #### 1. Read the entry state and user intent
 
-For a fresh Agent-direct transaction, begin with `action="inspect"`. For a handed-off DraftPlan, begin with `action="plan", op="show"`; inspect the anchor only if the requested work needs broader context.
+For a fresh Agent-direct transaction, begin with `request={action:"inspect"}`. For a handed-off DraftPlan, begin with `request={action:"plan", op:"show"}`; inspect the anchor only if the requested work needs broader context.
 
 Establish the user's desired scope, fidelity, and planning effort from their words, current selection, `User focus: ...`, and surrounding interaction. Treat answers collected through question, questionnaire, or similar tools as user-originated input even when represented as tool results.
 
@@ -71,7 +71,7 @@ When treatments involve a meaningful tradeoff, present concise alternatives and 
 
 #### 4. Resolve boundaries and build the DraftPlan
 
-After the intended treatment is clear, use `action="locate"` for targeted content and boundary checks. An atom is the smallest selectable unit; a tool call and its matching results form one indivisible `tool_exchange` atom. Keep source text outside a range when exact wording or provenance matters and a summary cannot preserve it equivalently.
+After the intended treatment is clear, use `request={action:"locate"}` for targeted content and boundary checks. An atom is the smallest selectable unit; a tool call and its matching results form one indivisible `tool_exchange` atom. Keep source text outside a range when exact wording or provenance matters and a summary cannot preserve it equivalently.
 
 Choose boundaries from the information that must survive, not from a fixed category. A range may replace a whole semantic phase, including its initiating and concluding messages. It may instead retain a load-bearing user instruction and concluding Agent response while replacing only the execution between them. It may split around important material to leave KEEP holes. These are reasoning patterns, not rules tied to start mode, message age, or one prescribed kind of work.
 
@@ -107,7 +107,7 @@ Length follows the information that must survive, not a target ratio. Final test
 
 #### 6. Verify and hand off
 
-Call `action="plan", op="show"`. Check that the intended semantic phases are covered, KEEP holes remain outside ranges, every range has a summary, and the summaries conserve the future working state.
+Call `request={action:"plan", op:"show"}`. Check that the intended semantic phases are covered, KEEP holes remain outside ranges, every range has a summary, and the summaries conserve the future working state.
 
 Describe the completed proposal with the same recognizable landmarks used during alignment. Direct the user to `/midcompact:select` or `/midcompact:select-webui` for boundaries and KEEP holes, and to `/midcompact:review` or `/midcompact:review-webui` for summary inspection or rejection. Use browser variants when the TUI is unavailable or preferred. Ask the user to run `/midcompact:commit` when ready; never commit for them.
 
@@ -119,11 +119,11 @@ Recall works with or without an active planning transaction. It reads committed 
 
 #### 1. Find the block
 
-If its id is unknown, call `action="recall", pattern="..."` to search active topics and summaries. A projected summary also states its block id and exact recall call.
+If its id is unknown, call `request={action:"recall", pattern:"..."}` to search active topics and summaries. A projected summary also states its block id and exact recall call.
 
 #### 2. Retrieve the detail
 
-Call `action="recall", ref="c0001"`. If the readable, structure-flattened result ends with a truncation marker, retry with `detail="full"`. Retrieve only what the current task needs; do not start or change a plan merely to recall history.
+Call `request={action:"recall", ref:"c0001"}`. If the readable, structure-flattened result ends with a truncation marker, retry with `detail="full"`. Retrieve only what the current task needs; do not start or change a plan merely to recall history.
 
 ## Tool conventions
 

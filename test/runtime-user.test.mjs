@@ -92,7 +92,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   // Simulate the user having pre-selected a range (written into DraftPlan by the
   // future Selection UI). Here we drive it through the Agent tool as a stand-in,
   // since the UI is not yet implemented.
-  await tool.execute("tc-preadd", { action: "plan", op: "add", start: "a0001", end: "a0002" }, null, null, toolCtx);
+  await tool.execute("tc-preadd", { request: { action: "plan", op: "add", start: "a0001", end: "a0002" } }, null, null, toolCtx);
 
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   const handoff = await pi.emit("before_agent_start", { prompt: "continue the current midcompact draft" }, toolCtx);
@@ -107,7 +107,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   // not persist a duplicate DraftPlan entry.
   await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
   const draftEntriesBeforeShow = entries.filter(entry => entry.customType === "midcompact-draft").length;
-  const shown = await tool.execute("tc-show", { action: "plan", op: "show" }, null, null, toolCtx);
+  const shown = await tool.execute("tc-show", { request: { action: "plan", op: "show" } }, null, null, toolCtx);
   assert.match(shown.content[0].text, /d1:/);
   assert.match(shown.content[0].text, /from: User: phase one/);
   assert.match(shown.content[0].text, /to: Assistant: old exploration/);
