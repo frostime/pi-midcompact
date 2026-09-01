@@ -1,6 +1,8 @@
-// Sole owner of factual message content statistics. Never converts local char or
-// image byte counts into token claims. Image base64 never contributes to text
-// char counts.
+// Sole owner of message content statistics. Factual char/image counts are the
+// authority; the only token conversion allowed is the explicitly scoped,
+// display-level estimator at the bottom of this file (web UI presentation
+// only — it never gates decisions, commits, or range validity). Image base64
+// never contributes to text char counts.
 
 import type { ContentMetrics, ImageFact, MessageLike } from "./types.js";
 
@@ -182,4 +184,74 @@ export function aggregateMetrics(parts: readonly ContentMetrics[]): ContentMetri
     }
   }
   return { contentChars, imageCount, images };
+}
+
+// ---- Display-level token estimation (web UI presentation only) ----
+//
+// The web UI shows a projected post-commit usage band. Because the consumer
+// model is provider-dependent, tokens are estimated from char classes with a
+// documented assumption table instead of a real tokenizer: the [low, high]
+// pairs express published tokenizer spread and are propagated as a band, never
+// collapsed into a single authoritative number. The band is derived from the
+// content mix of the atoms involved (ASCII-heavy content lands near the tight
+// end, CJK-heavy near the wide end). Nothing here feeds commit gating, range
+// validation, or any decision.
+
+/** Per-char-class token-cost assumptions: [low, high] tokens per char. */
+export const TOKEN_ESTIMATE = {
+  /** ASCII/code: roughly 3.3–4.5 chars per token across common tokenizers. */
+  narrowTokPerChar: [0.22, 0.3],
+  /** Non-ASCII scripts (CJK, kana, hangul, emoji, …): the dominant spread. */
+  wideTokPerChar: [0.5, 1.0],
+  /** Images: provider- and resolution-dependent flat allowance. */
+  imageTok: [700, 1600],
+} as const;
+
+/** Char classes the estimator distinguishes. */
+export interface CharMix {
+  /** ASCII code points. */
+  narrowChars: number;
+  /** Everything non-ASCII (counted conservatively at the wide rate). */
+  wideChars: number;
+}
+
+// Classification is deliberately coarse: ASCII is estimated at the narrow
+// rate; every non-ASCII code point (CJK, kana, hangul, emoji, Cyrillic, …) is
+// counted at the wide rate, which is the conservative side for CJK-heavy
+// content and keeps the table honest without per-script modeling.
+
+/** Split a text into narrow (ASCII) and wide (everything else) code points. */
+export function charClassCounts(text: string): CharMix {
+  let narrowChars = 0;
+  let wideChars = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    if (cp <= 0x7f) {
+      narrowChars += 1;
+      continue;
+    }
+    wideChars += 1;
+  }
+  return { narrowChars, wideChars };
+}
+
+export interface TokenEstimate {
+  point: number;
+  low: number;
+  high: number;
+}
+
+/** Estimate tokens for a char mix plus images, as a propagated band. */
+export function estimateTokens(mix: CharMix, imageCount: number): TokenEstimate {
+  const [aLo, aHi] = TOKEN_ESTIMATE.narrowTokPerChar;
+  const [cLo, cHi] = TOKEN_ESTIMATE.wideTokPerChar;
+  const [iLo, iHi] = TOKEN_ESTIMATE.imageTok;
+  const mid = (lo: number, hi: number) => (lo + hi) / 2;
+  return {
+    point: Math.round(mix.narrowChars * mid(aLo, aHi)
+      + mix.wideChars * mid(cLo, cHi)
+      + imageCount * mid(iLo, iHi)),
+    low: Math.round(mix.narrowChars * aLo + mix.wideChars * cLo + imageCount * iLo),
+    high: Math.round(mix.narrowChars * aHi + mix.wideChars * cHi + imageCount * iHi),
+  };
 }

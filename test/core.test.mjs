@@ -19,7 +19,7 @@ const { addDraftRange, addPendingRanges, emptyDraft, formatDraft, isReviewReady,
 const { projectMessages } = projectionMod;
 const { restoreCompressionState, STATE_ENTRY, coerceDraftRange, defaultStartMode } = stateMod;
 const { draftTelemetry } = telemetryMod;
-const { measureMessage, measureContentParts, codePointCount, readImageDimensions, aggregateMetrics } = contentMetricsMod;
+const { measureMessage, measureContentParts, codePointCount, readImageDimensions, aggregateMetrics, charClassCounts, estimateTokens, TOKEN_ESTIMATE } = contentMetricsMod;
 const {
   buildInventory,
   formatInventory,
@@ -33,6 +33,8 @@ const {
 const { expandSelection, SelectionError } = selectionMod;
 const { buildReviewText } = reviewMod;
 const { serializeReviewState, showReviewWebUi } = reviewWebMod;
+const messagesMod = await import(new URL("messages.js", ROOT));
+const { renderMessage } = messagesMod;
 const { emptyPlanningLock, agentCanMutate, tryAcquireUi, acquireAgent, releaseAgent, releaseUi } = planningLockMod;
 
 function entry(id, message, parentId = null) {
@@ -358,6 +360,86 @@ test("Web UI ends when its page liveness connection disappears", async () => {
 });
 
 // ---- Phase 2: factual content metrics ----
+
+test("charClassCounts splits ASCII from non-ASCII code points", () => {
+  const mix = charClassCounts("abc 中文\nplain");
+  assert.equal(mix.narrowChars, 10); // "abc \nplain"
+  assert.equal(mix.wideChars, 2); // 中文
+  assert.equal(charClassCounts("😀").wideChars, 1); // surrogate pair = one code point
+});
+
+test("estimateTokens propagates the assumption band and widens with CJK share", () => {
+  const mixed = estimateTokens({ narrowChars: 100, wideChars: 10 }, 1);
+  assert.equal(mixed.point, 1184); // 100×0.26 + 10×0.75 + 1×1150
+  assert.equal(mixed.low, 727); // 100×0.22 + 10×0.5 + 700
+  assert.equal(mixed.high, 1640); // 100×0.30 + 10×1.0 + 1600
+  // The ± spread is derived from composition, not a constant: ASCII-heavy
+  // content stays near the tight end of the table, CJK-heavy near the wide end.
+  const asciiHeavy = estimateTokens({ narrowChars: 1000, wideChars: 0 }, 0);
+  const cjkHeavy = estimateTokens({ narrowChars: 0, wideChars: 1000 }, 0);
+  const spread = (est) => (est.high - est.point) / est.point;
+  assert.ok(spread(cjkHeavy) > spread(asciiHeavy));
+  assert.ok(asciiHeavy.low <= asciiHeavy.point && asciiHeavy.point <= asciiHeavy.high);
+});
+
+test("serializeReviewState carries char-class mix and the estimation table", () => {
+  const messages = [user("phase 中文", 1), assistant([{ type: "text", text: "old exploration" }], 2)];
+  const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
+  const atoms = buildAtoms(messages, branch);
+  const draft = emptyDraft("tx-char-mix");
+  const telemetry = draftTelemetry({ version: 1, id: "tx-char-mix", anchorEntryId: "e2", startedAt: "now" }, draft);
+
+  const state = serializeReviewState(atoms, draft, telemetry, "review");
+  assert.deepEqual(state.est, TOKEN_ESTIMATE);
+  // The mix must equal the char classes of the rendered full text, whatever
+  // prefix renderMessage adds — wiring check, not format coupling.
+  for (let i = 0; i < atoms.length; i += 1) {
+    const expected = charClassCounts(renderMessage(messages[i]));
+    assert.equal(state.atoms[i].narrowChars, expected.narrowChars);
+    assert.equal(state.atoms[i].wideChars, expected.wideChars);
+  }
+  assert.ok(state.atoms[0].wideChars >= 2); // 中文 present in the user text
+});
+
+test("Web UI serves full atom text and 404s unknown refs", async () => {
+  let ready;
+  const readyUrl = new Promise((resolve) => { ready = resolve; });
+  const ctx = {
+    ui: {
+      notify(text) {
+        const match = text.match(/http:\/\/127\.0\.0\.1:\d+\/\?view=review/);
+        if (match) ready(match[0]);
+      },
+    },
+  };
+  const messages = [user("hello", 1), assistant([{ type: "text", text: "world" }], 2)];
+  const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
+  const atoms = buildAtoms(messages, branch);
+  const draft = emptyDraft("tx-web-atom");
+  const telemetry = draftTelemetry({ version: 1, id: "tx-web-atom", anchorEntryId: "e1", startedAt: "now" }, draft);
+  const workbench = showReviewWebUi(
+    ctx,
+    atoms,
+    () => ({ draft, telemetry }),
+    { editSummary() {}, editTopic() {}, remove() {} },
+    "review",
+    { openBrowser() {}, livenessConnectTimeoutMs: 5_000 },
+  );
+  const url = await readyUrl;
+  try {
+    const response = await fetch(new URL("/api/atom/a0001", url));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.ref, "a0001");
+    assert.equal(body.kind, "user");
+    assert.match(body.fullText, /hello/);
+    const missing = await fetch(new URL("/api/atom/a9999", url));
+    assert.equal(missing.status, 404);
+  } finally {
+    await fetch(new URL("/api/close", url), { method: "POST" }).catch(() => {});
+    await workbench.catch(() => {});
+  }
+});
 
 test("codePointCount counts Unicode code points, not UTF-16 units", () => {
   assert.equal(codePointCount("abc"), 3);

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
+import { TOKEN_ESTIMATE, charClassCounts } from "./content-metrics.js";
 import type { Atom, DraftPlan, DraftTelemetry, SelectionSpan } from "./types.js";
 
 const HTML_TEMPLATE = readFileSync(new URL("review-webui.html", import.meta.url), "utf8");
@@ -13,6 +14,12 @@ export type ReviewWebUiView = "review" | "selection";
 
 export interface ReviewState {
   view: ReviewWebUiView;
+  /** Char-class token-cost assumption table shared with the page (see content-metrics). */
+  est: {
+    readonly narrowTokPerChar: readonly [number, number];
+    readonly wideTokPerChar: readonly [number, number];
+    readonly imageTok: readonly [number, number];
+  };
   atoms: Array<{
     ref: string;
     index: number;
@@ -31,6 +38,9 @@ export interface ReviewState {
     owningRangeId?: string;
     isRangeStart?: boolean;
     isRangeEnd?: boolean;
+    /** Char-class counts over the atom's full text; display-level estimation input. */
+    narrowChars: number;
+    wideChars: number;
   }>;
   draft: {
     revision: number;
@@ -100,9 +110,11 @@ export function serializeReviewState(
   const groups = groupMeta(atoms);
   return {
     view,
+    est: TOKEN_ESTIMATE,
     atoms: atoms.map((atom) => {
       const owner = owningRange(atom.index, draft.ranges);
       const group = groups.get(atom.index)!;
+      const mix = charClassCounts(atom.fullText);
       return {
         ref: atom.ref,
         index: atom.index,
@@ -121,6 +133,8 @@ export function serializeReviewState(
         owningRangeId: owner?.id,
         isRangeStart: owner?.startIndex === atom.index,
         isRangeEnd: owner?.endIndex === atom.index,
+        narrowChars: mix.narrowChars,
+        wideChars: mix.wideChars,
       };
     }),
     draft: {
@@ -231,6 +245,22 @@ export async function showReviewWebUi(
         }
         if (req.method === "GET" && path === "/api/state") {
           sendJson(200, currentState());
+          return;
+        }
+        const atomMatch = path.match(/^\/api\/atom\/([^/]+)$/);
+        if (req.method === "GET" && atomMatch) {
+          const atom = atoms.find((a) => a.ref === decodeURIComponent(atomMatch[1]!));
+          if (!atom) {
+            sendJson(404, { error: `Unknown atom ${atomMatch[1]}` });
+            return;
+          }
+          sendJson(200, {
+            ref: atom.ref,
+            kind: atom.kind,
+            contentChars: atom.metrics.contentChars,
+            imageCount: atom.metrics.imageCount,
+            fullText: atom.fullText,
+          });
           return;
         }
         if (req.method === "POST" && path === "/api/close") {
