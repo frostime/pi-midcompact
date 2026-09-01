@@ -1,6 +1,6 @@
 # WebGUI UX 改版 — Code Change Spec
 
-变更代号:`webui-review-ux` · 日期:2026-09-01 · 状态:**spec 定稿,待实现**
+变更代号:`webui-review-ux` · 日期:2026-09-01 · 状态:**已实现**(分支 `feat/webui-review-ux`,待浏览器走查与合并;在途项见同目录 HANDOVER.md)
 迭代过程见同目录 `decisions.md`(原型期日志)与两份原型(`prototype.html` 功能 / `prototype-visual.html` 视觉)。本文是收口后的权威依据,与日志冲突时以本文为准。
 
 ---
@@ -32,8 +32,8 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 
 ### 3.1 双视图共用
 
-- **决策条**:一行显示 `draft 范围数 · coverage(atoms) · anchor content 削减(−chars,−%,事实值) · pending 数`,右端为投影条(见下)。数值随草稿编辑与保存实时更新。
-- **投影条**:两段式——实心段 = commit 后占用(点估计),斜纹段 = 将被释放;悬停展示换算假设;不确定度只出现在数字(`est. ±N%`,N 由内容构成计算,见 4.3)与悬停说明,不画进条形。
+- **决策条**:一行显示 `draft 范围数 · coverage(atoms) · anchor content 削减(−chars,−%) · pending 数`,右端为投影条(见下)。数值随草稿编辑与保存实时更新。削减百分比 = 保存的字符差(range 原字符总数 − 替换字符总数)÷ 锚点内容总字符(全部 atom 的 contentChars 之和);分子分母都是事实字符数。
+- **投影条**:两段式——实心段 = commit 后占用(点估计),斜纹段 = 将被释放。基线 `now` = `telemetry.anchorUsage.tokens`(Pi 上报事实);`anchorUsage` 缺失或无 `contextWindow` 时,投影条显示“不可用”占位,不得臆造数字。悬停展示换算假设;不确定度只出现在数字(`est. ±N%`,N 由内容构成计算,见 4.3)与悬停说明,不画进条形。
 - **绿色削减标注**(列表卡、组头、决策条、投影条 delta)一律绿色加粗。
 - **死会话检测**:liveness SSE 断开后,页面顶部横幅告知会话已在终端关闭,写操作禁用(只读),提示可关闭标签页。
 - **文案规范**:不出现 "DraftPlan"(用 draft/plan)、"provider usage fact"、"payload facts only" 类系统腔;下一步指引明确指向终端 `/midcompact:commit`。
@@ -41,7 +41,7 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 
 ### 3.2 Review 视图
 
-- **Raw ⇄ Projected 切换**:Raw 显示原始 atom 分组(现状能力保留);Projected 将每个 range 折叠为一张 summary 卡(显示 topic、摘要全文、`N atoms → M chars`、replaced refs),KEEP 组原样保留并标注 verbatim;有 pending summary 的 range 显示虚线警告卡("commit 将拒绝")+ "Write summary" 跳转按钮。
+- **Raw ⇄ Projected 切换**:Raw 显示原始 atom 分组(现状能力保留);Projected 将每个 range 折叠为一张 summary 卡(显示 topic、摘要全文、`N atoms → M chars`、replaced refs),KEEP 组原样保留并标注 verbatim;有 pending summary 的 range 显示虚线警告卡("commit 将拒绝")+ "Write summary" 跳转按钮。Raw 与 Projected 共用同一套 policy(All/Compressed/Kept)与查询过滤语义:两种模式下 range 卡/组与 KEEP 组都受 policy 和查询约束(KEEP 组按其 atom 内容或标签匹配)。
 - **原文抽屉**:点击 atom 预览或投影卡 "View original" 侧向抽屉展示该 atom 完整原文,标注 kind 与尺寸;数据来自新增只读 API(见 4.1)。
 - **Pending 前置**:range 列表卡显示 pending 标记;投影警告卡;关闭对话框列出 pending ranges 并警告 "commit 将拒绝",提供 "Fix pending" 跳转到对应编辑器。
 - **Review 清单**:每个 range 可勾选 reviewed,列表卡同步显示 ✓;状态在页面会话内保持(持久化位置未定,见 §6)。
@@ -53,7 +53,7 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 
 - **两态模型**:选中 = 压缩,未选 = 原样保留(即 KEEP 的表达方式);不再提供 per-atom 的 Add/Keep 按钮对。user 消息为普通可选 atom。
 - **不可选 atom**:已压缩块、断开的工具协议、缺锚点条目的消息显示 🔒 与文案 "can't compress"(替代生产现词 "not compressible"),禁用选择;组头 "N/M selected" 分母只计可选 atom。
-- **键盘圈选**:`↑/↓` 移动光标、`Space` 选中/取消、`G` 整组切换;鼠标点击行等效 Space;页面获得焦点时生效。
+- **键盘圈选**:`↑/↓` 移动光标、`Space` 选中/取消、`G` 整组切换;鼠标点击行等效 Space;文档级监听,输入控件聚焦时让位。
 - **实时反馈**:左栏实时列出连续选中段将生成的 ranges(可整段移除);右栏实时汇总 atoms/chars/images 与 "if committed now" 投影条(未计 Agent 之后起草的摘要,悬停说明);顶部一条细汇总替代四张指标卡。
 - **保存**:Save selection 后显示已存 chip 与"回终端告诉 Agent 继续"指引;现状的 spans 归一化行为不变。
 
@@ -86,7 +86,7 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 
 ### 4.4 视觉规范(以 prototype-visual.html 变体 E 为基线)
 
-- Tokens:zinc 中性面(bg/panel/card/elev/ border 三级)、语义色专用(绿=节省、琥珀=pending、红=danger),品牌无彩色主按钮(primary 亮色=近黑、暗色=反白)。
+- Tokens:zinc 中性面(四个表面层级 bg/panel/card/elev;三级边框 border/border-soft/border-strong)、语义色专用(绿=节省、琥珀=pending、红=danger),品牌无彩色主按钮(primary 亮色=近黑、暗色=反白)。
 - 字阶:基准 14px/1.6;辅助文本下限 12px;摘要正文 12.5px/1.6;数据与代码一律 mono(tabular-nums);内距整体较现状 +30~40%;右栏 ≈430px、左栏 ≈288px;圆角 8–10px;1px 弱边框、无投影堆叠。
 - 时间线锚点:组左侧 3px 色轨(黑=range / 绿=KEEP);user 行实色 chip + 加重正文;kind 低饱和着色(read 青蓝 / bash 琥珀 / assistant 紫);右栏 chars 下带轨道计量条(宽度按视图内最大值归一);正文与元数据两层对比度。
 - 微标签对比度 ≥ WCAG AA;保留 `prefers-reduced-motion` 豁免;亮/暗两套 tokens 同时交付。
@@ -100,13 +100,13 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 
 技术检查(可在仓库执行):
 
-1. `npm run typecheck`、`npm test`、`npm run typecheck:contract` 全绿;新增/调整行为的测试落在既有 58 个 suite 的对应文件中(新 API 的 200/404、selection 两态提交后的 spans 归一化、投影条数值计算)。
+1. `npm run typecheck`、`npm test`、`npm run typecheck:contract` 全绿;新增/调整行为的测试落在全量既有测试套件的对应文件中(当前 63 项,随实现增长)(新 API 的 200/404、selection 两态提交后的 spans 归一化、投影条数值计算)。
 2. 契约检查:持久化条目仍恰好三类;commit 拒绝条件不变(pending/reversed/overlap/protected);页面 JS 不含估算参与门禁的逻辑路径。
 3. 文档一致性:全仓 rg 无 "DraftPlan"、"not compressible"(用户面文案)、"provider usage fact" 残留;`src/SPEC.md`、`skills/midcompact/`、README 双语与实现一致。
 
 用户验收(浏览器走查 `review-webui` / `select-webui`):
 
-4. 决策条与投影条数值随编辑/保存实时正确;pseudo 数据场景(80% → ≈33%,带 ±N% 区间)与手算一致。
+4. 决策条与投影条数值随编辑/保存实时正确;用一个固定样例手算验证:给定 atoms 的 narrow/wideChars 与 imageCount、anchorUsage,按 §4.3 假设表算出点估计、区间下/上界与 ±N%,页面显示与手算一致。
 5. Projected 模式:range 折叠为 summary 卡、pending 警告卡可跳转、KEEP 保持;抽屉能看到 atom 全文。
 6. 空 summary 时关闭对话框出现拒绝警告与 Fix pending;补全保存后出现 commit 指引。
 7. Selection:键盘可完成全流程;🔒 atom 不可选;左栏 runs 与右栏汇总实时正确。
@@ -132,5 +132,6 @@ WebGUI(`review-webui` / `select-webui`)是 Pi 无 TUI 模式下的人工门禁�
 | 投影 / Projected | commit 后模型实际看到的上下文形状(range → summary 卡,KEEP 与后续内容不变) |
 | 投影条 | 双视图共用的水平条组件:实心=commit 后占用(点估计),斜纹=将被释放 |
 | 决策条 | 头部一行聚合:ranges / coverage / −chars% / pending + 投影条,替代四张指标卡 |
+| narrow / wide chars | 估算用字符分类:narrow = ASCII 码点,wide = 其余全部码点(保守按宽档计);对应序列化字段 narrowChars / wideChars |
 | reviewed | 用户对某 range "已核对"的勾选标记,客户端态 |
 | liveness | 页面与本地服务端的 SSE 心跳;断开即会话已在终端关闭 |
