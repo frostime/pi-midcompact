@@ -32,7 +32,12 @@ package.json → `pi.extensions`).
   then appends state, abort appends nothing. Both refuse to run while the
   Agent holds the planning lock.
 - `anchorUsage` is informational only — Pi-reported awareness, never an
-  optimization target (same rule as `projectedTokens` / estimates).
+  optimization target. The web workbench may additionally render a
+  **display-level** post-commit projection derived from the documented
+  char-class assumption table in `content-metrics` (`TOKEN_ESTIMATE`): always
+  labeled `est.`, shown as a propagated band, and never feeding commit
+  gating, range validation, or any decision (same rule as `projectedTokens`
+  / `approxTokens`).
 - Atom refs are transaction-local: re-run inspect/locate in a later
   transaction; group refs (`g...`) are never locate refs.
 
@@ -78,6 +83,13 @@ package.json → `pi.extensions`).
   `skill:<name>`).
 - The tool never starts a transaction and never commits; both are command-
   or user-gated. Recall is the only action valid without a transaction.
+- Web workbench (`review-webui.html` + `review-webui.ts`): the state payload
+  carries per-atom char-class counts (`narrowChars`/`wideChars`) and the
+  assumption table (`est`), so the page renders the projection band and can
+  estimate arbitrary selection spans; `GET /api/atom/:ref` serves the frozen
+  atom's full text for the original-text drawer (read-only, snapshot-local).
+  User-facing copy says "can't compress" for protected atoms; "protected"
+  stays the agent/tool-side term.
 
 ## Change rules
 

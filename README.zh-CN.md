@@ -55,7 +55,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 实际压缩效果
 
-下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 会把 Pi 提供的锚点 usage 与扩展统计的 content chars、图片数量分开显示，不再根据本地字符估算推导预计 token 节省量。点击图片可查看原图。
+下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。点击图片可查看原图。
 
 <p align="center">
   <a href="./figures/review-webui.png">

@@ -55,7 +55,7 @@ The raw session JSONL still contains:
 
 ### A reviewed draft can reclaim meaningful context
 
-The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage separately from factual content chars and image counts; it does not derive projected token savings from local character estimates. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
 
 <p align="center">
   <a href="./figures/review-webui.png">
