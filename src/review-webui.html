@@ -452,7 +452,7 @@ const openAtoms = new Set();
 let lastScrolled = null;
 let removeArmed = null;
 let selectionDirty = false;
-let selectionRefs = new Set(state.draft.ranges.flatMap(r => rangeAtoms(r).map(a => a.ref)));
+let selectionRefs = new Set();
 let cursor = 0;                   // selection-view atom cursor
 
 // Reviewed flags are a page-session convenience, not persisted app state.
@@ -476,6 +476,7 @@ const rangeAtoms = r => {
   const end = state.atoms.findIndex(a => a.ref === r.endRef);
   return start >= 0 && end >= start ? state.atoms.slice(start, end + 1) : [];
 };
+selectionRefs = new Set(state.draft.ranges.flatMap(r => rangeAtoms(r).map(a => a.ref)));
 const rangeById = id => state.draft.ranges.find(r => r.id === id);
 const saveOf = r => Math.max(0, (r.originalContentChars ?? 0) - (r.replacementContentChars ?? 0));
 const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
@@ -636,8 +637,7 @@ function renderStrip() {
       <div class="di"><label>draft</label><span class="val">${state.draft.ranges.length} range${state.draft.ranges.length === 1 ? '' : 's'}</span></div>
       <div class="di"><label>coverage</label><span class="val">${coverage} / ${state.atoms.length} atoms</span></div>
       <div class="di"><label>anchor content</label><span class="val save">−${fmt(save)} chars (−${pct(share)})</span></div>
-      <div class="di"><label>pending</label><span class="val ${pending ? 'pend' : ''}">${pending}</span></div>
-      <div class="di"><label>in ranges</label><span class="val">${fmt(chars)} chars</span></div>`;
+      <div class="di"><label>pending</label><span class="val ${pending ? 'pend' : ''}">${pending}</span></div>`;
   }
   $('strip').innerHTML = items + pbarHtml(proj, isSelection() ? 'if committed now' : 'after commit');
 }
