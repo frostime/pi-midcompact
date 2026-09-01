@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pi-midcompact WebGUI — UX 提案原型</title>
+<style>
+/* ================================================================
+   分层约定
+   深色 .chrome*  = 原型导航与中文解说层(不是设计的一部分)
+   浅色 .app / .a-* = App 界面(英文,对应产品实际观感)
+   ================================================================ */
+
+/* ---------- chrome(原型层,深色) ---------- */
+:root {
+  --ck-bg: #171c26; --ck-bg2: #1e2532; --ck-line: #2b3448;
+  --ck-fg: #d5dcec; --ck-dim: #8f9ab5; --ck-accent: #8fb0ff; --ck-warn: #e8b45e; --ck-keep: #7ed49a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--ck-bg); color: var(--ck-fg); font: 13px/1.6 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+
+#nav { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 0 16px; height: 46px; background: var(--ck-bg2); border-bottom: 1px solid var(--ck-line); }
+#nav .logo { font-weight: 700; font-size: 13px; white-space: nowrap; }
+#nav .logo em { color: var(--ck-accent); font-style: normal; }
+#nav .grp { display: flex; align-items: center; gap: 4px; padding-left: 14px; border-left: 1px solid var(--ck-line); }
+#nav .grp .glabel { color: var(--ck-dim); font-size: 11px; padding: 0 4px; }
+#nav a { color: var(--ck-dim); text-decoration: none; font-size: 12.5px; padding: 4px 10px; border-radius: 7px; white-space: nowrap; }
+#nav a:hover { color: var(--ck-fg); background: #26304200; background: rgba(255,255,255,.06); }
+#nav a.on { color: #10141d; background: var(--ck-accent); font-weight: 600; }
+#nav .right { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--ck-dim); }
+#nav .right label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; user-select: none; }
+
+#stage { flex: 1 1 auto; position: relative; min-height: 0; }
+.page { position: absolute; inset: 0; display: none; flex-direction: column; min-height: 0; }
+.page.active { display: flex; }
+
+/* hub(总览页,全 chrome) */
+#page-hub { overflow: auto; padding: 34px 40px 60px; }
+#page-hub .wrap { max-width: 980px; margin: 0 auto; }
+#page-hub h1 { font-size: 21px; margin: 0 0 6px; }
+#page-hub .sub { color: var(--ck-dim); margin: 0 0 26px; font-size: 13px; }
+.route-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rcard { background: var(--ck-bg2); border: 1px solid var(--ck-line); border-radius: 12px; padding: 18px 20px; }
+.rcard h2 { margin: 0 0 4px; font-size: 15px; color: var(--ck-fg); }
+.rcard .job { color: var(--ck-dim); font-size: 12.5px; margin: 0 0 12px; }
+.rcard h3 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ck-dim); }
+.rcard ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ck-fg); display: grid; gap: 3px; }
+.rcard .goto { margin-top: 14px; display: flex; gap: 8px; }
+.ckbtn { display: inline-block; border: 1px solid var(--ck-line); color: var(--ck-fg); background: none; border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; text-decoration: none; }
+.ckbtn:hover { border-color: var(--ck-accent); color: var(--ck-accent); }
+.ckbtn.primary { background: var(--ck-accent); border-color: var(--ck-accent); color: #10141d; font-weight: 600; }
+.ckbtn.primary:hover { color: #10141d; filter: brightness(1.08); }
+.hub-meta { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.hub-meta .rcard ul { color: var(--ck-dim); }
+#page-hub .reading { margin: 22px 0 0; padding: 12px 16px; border: 1px dashed var(--ck-line); border-radius: 10px; color: var(--ck-dim); font-size: 12.5px; }
+#page-hub .reading b { color: var(--ck-fg); }
+
+/* 每个原型页顶部的中文说明条 */
+.pagecap { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px; background: var(--ck-bg); border-bottom: 1px solid var(--ck-line); font-size: 12px; color: var(--ck-dim); }
+.pagecap .tag-app { background: #f3f5fa; color: #1c2230; font-weight: 600; border-radius: 6px; padding: 2px 8px; font-size: 11.5px; }
+.pagecap .protoctl { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+.pagecap .ckbtn { padding: 3px 10px; font-size: 11.5px; border-radius: 6px; }
+.notes-strip { flex: 0 0 auto; display: none; padding: 8px 16px; background: #1a2130; border-bottom: 1px solid var(--ck-line); font-size: 12px; color: var(--ck-dim); }
+body.notes .notes-strip { display: block; }
+.notes-strip b { color: var(--ck-warn); font-family: Consolas, monospace; }
+.notes-strip span { margin-right: 16px; white-space: nowrap; }
+
+/* App 框:浅色画布 + 边界 */
+.appframe { flex: 1 1 auto; min-height: 0; margin: 14px 16px 16px; border: 1px solid #39445c; border-radius: 10px; overflow: hidden; background: #eef1f7; display: flex; }
+
+/* ---------- App 层(浅色,对应产品) ---------- */
+.app { --bg: #eef1f7; --panel: #ffffff; --panel-2: #f5f7fb; --elev: #e9edf5; --line: #d9e0ec; --line-soft: #e8ecf4; --fg: #1c2230; --fg-dim: #4a5468; --fg-mute: #5f6a84; --accent: #3b6ef6; --accent-2: #7c3aed; --keep: #178a4c; --range: #0b7fc4; --warn: #b45309; --danger: #d4374e;
+  flex: 1 1 auto; min-width: 0; min-height: 0; background: var(--bg); color: var(--fg); font: 13px/1.55 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; display: flex; flex-direction: column; }
+.app button, .app input, .app textarea { font: inherit; color: inherit; }
+.app :focus-visible { outline: 2px solid rgba(59,110,246,.5); outline-offset: 1px; }
+.a-mono { font-family: Consolas, "SFMono-Regular", Menlo, monospace; }
+
+.a-header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px 12px; flex: 0 0 auto; }
+.a-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.a-brand { font-size: 14.5px; font-weight: 650; margin: 0; }
+.a-brand b { color: var(--accent); }
+.a-chip { background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-dim); padding: 2px 9px; border-radius: 99px; font-size: 11px; font-family: Consolas, monospace; white-space: nowrap; }
+.a-chip.dirty { color: var(--warn); border-color: #e2c193; }
+.a-chip.ok { color: var(--keep); border-color: #b5d9c2; }
+.a-spacer { flex: 1 1 auto; }
+.a-btn { border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); padding: 5px 11px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12.5px; }
+.a-btn:hover { background: var(--elev); border-color: #b9c6de; }
+.a-btn[disabled] { opacity: .45; cursor: not-allowed; }
+.a-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.a-btn-primary:hover { background: #2f5fe0; border-color: #2f5fe0; }
+.a-btn-danger { background: transparent; border-color: #e0aab4; color: var(--danger); }
+.a-btn-danger:hover { background: #faecef; border-color: var(--danger); }
+.a-btn-sm { padding: 3px 9px; font-size: 12px; border-radius: 7px; }
+
+/* baseline 四卡指标 */
+.a-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+.a-metric { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 9px; }
+.a-metric > label { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-mute); }
+.a-metric .val { font-family: Consolas, monospace; font-size: 13.5px; margin-top: 2px; }
+.a-metric .val small { color: var(--fg-dim); font-size: 11px; }
+.a-track { position: relative; height: 6px; background: var(--elev); border-radius: 99px; margin-top: 7px; overflow: hidden; }
+.a-track i { position: absolute; inset: 0 auto 0 0; background: #d8b271; border-radius: 99px; display: block; }
+.a-legend { margin-top: 5px; font-size: 10.5px; color: var(--fg-mute); }
+
+/* proposal 决策条 */
+.a-decision { display: flex; align-items: center; flex-wrap: wrap; margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; }
+.a-d-item { display: flex; align-items: baseline; gap: 7px; padding: 0 15px; }
+.a-d-item:first-child { padding-left: 0; }
+.a-d-item + .a-d-item { border-left: 1px solid var(--line); }
+.a-d-item label { font-size: 11.5px; color: var(--fg-mute); }
+.a-d-item .val { font-family: Consolas, monospace; font-size: 14px; font-weight: 600; }
+.a-d-item .val.save { color: var(--keep); font-weight: 700; }
+.a-d-item .val.pending { color: var(--warn); }
+/* 投影条:实心=当前占用(报告值),斜纹带=commit 后估算区间(est.) */
+.a-pbar { flex: 1 1 250px; min-width: 220px; padding-left: 15px; border-left: 1px solid var(--line); }
+.a-pbar .plabels { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--fg-mute); margin-bottom: 4px; flex-wrap: wrap; }
+.a-pbar .plabels b { color: var(--fg-dim); font-family: Consolas, monospace; font-weight: 600; }
+.a-pbar .plabels .delta { color: var(--keep); font-family: Consolas, monospace; font-weight: 700; }
+.a-pbar .ptrack { position: relative; height: 10px; background: var(--elev); border-radius: 99px; }
+.a-pbar .zone { position: absolute; top: 0; bottom: 0; }
+.a-pbar .kept { left: 0; background: #d8b271; border-radius: 99px 0 0 99px; }
+.a-pbar .free { background: repeating-linear-gradient(45deg, rgba(216,178,113,.8) 0 4px, rgba(216,178,113,.28) 4px 8px); border-radius: 0 99px 99px 0; }
+.a-pbar.mini { flex: 0 1 auto; padding: 0; border: 0; min-width: 240px; }
+.a-pbar.mini .ptrack { height: 8px; }
+
+/* selection 顶部细条 */
+.a-slim { display: flex; align-items: center; gap: 14px; margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font-size: 12.5px; color: var(--fg-dim); flex-wrap: wrap; }
+.a-slim b { font-family: Consolas, monospace; color: var(--fg); font-weight: 600; }
+.a-slim .ok { color: var(--keep); }
+
+/* 三栏 */
+.a-main { flex: 1 1 auto; min-height: 0; display: grid; gap: 1px; background: var(--line); grid-template-columns: 264px minmax(0, 1fr) 380px; }
+.a-pane { background: var(--bg); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.a-pane.ranges { background: var(--panel); }
+.a-pane.editor { background: var(--panel); }
+.a-pane-head { flex: 0 0 auto; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.a-pane-title { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--fg-mute); }
+.a-scroll { flex: 1 1 auto; overflow: auto; min-height: 0; scrollbar-width: thin; }
+.a-seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.a-seg button { border: 0; background: none; color: var(--fg-dim); padding: 3px 10px; border-radius: 6px; cursor: pointer; font-size: 11.5px; }
+.a-seg button[aria-pressed="true"] { background: var(--elev); color: var(--fg); }
+
+/* range 列表 */
+.a-rlist { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.a-ritem { position: relative; width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; gap: 3px; }
+.a-ritem:hover { background: var(--elev); }
+.a-ritem[aria-selected="true"] { border-color: var(--range); border-left-color: var(--range); background: #eaf4fb; }
+.a-ritem .r1 { display: flex; align-items: center; gap: 6px; font-family: Consolas, monospace; font-size: 12px; }
+.a-ritem .rid { color: var(--range); font-weight: 700; }
+.a-ritem .refs { color: var(--fg-mute); font-size: 11px; }
+.a-ritem .save { margin-left: auto; color: var(--keep); font-size: 11px; font-weight: 700; }
+.a-ritem .rsum { color: var(--fg-dim); font-size: 11.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.a-ritem .meta { color: var(--fg-mute); font-size: 10.5px; font-family: Consolas, monospace; display: flex; gap: 10px; flex-wrap: wrap; }
+.a-topic { color: var(--accent-2); font-size: 11px; font-family: Consolas, monospace; }
+.a-udot { width: 6px; height: 6px; border-radius: 99px; background: var(--warn); display: inline-block; }
+.a-pend { color: var(--warn); font-size: 10.5px; font-family: "Segoe UI", sans-serif; }
+.a-pend::before { content: "● "; font-size: 8px; vertical-align: 1px; }
+.a-rev { color: var(--keep); font-size: 10.5px; font-family: "Segoe UI", sans-serif; }
+
+/* timeline */
+.a-tl { padding: 10px 12px 40px; display: flex; flex-direction: column; gap: 8px; }
+.a-group { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.a-group.keepg { background: transparent; border-color: var(--line-soft); }
+.a-ghead { width: 100%; text-align: left; cursor: pointer; display: grid; grid-template-columns: 18px auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 10px; background: var(--panel-2); border: 0; border-bottom: 1px solid var(--line-soft); }
+.a-ghead:hover { background: var(--elev); }
+.a-group.sel { border-color: var(--range); box-shadow: 0 0 0 1px rgba(11,127,196,.35); }
+.a-group.sel .a-ghead { background: #eaf4fb; }
+.a-chev { color: var(--fg-mute); font-size: 10px; text-align: center; }
+.a-gid { font-family: Consolas, monospace; font-weight: 700; color: var(--range); font-size: 12px; }
+.a-group.keepg .a-gid { color: var(--keep); }
+.a-gsum { color: var(--fg-dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a-gstat { font-family: Consolas, monospace; font-size: 11px; color: var(--fg-mute); white-space: nowrap; }
+.a-gstat em { color: var(--keep); font-style: normal; font-weight: 700; }
+.a-gbody { padding: 3px; }
+.a-more { padding: 6px 10px; border-top: 1px solid var(--line-soft); color: var(--fg-mute); font-size: 11px; font-style: italic; }
+
+/* atom 行(review 用) */
+.a-atom { display: grid; grid-template-columns: 58px minmax(0, 1fr) 66px; gap: 10px; align-items: start; padding: 5px 8px; }
+.a-atom + .a-atom { border-top: 1px solid var(--line-soft); }
+.a-atom .aref { font-family: Consolas, monospace; font-size: 11.5px; color: var(--accent-2); }
+.a-atom .abody { font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.5; color: var(--fg-dim); white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.a-atom .abody.click { cursor: pointer; }
+.a-atom .abody.click:hover { color: var(--fg); background: #f2f5fb; border-radius: 4px; }
+.a-atom .atok { font-family: Consolas, monospace; font-size: 11px; color: var(--fg-mute); text-align: right; }
+.a-tag { font-family: Consolas, monospace; font-size: 10px; padding: 0 5px; border-radius: 5px; background: var(--elev); color: var(--fg-dim); border: 1px solid var(--line-soft); margin-right: 4px; }
+
+/* atom 行(selection 用:可选) */
+.a-satom { display: grid; grid-template-columns: 16px 58px minmax(0, 1fr) 88px 46px; gap: 8px; align-items: center; padding: 5px 8px; cursor: pointer; border: 1px solid transparent; border-radius: 7px; }
+.a-satom + .a-satom { margin-top: 2px; }
+.a-satom:hover { background: var(--panel-2); }
+.a-satom .cursor { color: transparent; font-size: 11px; text-align: center; }
+.a-satom.cursor .cursor { color: var(--accent); }
+.a-satom .aref { font-family: Consolas, monospace; font-size: 11.5px; color: var(--accent-2); }
+.a-satom .abody { font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.4; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a-satom .atok { font-family: Consolas, monospace; font-size: 11px; color: var(--fg-mute); text-align: right; }
+.a-satom.selected { background: #eaf1fe; border-color: #c4d6fb; }
+.a-satom.selected .aref { color: var(--accent); font-weight: 700; }
+.a-satom.protected { opacity: .55; cursor: not-allowed; }
+.a-satom .state { font-size: 10.5px; font-family: Consolas, monospace; }
+.a-satom.selected .state { color: var(--accent); }
+.a-satom.protected .state { color: var(--fg-mute); }
+
+/* 投影卡 */
+.a-pcard { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 11px 13px; }
+.a-pcard .phead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.a-pcard .pid { font-family: Consolas, monospace; font-weight: 700; color: var(--range); }
+.a-pcard .ptopic { color: var(--fg); font-size: 12.5px; font-weight: 600; }
+.a-pcard .pmeta { margin-left: auto; font-family: Consolas, monospace; font-size: 11px; color: var(--fg-mute); white-space: nowrap; }
+.a-pcard .ptext { color: var(--fg-dim); font-size: 12.5px; line-height: 1.6; }
+.a-pcard .pactions { margin-top: 9px; display: flex; gap: 8px; }
+.a-pcard.pend { border-left-color: var(--warn); border-style: dashed; background: #fdf6ec; }
+.a-pcard.pend .pwarnline { color: var(--warn); font-size: 12px; }
+.a-proj-note { color: var(--fg-mute); font-size: 11px; text-align: center; padding: 1px 0 3px; }
+
+/* 编辑器 */
+.a-epad { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.a-etitle { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.a-etitle .eid { font-family: Consolas, monospace; font-size: 15px; font-weight: 700; color: var(--range); }
+.a-etitle .erefs { font-family: Consolas, monospace; font-size: 11.5px; color: var(--fg-mute); }
+.a-estats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.a-estat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+.a-estat label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-mute); }
+.a-estat span { font-family: Consolas, monospace; font-size: 12px; }
+.a-field label { display: flex; align-items: center; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-mute); margin-bottom: 4px; }
+.a-field label .count { margin-left: auto; text-transform: none; letter-spacing: 0; font-family: Consolas, monospace; }
+.a-field input, .a-field textarea { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; font-family: Consolas, monospace; font-size: 12px; line-height: 1.6; }
+.a-field textarea { min-height: 120px; }
+.a-field input:focus, .a-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,110,246,.25); }
+.a-field.invalid textarea { border-color: var(--danger); }
+.a-erow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line-soft); margin: 0 -14px; padding: 10px 14px; }
+.a-erow.static { position: static; margin: 0; padding: 0; border: 0; }
+.a-hint { color: var(--fg-mute); font-size: 11px; }
+.a-checkline { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12px; cursor: pointer; user-select: none; }
+.a-checkline input { accent-color: var(--keep); }
+.a-nextstep { display: none; gap: 10px; align-items: flex-start; background: #ecf7f0; border: 1px solid #b5d9c2; border-radius: 8px; padding: 9px 12px; font-size: 12.5px; color: var(--fg-dim); }
+.a-nextstep.show { display: flex; }
+.a-nextstep b { color: var(--keep); }
+.a-kbd { font-family: Consolas, monospace; font-size: 11px; background: var(--elev); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; color: var(--fg-dim); }
+
+/* 横幅 / 抽屉 / 对话框 */
+.a-banner { display: none; padding: 8px 16px; font-size: 12.5px; background: #fbeef0; border-bottom: 1px solid var(--danger); color: var(--danger); }
+.a-banner.show { display: block; }
+.a-drawer-bg { position: fixed; inset: 0; background: rgba(23,28,38,.45); display: none; z-index: 60; }
+.a-drawer-bg.show { display: block; }
+.a-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 92vw); background: #ffffff; border-left: 1px solid var(--line); box-shadow: -12px 0 34px rgba(23,28,38,.18); z-index: 61; display: none; flex-direction: column; }
+.a-drawer.show { display: flex; }
+.a-drawer .dhead { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; }
+.a-drawer .dhead .t { font-family: Consolas, monospace; font-weight: 700; color: var(--accent-2); }
+.a-drawer .dhead .m { font-size: 11px; color: var(--fg-mute); font-family: Consolas, monospace; }
+.a-drawer .dbody { flex: 1; overflow: auto; padding: 14px 16px; font-family: Consolas, monospace; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; color: var(--fg-dim); }
+.a-drawer .dfoot { padding: 8px 16px; border-top: 1px solid var(--line-soft); font-size: 11px; color: var(--fg-mute); }
+.a-dialog-bg { position: fixed; inset: 0; background: rgba(23,28,38,.45); display: none; place-items: center; z-index: 70; padding: 20px; }
+.a-dialog-bg.show { display: grid; }
+.a-dialog { background: #ffffff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 18px 50px rgba(23,28,38,.25); padding: 16px 18px; min-width: 330px; max-width: 460px; color: var(--fg); }
+.a-dialog h3 { margin: 0 0 8px; font-size: 13px; }
+.a-dialog p { margin: 0; color: var(--fg-dim); font-size: 12.5px; }
+.a-dialog .warnbox { margin: 10px 0 0; border: 1px solid #e2c193; background: #fdf6ec; border-radius: 8px; padding: 8px 11px; font-size: 12px; color: var(--warn); display: grid; gap: 3px; }
+.a-dialog .warnbox b { font-family: Consolas, monospace; }
+.a-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.a-toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 12px); background: #1e2532; color: #d5dcec; border: 1px solid #39445c; padding: 8px 14px; border-radius: 8px; font-size: 12px; opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 99; }
+.a-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.app[data-dead] .a-field, .app[data-dead] .a-btn, .app[data-dead] .a-ritem, .app[data-dead] .a-satom { pointer-events: none; opacity: .55; }
+.a-empty { color: var(--fg-mute); text-align: center; padding: 36px 16px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <span class="logo"><em>原型</em> · pi-midcompact WebGUI UX 提案</span>
+  <span class="grp">
+    <a href="#/hub" data-route="hub">总览</a>
+  </span>
+  <span class="grp"><span class="glabel">Review(审阅 Agent 草案)</span>
+    <a href="#/review/baseline" data-route="review/baseline">现状</a>
+    <a href="#/review/proposal" data-route="review/proposal">提案</a>
+  </span>
+  <span class="grp"><span class="glabel">Selection(自选范围)</span>
+    <a href="#/select/baseline" data-route="select/baseline">现状</a>
+    <a href="#/select/proposal" data-route="select/proposal">提案</a>
+  </span>
+  <span class="right"><label><input type="checkbox" id="notes-toggle"> 变更标注</label></span>
+</nav>
+
+<div id="stage">
+
+  <!-- ==================== 总览 ==================== -->
+  <div class="page active" id="page-hub">
+    <div class="wrap">
+      <h1>WebGUI UX 提案总览</h1>
+      <p class="sub">WebGUI 有两个视图、共用一套界面:<b>Review</b> 审阅 Agent 起草的压缩方案,<b>Selection</b> 由用户自己圈定压缩范围。下面先看每个视图的问题与提案方向,再进入对应页面查看可交互原型。</p>
+
+      <div class="route-cards">
+        <div class="rcard">
+          <h2>① Review — 审阅 /midcompact:review-webui</h2>
+          <p class="job">用户任务:判断“这份草案能不能 commit”。</p>
+          <h3>现状问题</h3>
+          <ul>
+            <li>看不到被压缩的原文,无法核对摘要忠实性</li>
+            <li>看不到压缩后的结果,只能脑补 commit 效果</li>
+            <li>没有汇总决策数字;空 summary 的坑要到终端 commit 才撞上</li>
+          </ul>
+          <h3>提案要点</h3>
+          <ul>
+            <li>决策条:ranges / 覆盖 / −chars% / pending 一行看全</li>
+            <li>Timeline 加 <b>Raw ⇄ Projected</b> 切换,直视 commit 后的上下文</li>
+            <li>点 atom 弹<b>原文抽屉</b>(新增 GET /api/atom/:ref)</li>
+            <li>pending 前置到列表、投影卡、关闭对话框</li>
+            <li>reviewed 清单 + 吸底操作行 + “回终端 commit”指引</li>
+            <li>锚点条 → <b>now → after commit 估算投影条</b>(与 Selection 共用组件)</li>
+          </ul>
+          <div class="goto">
+            <a class="ckbtn" href="#/review/baseline">现状(对照)</a>
+            <a class="ckbtn primary" href="#/review/proposal">查看提案 →</a>
+          </div>
+        </div>
+
+        <div class="rcard">
+          <h2>② Selection — 圈选 /midcompact:select-webui</h2>
+          <p class="job">用户任务:选出要压缩的 atom,存成草案。</p>
+          <h3>现状问题</h3>
+          <ul>
+            <li>核心操作纯鼠标,大 session 圈选很慢</li>
+            <li>Add / Keep / 不选 三态模型,但 KEEP 与“不选”投影上等价,徒增心智负担</li>
+            <li>右栏文案是系统语言(“normalized, non-overlapping ranges… DraftPlan”)</li>
+          </ul>
+          <h3>提案要点</h3>
+          <ul>
+            <li><b>合并为两态</b>:选中=压缩,未选=保留(KEEP 由“不选”天然表达)</li>
+            <li><b>键盘圈选</b>:↑↓ 移光标,Space 选中,G 整组切换</li>
+            <li>左侧实时显示“将生成哪些 range”,右侧实时汇总</li>
+            <li>顶部细汇总内嵌 <b>“if committed now” 估算投影条</b>,随圈选实时变化</li>
+          </ul>
+          <div class="goto">
+            <a class="ckbtn" href="#/select/baseline">现状(对照)</a>
+            <a class="ckbtn primary" href="#/select/proposal">查看提案 →</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="hub-meta">
+        <div class="rcard">
+          <h2>③ 全局改动(体现在两个提案页)</h2>
+          <ul>
+            <li>会话已在终端关闭 → 页面顶部横幅 + 只读(提案页有“模拟”按钮)</li>
+            <li>浅色/深色主题保留,微标签对比度提到 WCAG AA</li>
+            <li>文案去系统腔:DraftPlan → draft/plan,删“provider usage fact”类免责句</li>
+            <li><b>契约修订</b>:允许“展示级”token 估算(标注 est. + 不确定带 + 假设说明),事实 chars 并行保留</li>
+          </ul>
+        </div>
+        <div class="rcard">
+          <h2>④ 明确不做(契约约束)</h2>
+          <ul>
+            <li>浏览器里不放 commit 按钮 — 人工门禁留在终端</li>
+            <li>估算仅止于展示,无否决权 — commit 门禁永远基于事实(pending/边界/受保护);数字错误只会“看着不准”,不会导致错误提交</li>
+            <li>不做 remove 撤销 — 需要新增服务端契约,收益不匹配</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="reading"><b>阅读说明:</b>顶部深色条与总览页是<b>原型导航/解说层(中文)</b>;进入子页后,浅色区域是 <b>App 界面(英文,对应产品观感)</b>。“提案”页的交互可操作,“现状”页仅作对照示意。勾选右上角“变更标注”会在提案页显示编号说明。</p>
+    </div>
+  </div>
+
+  <!-- ==================== Review · 现状 ==================== -->
+  <div class="page" id="page-review-baseline">
+    <div class="pagecap">
+      <span class="tag-app">App 界面 · Review 现状</span>
+      <span>对照基线:四张指标卡、纯 Raw timeline、空 summary 无任何标记、关闭对话框不检查 pending。交互仅示意。</span>
+    </div>
+    <div class="appframe">
+      <div class="app" id="app-rb">
+        <div class="a-header">
+          <div class="a-bar">
+            <h1 class="a-brand"><b>Midcompact</b> Review</h1>
+            <span class="a-chip">draft v4 · 2 ranges</span>
+            <span class="a-spacer"></span>
+            <button class="a-btn a-btn-sm ck-inert">⟳</button>
+            <button class="a-btn a-btn-sm ck-inert">☾</button>
+            <button class="a-btn a-btn-sm ck-inert">?</button>
+            <button class="a-btn a-btn-sm a-btn-primary" id="rb-close">Close &amp; return</button>
+          </div>
+          <div class="a-metrics">
+            <div class="a-metric"><label>Pi reported anchor</label><div class="val">160k / 200k <small>(80%)</small></div><div class="a-track"><i style="width:80%"></i></div><div class="a-legend">provider usage fact · no local token estimate</div></div>
+            <div class="a-metric"><label>Draft ranges</label><div class="val">2 <small>1 pending</small></div><div class="a-legend">revision <b>4</b></div></div>
+            <div class="a-metric"><label>Content chars</label><div class="val">31.0k</div><div class="a-legend">42 selected atoms</div></div>
+            <div class="a-metric"><label>Images</label><div class="val">2</div><div class="a-legend">payload facts only</div></div>
+          </div>
+        </div>
+        <div class="a-main">
+          <section class="a-pane ranges">
+            <div class="a-pane-head"><span class="a-pane-title">Ranges</span><span class="a-spacer"></span><button class="a-btn a-btn-sm ck-inert">Filter (/)</button></div>
+            <div class="a-scroll"><div class="a-rlist" id="rb-rlist"></div></div>
+          </section>
+          <section class="a-pane">
+            <div class="a-pane-head"><span class="a-pane-title">Timeline</span><span class="a-chip">73 atoms</span><span class="a-spacer"></span><span class="a-seg ck-inert"><button aria-pressed="true">All</button><button>Compressed</button><button>Kept</button></span><button class="a-btn a-btn-sm ck-inert">Expand all</button></div>
+            <div class="a-scroll"><div class="a-tl" id="rb-timeline"></div></div>
+          </section>
+          <aside class="a-pane editor">
+            <div class="a-scroll"><div class="a-epad" id="rb-editor"></div></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Review · 提案 ==================== -->
+  <div class="page" id="page-review-proposal">
+    <div class="pagecap">
+      <span class="tag-app">App 界面 · Review 提案</span>
+      <span>交互可用:切 Raw ⇄ Projected、点 atom 看原文、给 d2 补 summary 后保存、点 Close &amp; return。</span>
+      <span class="protoctl"><span>原型控制(非设计):</span><button class="ckbtn" id="rp-dead-btn">模拟会话已关闭</button></span>
+    </div>
+    <div class="notes-strip">
+      <span><b>1</b> 决策条替代四张卡:commit 相关的汇总数字,只用事实 chars</span>
+      <span><b>2</b> Raw ⇄ Projected:直视 commit 后模型看到的上下文</span>
+      <span><b>3</b> pending 三处前置:列表标记 / 投影警告卡 / 关闭对话框</span>
+      <span><b>4</b> 原文抽屉:新 GET /api/atom/:ref,现在只有 700 字符截断 preview</span>
+      <span><b>5</b> reviewed 清单 + 吸底操作行 + 下一步指引</span>
+      <span><b>6</b> 文案去系统腔(对比现状页的 “provider usage fact” 等)</span>
+      <span><b>7</b> 锚点条升级为估算投影条:实心=commit 后(点估计),斜纹=被释放;不确定度只放在数字与悬停说明里;需修订 SPEC 的“无估算”约束为“仅展示级”</span>
+    </div>
+    <div class="appframe">
+      <div class="app" id="app-rp">
+        <div class="a-banner" id="rp-banner">⚠ Session closed in the terminal — this page is now read-only. You can close this tab.</div>
+        <div class="a-header">
+          <div class="a-bar">
+            <h1 class="a-brand"><b>Midcompact</b> Review</h1>
+            <span class="a-chip" id="rp-draft">draft v4 · 2 ranges</span>
+            <span class="a-chip dirty" id="rp-dirty" hidden>1 unsaved</span>
+            <span class="a-spacer"></span>
+            <button class="a-btn a-btn-sm ck-inert">⟳</button>
+            <button class="a-btn a-btn-sm ck-inert">?</button>
+            <button class="a-btn a-btn-sm a-btn-primary" id="rp-close">Close &amp; return</button>
+          </div>
+          <div class="a-decision">
+            <div class="a-d-item"><label>draft</label><span class="val" id="rp-ds-ranges">2 ranges</span></div>
+            <div class="a-d-item"><label>coverage</label><span class="val" id="rp-ds-cov">42 / 73 atoms</span></div>
+            <div class="a-d-item"><label>anchor content</label><span class="val save" id="rp-ds-save">−30.2k chars (−46%)</span></div>
+            <div class="a-d-item"><label>pending</label><span class="val pending" id="rp-ds-pend">1</span></div>
+            <div class="a-pbar" title="Estimate only: ~0.75 tok/CJK char · ~0.25 tok/ASCII char · ≈1.1k tok/image — the provider's report is the final authority.">
+              <div class="plabels">
+                <span>now <b>160k tok</b> · 80% (reported by Pi)</span>
+                <span>after commit <b id="rp-pb-post">…</b> <span class="delta" id="rp-pb-delta"></span></span>
+              </div>
+              <div class="ptrack" title="solid = after commit (point estimate) · hatched = freed by commit. Estimate ±15%: ~0.75 tok/CJK char · ~0.25 tok/ASCII char · ≈1.1k tok/image — the provider's report is the final authority.">
+                <i class="zone kept" id="rp-pb-kept"></i><i class="zone free" id="rp-pb-free"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-main">
+          <section class="a-pane ranges">
+            <div class="a-pane-head"><span class="a-pane-title">Ranges</span><span class="a-spacer"></span><button class="a-btn a-btn-sm ck-inert">Filter (/)</button></div>
+            <div class="a-scroll"><div class="a-rlist" id="rp-rlist"></div></div>
+          </section>
+          <section class="a-pane">
+            <div class="a-pane-head">
+              <span class="a-pane-title">Timeline</span>
+              <span class="a-seg"><button id="rp-mode-raw" aria-pressed="true">Raw</button><button id="rp-mode-proj" aria-pressed="false">Projected</button></span>
+              <span class="a-chip">73 atoms</span>
+              <span class="a-spacer"></span>
+              <button class="a-btn a-btn-sm ck-inert">Expand all</button>
+            </div>
+            <div class="a-scroll">
+              <div class="a-tl" id="rp-tl-raw"></div>
+              <div class="a-tl" id="rp-tl-proj" style="display:none"></div>
+            </div>
+          </section>
+          <aside class="a-pane editor">
+            <div class="a-scroll"><div class="a-epad" id="rp-editor"></div></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Selection · 现状 ==================== -->
+  <div class="page" id="page-select-baseline">
+    <div class="pagecap">
+      <span class="tag-app">App 界面 · Selection 现状</span>
+      <span>对照基线:每行两个按钮(Add / Keep)的三态模型、纯鼠标操作、右栏系统腔文案。交互仅示意。</span>
+    </div>
+    <div class="appframe">
+      <div class="app" id="app-sb">
+        <div class="a-header">
+          <div class="a-bar">
+            <h1 class="a-brand"><b>Midcompact</b> Selection</h1>
+            <span class="a-chip">draft v1 · 0 ranges</span>
+            <span class="a-spacer"></span>
+            <button class="a-btn a-btn-sm a-btn-primary ck-inert">Save selection</button>
+          </div>
+          <div class="a-metrics">
+            <div class="a-metric"><label>Pi reported anchor</label><div class="val">160k / 200k <small>(80%)</small></div><div class="a-track"><i style="width:80%"></i></div><div class="a-legend">provider usage fact · no local token estimate</div></div>
+            <div class="a-metric"><label>Draft ranges</label><div class="val">0 <small>ready for review</small></div><div class="a-legend">revision <b>1</b></div></div>
+            <div class="a-metric"><label>Selected content chars</label><div class="val">0 / 268k <small>(0% of anchor)</small></div><div class="a-track"><i style="width:0%"></i></div><div class="a-legend">up to 0% fewer anchor chars · actual is lower after summaries</div></div>
+            <div class="a-metric"><label>Images</label><div class="val">0</div><div class="a-legend">payload facts only</div></div>
+          </div>
+        </div>
+        <div class="a-main">
+          <section class="a-pane ranges">
+            <div class="a-pane-head"><span class="a-pane-title">Proposed ranges</span></div>
+            <div class="a-scroll"><div class="a-rlist" id="sb-runs"></div></div>
+          </section>
+          <section class="a-pane">
+            <div class="a-pane-head"><span class="a-pane-title">Timeline</span><span class="a-chip">13 atoms</span><span class="a-spacer"></span><button class="a-btn a-btn-sm ck-inert">Expand all</button></div>
+            <div class="a-scroll"><div class="a-tl" id="sb-timeline"></div></div>
+          </section>
+          <aside class="a-pane editor">
+            <div class="a-scroll"><div class="a-epad" id="sb-panel"></div></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Selection · 提案 ==================== -->
+  <div class="page" id="page-select-proposal">
+    <div class="pagecap">
+      <span class="tag-app">App 界面 · Selection 提案</span>
+      <span>交互可用:点 atom 行或 <b>↑↓</b> 移光标、<b>Space</b> 选中/取消、<b>G</b> 整组切换、左栏实时 runs、Save selection。</span>
+    </div>
+    <div class="notes-strip">
+      <span><b>1</b> 三态 → 两态:选中=压缩,未选=保留;去掉 per-atom 的 Add/Keep 按钮对。🔒 = SPEC protected atom(生产 UI 叫 “not compressible”,此处改为更直白的 can’t compress)</span>
+      <span><b>2</b> 键盘圈选:↑↓ 光标、Space 切换、G 整组(受保护 atom 自动跳过)</span>
+      <span><b>3</b> 左栏实时显示将生成的 ranges(连续选中段自动成段)</span>
+      <span><b>4</b> 右栏实时汇总 + 用户语言文案(替代 “normalized, non-overlapping…”)</span>
+      <span><b>5</b> 顶部一条细汇总替代四张指标卡</span>
+      <span><b>6</b> “if committed now” 估算投影条与 Review 共用同一组件,随圈选实时更新</span>
+    </div>
+    <div class="appframe">
+      <div class="app" id="app-sp" tabindex="-1">
+        <div class="a-header">
+          <div class="a-bar">
+            <h1 class="a-brand"><b>Midcompact</b> Selection</h1>
+            <span class="a-chip" id="sp-selchip">7 selected · 163.5k chars</span>
+            <span class="a-chip ok" id="sp-savedchip" hidden>saved · v2</span>
+            <span class="a-spacer"></span>
+            <button class="a-btn a-btn-sm a-btn-primary" id="sp-save">Save selection</button>
+          </div>
+          <div class="a-slim">
+            <span>selected <b id="sp-s-atoms">7</b> atoms</span>
+            <span><b id="sp-s-chars">13.8k</b> chars</span>
+            <span>will become <b id="sp-s-runs">2</b> ranges</span>
+            <span class="a-spacer"></span>
+            <span class="ok" id="sp-s-share">≈61% of anchor content selected</span>
+            <div class="a-pbar mini" title="Estimate only: ~0.75 tok/CJK char · ~0.25 tok/ASCII char — summaries drafted later by the Agent are not yet counted.">
+              <div class="plabels">
+                <span>if committed now</span>
+                <span><b id="sp-pb-post">…</b> <span class="delta" id="sp-pb-delta"></span></span>
+              </div>
+              <div class="ptrack" title="solid = after commit (point estimate) · hatched = freed if committed now. Summaries drafted later by the Agent are not yet counted.">
+                <i class="zone kept" id="sp-pb-kept"></i><i class="zone free" id="sp-pb-free"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-main">
+          <section class="a-pane ranges">
+            <div class="a-pane-head"><span class="a-pane-title">Will become</span></div>
+            <div class="a-scroll"><div class="a-rlist" id="sp-runs"></div></div>
+          </section>
+          <section class="a-pane">
+            <div class="a-pane-head"><span class="a-pane-title">Timeline</span><span class="a-chip">13 atoms</span><span class="a-spacer"></span><span class="a-hint">click row · <span class="a-kbd">↑↓</span> move · <span class="a-kbd">Space</span> toggle · <span class="a-kbd">G</span> group</span></div>
+            <div class="a-scroll" id="sp-tl-scroll"><div class="a-tl" id="sp-timeline"></div></div>
+          </section>
+          <aside class="a-pane editor">
+            <div class="a-scroll"><div class="a-epad" id="sp-panel"></div></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /stage -->
+
+<!-- 抽屉与对话框(review 提案用) -->
+<div class="a-drawer-bg" id="drawer-bg"></div>
+<div class="a-drawer" id="drawer">
+  <div class="dhead"><span class="t" id="dw-ref">a0004</span><span class="m" id="dw-meta"></span><span class="a-spacer"></span><button class="a-btn a-btn-sm" id="dw-close">✕</button></div>
+  <div class="dbody" id="dw-body"></div>
+  <div class="dfoot">Full text served from the frozen anchor via new <span class="a-mono">GET /api/atom/:ref</span> — today the page only receives a 700-char truncated preview.</div>
+</div>
+
+<div class="a-dialog-bg" id="rb-dialog">
+  <div class="a-dialog">
+    <h3>Unsaved changes</h3>
+    <p>Save the current DraftPlan before closing this workbench?</p>
+    <div class="actions">
+      <button class="a-btn" id="rb-stay">Stay</button>
+      <button class="a-btn a-btn-danger" id="rb-discard">Discard</button>
+      <button class="a-btn a-btn-primary" id="rb-saveclose">Save &amp; close</button>
+    </div>
+  </div>
+</div>
+
+<div class="a-dialog-bg" id="rp-dialog">
+  <div class="a-dialog">
+    <h3>Close review?</h3>
+    <p id="rp-dialog-line">All ranges are saved. Nothing is applied yet — the draft waits in the terminal.</p>
+    <div class="warnbox" id="rp-dialog-warn" hidden>
+      <b><span id="rp-warn-count">1</span> range still has an empty summary</b>
+      <span id="rp-warn-list">d2 — /midcompact:commit will refuse it until a summary is written.</span>
+    </div>
+    <div class="actions">
+      <button class="a-btn" id="rp-stay">Stay</button>
+      <button class="a-btn a-btn-danger" id="rp-discard">Discard edits</button>
+      <button class="a-btn" id="rp-fix">Fix pending</button>
+      <button class="a-btn a-btn-primary" id="rp-close-ok">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="a-toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================== helpers ============================== */
+const $ = id => document.getElementById(id);
+const fmt = n => Math.abs(n) >= 1000 ? (n / 1000).toFixed(n % 1000 ? 1 : 0) + "k" : String(Math.round(n));
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
+document.addEventListener("click", e => { if (e.target.closest(".ck-inert")) toast("原型:此按钮未接线(仅示意)"); });
+
+/* ============================== 路由 ============================== */
+const ROUTES = ["hub", "review/baseline", "review/proposal", "select/baseline", "select/proposal"];
+function route() {
+  let r = (location.hash || "#/hub").replace(/^#\//, "");
+  if (!ROUTES.includes(r)) r = "hub";
+  ROUTES.forEach(x => {
+    $("page-" + x.replace("/", "-")).classList.toggle("active", x === r);
+  });
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.route === r));
+  if (r === "select/proposal") $("app-sp").focus({ preventScroll: true });
+}
+window.addEventListener("hashchange", route);
+$("notes-toggle").addEventListener("change", e => document.body.classList.toggle("notes", e.target.checked));
+
+/* ============================== 共用假数据(review) ============================== */
+const RANGES = {
+  d1: { id: "d1", startRef: "a0004", endRef: "a0035", topic: "pi framework exploration for TUI fix",
+    summary: "Early framework exploration: read the full old review-ui/index/plan/types/telemetry sources and pi framework internals (editorContainer/dock layout, overlay API, rpc-mode UI capabilities). Key conclusion: a non-overlay ctx.ui.custom expands to the natural height of its render() and crushes the transcript to minSize=1 — the root cause of the full-screen takeover; fix is overlay mode + maxHeight constraint, implemented in review-ui.ts.",
+    atoms: 32, orig: 150000, repl: 2500, pending: false, reviewed: true, dirty: false },
+  d2: { id: "d2", startRef: "a0053", endRef: "a0062", topic: "test contract fix for overlay custom",
+    summary: "", atoms: 10, orig: 60000, repl: 0, pending: true, reviewed: false, dirty: false },
+};
+const ANCHOR_ATOMS = 73, ANCHOR_CHARS = 268000;
+const GROUPS = [
+  { key: null, label: "context before first user message", refs: "a0001 → a0003", count: 3, chars: 6000,
+    rows: [["a0001", "system", "session start — environment, tools, repo layout", "2.4k"],
+           ["a0002", "tool_exchange", 'Assistant: bash({{"command":"ls -la && cat package.json"}}) Tool result (bash): .git/ …', "2.1k"]], more: 1 },
+  { key: "d1", label: "pi framework exploration for TUI fix", refs: "a0004 → a0035", count: 32, chars: 150000,
+    rows: [["a0004", "tool_exchange", 'Assistant: read({{"path":"src/review-ui.ts"}}) Tool result (read): import type {{ ExtensionCommandContext }} from "@earendil-works/pi-coding-agent"; import {{ Key, matchesKey …', "14.2k", true],
+           ["a0005", "tool_exchange", 'Assistant: Now let me understand the broader context — the index.ts to see how review is invoked and what modes exist. read({{"path":"src/index.ts"}}) …', "31k"],
+           ["a0006", "tool_exchange", 'Assistant: Let me check what ctx.ui.custom does. bash({{"command":"rg -n \\"ctx.ui.custom\\" …', "8.9k"],
+           ["a0007", "assistant", "Key conclusion: the old UI ran in non-overlay mode; its render() natural height expanded until the dock shrank the transcript to minSize=1.", "1.2k"]], more: 28 },
+  { key: null, label: "“the overlay takes over the whole screen — keep this diagnosis verbatim”", refs: "a0036 → a0052", count: 17, chars: 12000, keep: true,
+    rows: [["a0036", "user", "The overlay takes over the whole screen and the transcript disappears — figure out why, and keep the diagnosis notes around.", "0.9k"],
+           ["a0037", "assistant", "Diagnosis: dock shrink=1 minSize=1 … (verbatim decision context — stays raw in every projection)", "2.8k"]], more: 15 },
+  { key: "d2", label: "test contract fix for overlay custom", refs: "a0053 → a0062", count: 10, chars: 60000,
+    rows: [["a0053", "tool_exchange", 'Assistant: bash({{"command":"npm run typecheck:contract"}}) Tool result (bash): test/mock build failed — overlay custom contract mismatch …', "22k"],
+           ["a0054", "assistant", "After the TUI refactor the test build failed; the mock must mirror the real ExtensionCommandContext surface …", "3.1k"]], more: 8 },
+  { key: null, label: "recent work (last turn)", refs: "a0063 → a0073", count: 11, chars: 40000, keep: true,
+    rows: [["a0073", "assistant", 'Commit 3f2a91c “fix(tui): overlay mode + maxHeight for custom UI” — pushed; CI green.', "0.9k"]], more: 10 },
+];
+const atomRowHtml = (r, clickable) =>
+  `<div class="a-atom"><span class="aref">${r[0]}</span><div><span class="a-tag">${r[1]}</span><div class="abody${clickable ? " click" : ""}"${clickable ? ` data-orig="${r[0]}"` : ""}>${r[2]}</div></div><span class="atok">${r[3]} chars</span></div>`;
+const moreRow = n => `<div class="a-more">⋯ ${n} more atoms(原型示意,实际应用中完整显示)</div>`;
+
+/* ============================== Review · 现状 ============================== */
+(function initReviewBaseline() {
+  const list = Object.values(RANGES);
+  $("rb-rlist").innerHTML = list.map(r => `
+    <div class="a-ritem" aria-selected="${r.id === "d1"}">
+      <div class="r1"><span class="rid">${r.id}</span><span class="refs">${r.startRef}→${r.endRef}</span><span class="save">−${fmt(r.orig - r.repl)}</span></div>
+      <span class="a-topic">${r.topic}</span>
+      <div class="rsum">${r.summary || "&nbsp;"}</div>
+      <div class="meta">${r.atoms} atoms · ${fmt(r.orig)}→${fmt(r.repl)} chars</div>
+    </div>`).join("");
+  $("rb-timeline").innerHTML = GROUPS.map(g => g.key ? `
+    <section class="a-group ${g.key === "d1" ? "sel" : ""}">
+      <div class="a-ghead"><span class="a-chev">▶</span><span class="a-gid">${g.key}</span><span class="a-gsum">${g.label}</span><span class="a-gstat">${g.count} atoms · ${fmt(g.chars)} chars <em>−${fmt(g.chars - RANGES[g.key].repl)}</em></span></div>
+      <div class="a-gbody">${g.rows.map(r => atomRowHtml(r)).join("")}${moreRow(g.more)}</div>
+    </section>` : `
+    <section class="a-group keepg">
+      <div class="a-ghead"><span class="a-chev">▶</span><span class="a-gid">KEEP</span><span class="a-gsum">${g.refs} verbatim</span><span class="a-gstat">${g.count} atoms · ${fmt(g.chars)} chars</span></div>
+      <div class="a-gbody">${g.rows.map(r => atomRowHtml(r)).join("")}${moreRow(g.more)}</div>
+    </section>`).join("");
+  const r = RANGES.d1;
+  $("rb-editor").innerHTML = `
+    <div class="a-etitle"><span class="eid">${r.id}</span><span class="erefs">${r.startRef} → ${r.endRef}</span></div>
+    <div class="a-estats">
+      <div class="a-estat"><label>atoms</label><span>${r.atoms}</span></div>
+      <div class="a-estat"><label>chars</label><span>${fmt(r.orig)}→${fmt(r.repl)}</span></div>
+      <div class="a-estat"><label>images</label><span>0</span></div>
+    </div>
+    <div class="a-field"><label>Topic <span class="count">optional</span></label><input class="ck-inert" value="${r.topic}"></div>
+    <div class="a-field"><label>Summary <span class="count">${r.summary.length} chars</span></label><textarea class="ck-inert" rows="5">${r.summary}</textarea></div>
+    <div class="a-erow static">
+      <button class="a-btn a-btn-primary ck-inert" disabled>Save</button>
+      <button class="a-btn ck-inert" disabled>Revert</button>
+      <span class="a-spacer"></span>
+      <button class="a-btn a-btn-danger ck-inert">Remove range</button>
+    </div>
+    <div class="a-hint">Topic and summary are saved together. Removing a range keeps its atoms verbatim.</div>`;
+  $("rb-close").addEventListener("click", () => $("rb-dialog").classList.add("show"));
+  $("rb-stay").addEventListener("click", () => $("rb-dialog").classList.remove("show"));
+  $("rb-discard").addEventListener("click", () => { $("rb-dialog").classList.remove("show"); toast("原型:工作台将关闭"); });
+  $("rb-saveclose").addEventListener("click", () => { $("rb-dialog").classList.remove("show"); toast("原型:工作台将关闭"); });
+})();
+
+/* ============================== Review · 提案 ============================== */
+(function initReviewProposal() {
+  let sel = "d1", mode = "raw";
+  /* 展示级估算(原型内硬编码假设,真实实现需文档化):
+     ~0.75 tok/CJK char · ~0.25 tok/ASCII char · ≈1.1k tok/image,不确定度 ±15% */
+  RANGES.d1.cjk = 0.35; RANGES.d2.cjk = 0.45;
+  const estTok = (chars, cjk) => chars * (cjk * 0.75 + (1 - cjk) * 0.25);
+  const ANCHOR_TOK = 160000, WINDOW_TOK = 200000;
+  const updateProjection = () => {
+    const removed = Object.values(RANGES).reduce((s, r) => s + estTok(r.orig, r.cjk), 0) + 3300; /* 3 images inside ranges */
+    const added = Object.values(RANGES).reduce((s, r) => s + estTok(r.repl, 0.3), 0);
+    const post = Math.max(0, ANCHOR_TOK - removed + added);
+    const postLow = Math.max(0, ANCHOR_TOK - removed * 1.15 + added);
+    const postHigh = Math.max(0, ANCHOR_TOK - removed * 0.85 + added);
+    $("rp-pb-post").textContent = `≈${fmt(post)} tok · ${(post / WINDOW_TOK * 100).toFixed(0)}%`;
+    $("rp-pb-delta").textContent = `−${fmt(ANCHOR_TOK - postHigh)} … −${fmt(ANCHOR_TOK - postLow)} tok (est. ±15%)`;
+    const now = ANCHOR_TOK / WINDOW_TOK * 100, p = post / WINDOW_TOK * 100;
+    $("rp-pb-kept").style.width = p.toFixed(2) + "%";
+    const f = $("rp-pb-free");
+    f.style.left = p.toFixed(2) + "%"; f.style.width = Math.max(0, now - p).toFixed(2) + "%";
+  };
+  const totals = () => {
+    const rs = Object.values(RANGES);
+    const orig = rs.reduce((s, r) => s + r.orig, 0), repl = rs.reduce((s, r) => s + r.repl, 0);
+    return { save: orig - repl, atoms: rs.reduce((s, r) => s + r.atoms, 0),
+      pending: rs.filter(r => r.pending).length, dirty: rs.filter(r => r.dirty).length,
+      pct: Math.round((orig - repl) / ANCHOR_CHARS * 100) };
+  };
+  const render = () => {
+    const t = totals();
+    $("rp-ds-ranges").textContent = `${Object.keys(RANGES).length} ranges`;
+    $("rp-ds-cov").textContent = `${t.atoms} / ${ANCHOR_ATOMS} atoms`;
+    $("rp-ds-save").textContent = `−${fmt(t.save)} chars (−${t.pct}%)`;
+    $("rp-ds-pend").textContent = t.pending;
+    const dc = $("rp-dirty"); dc.hidden = !t.dirty; dc.textContent = `${t.dirty} unsaved`;
+
+    $("rp-rlist").innerHTML = Object.values(RANGES).map(r => `
+      <div class="a-ritem" data-range="${r.id}" aria-selected="${r.id === sel}">
+        <div class="r1"><span class="rid">${r.id}</span><span class="refs">${r.startRef}→${r.endRef}</span>${r.dirty ? '<span class="a-udot" title="unsaved"></span>' : ""}<span class="save">−${fmt(r.orig - r.repl)}</span></div>
+        <span class="a-topic">${r.topic}</span>
+        <div class="rsum">${r.summary || ""}</div>
+        <div class="meta">${r.atoms} atoms · ${fmt(r.orig)}→${fmt(r.repl)} chars ${r.pending ? '<span class="a-pend">pending</span>' : ""}${r.reviewed ? '<span class="a-rev">✓ reviewed</span>' : ""}</div>
+      </div>`).join("");
+
+    $("rp-tl-raw").innerHTML = GROUPS.map(g => {
+      const r = g.key ? RANGES[g.key] : null;
+      const marks = r ? `${r.pending ? '<span class="a-pend">pending</span>' : ""}${r.reviewed ? '<span class="a-rev">✓</span>' : ""}` : "";
+      return g.key ? `
+        <section class="a-group ${g.key === sel ? "sel" : ""}">
+          <div class="a-ghead" data-select="${g.key}"><span class="a-chev">▶</span><span class="a-gid">${g.key}</span><span class="a-gsum">${g.label}</span><span class="a-gstat">${g.count} atoms · ${fmt(g.chars)}→${fmt(r.repl)} <em>−${fmt(g.chars - r.repl)}</em> ${marks}</span></div>
+          <div class="a-gbody">${g.rows.map(x => atomRowHtml(x, !!x[4])).join("")}${moreRow(g.more)}</div>
+        </section>` : `
+        <section class="a-group keepg">
+          <div class="a-ghead"><span class="a-chev">▶</span><span class="a-gid">KEEP</span><span class="a-gsum">${g.label}</span><span class="a-gstat">${g.count} atoms · ${fmt(g.chars)} chars</span></div>
+          <div class="a-gbody">${g.rows.map(x => atomRowHtml(x)).join("")}${moreRow(g.more)}</div>
+        </section>`;
+    }).join("");
+
+    $("rp-tl-proj").innerHTML = GROUPS.map(g => {
+      if (!g.key) return `
+        <section class="a-group keepg">
+          <div class="a-ghead" style="cursor:default"><span class="a-chev">·</span><span class="a-gid">KEEP</span><span class="a-gsum">${g.label}</span><span class="a-gstat">${g.count} atoms · ${fmt(g.chars)} chars · verbatim</span></div>
+        </section>`;
+      const r = RANGES[g.key];
+      return `<div class="a-proj-note">↓ ${g.count} raw atoms become</div>` + (r.pending ? `
+        <div class="a-pcard pend">
+          <div class="phead"><span class="pid">${r.id}</span><span class="ptopic" style="color:var(--warn)">pending summary</span><span class="pmeta">${g.count} atoms → 0 chars</span></div>
+          <div class="pwarnline">⚠ No summary yet — <span class="a-mono">/midcompact:commit</span> will refuse this range.</div>
+          <div class="pactions"><button class="a-btn a-btn-sm" data-fix="${r.id}">Write summary</button><button class="a-btn a-btn-sm" data-orig="${g.rows[0][0]}">View raw start</button></div>
+        </div>` : `
+        <div class="a-pcard">
+          <div class="phead"><span class="pid">${r.id}</span><span class="ptopic">${r.topic}</span><span class="pmeta">${g.count} atoms → ${fmt(r.repl)} chars · replaces ${g.refs}</span></div>
+          <div class="ptext">${r.summary}</div>
+          <div class="pactions"><button class="a-btn a-btn-sm" data-orig="${g.rows[0][0]}">View original start</button><button class="a-btn a-btn-sm" data-edit="${r.id}">Edit summary</button></div>
+        </div>`);
+    }).join('<div class="a-proj-note">then</div>') + '<div class="a-proj-note">— nothing else changes: KEEP groups and later work stay raw —</div>';
+
+    updateProjection();
+    renderEditor();
+  };
+  const renderEditor = () => {
+    const r = RANGES[sel];
+    $("rp-editor").innerHTML = `
+      <div class="a-etitle"><span class="eid">${r.id}</span><span class="erefs">${r.startRef} → ${r.endRef}</span><span class="a-spacer"></span>
+        <label class="a-checkline"><input type="checkbox" id="rp-rev" ${r.reviewed ? "checked" : ""}> reviewed</label></div>
+      <div class="a-estats">
+        <div class="a-estat"><label>atoms</label><span>${r.atoms}</span></div>
+        <div class="a-estat"><label>chars</label><span>${fmt(r.orig)}→${fmt(r.repl)}</span></div>
+        <div class="a-estat"><label>images</label><span>0</span></div>
+      </div>
+      <div class="a-nextstep" id="rp-nextstep"></div>
+      <div class="a-field"><label>Topic <span class="count">optional</span></label><input id="rp-topic" value="${r.topic}"></div>
+      <div class="a-field ${r.summary.trim() ? "" : "invalid"}"><label>Summary — the model will see this instead of ${r.atoms} atoms <span class="count" id="rp-count">${r.summary.length} chars</span></label>
+        <textarea id="rp-sum" placeholder="What must survive after these atoms are replaced?">${r.summary}</textarea></div>
+      <div class="a-erow">
+        <button class="a-btn a-btn-primary" id="rp-save" ${r.dirty ? "" : "disabled"}>Save ${r.id}</button>
+        <button class="a-btn" id="rp-revert" ${r.dirty ? "" : "disabled"}>Revert</button>
+        <span class="a-spacer"></span>
+        <button class="a-btn a-btn-danger ck-inert">Remove ${r.id}</button>
+      </div>
+      <div class="a-hint">Saving edits the draft only. Nothing is applied until you run <span class="a-mono">/midcompact:commit</span> in the terminal.</div>`;
+  };
+  const checkNextStep = () => {
+    const t = totals(), ns = $("rp-nextstep");
+    if (!ns) return;
+    if (t.pending === 0 && t.dirty === 0) {
+      ns.classList.add("show");
+      ns.innerHTML = `<span>✅</span><span><b>Draft saved — nothing is applied yet.</b><br>Next step in the terminal: <span class="a-kbd">/midcompact:commit</span> applies this projection · <span class="a-kbd">/midcompact:abort</span> discards it.</span>`;
+    }
+  };
+
+  $("rp-rlist").addEventListener("click", e => { const c = e.target.closest("[data-range]"); if (c) { sel = c.dataset.range; render(); } });
+  document.addEventListener("click", e => {
+    const g = e.target.closest("#rp-tl-raw [data-select]");
+    if (g && !e.target.closest(".a-chev")) { sel = g.dataset.select; render(); }
+    const o = e.target.closest("#app-rp [data-orig]"); if (o) openDrawer(o.dataset.orig);
+    const fx = e.target.closest("[data-fix]"); if (fx) { sel = fx.dataset.fix; setMode("raw"); render(); $("rp-sum")?.focus(); }
+    const ed = e.target.closest("[data-edit]"); if (ed) { sel = ed.dataset.edit; setMode("raw"); render(); $("rp-sum")?.focus(); }
+  });
+  $("rp-editor").addEventListener("input", () => {
+    const r = RANGES[sel];
+    r.dirty = $("rp-sum").value.trim() !== r.summary || $("rp-topic").value.trim() !== r.topic;
+    $("rp-save").disabled = !r.dirty; $("rp-revert").disabled = !r.dirty;
+    $("rp-count").textContent = `${$("rp-sum").value.length} chars`;
+  });
+  $("rp-editor").addEventListener("click", e => {
+    const r = RANGES[sel];
+    if (e.target.id === "rp-rev") { r.reviewed = $("rp-rev").checked; render(); return; }
+    if (e.target.id === "rp-save") {
+      const sum = $("rp-sum").value.trim();
+      if (!sum) { toast("Summary cannot be empty"); return; }
+      r.summary = sum; r.topic = $("rp-topic").value.trim(); r.pending = false; r.dirty = false;
+      render(); checkNextStep(); toast(`Saved ${r.id}`);
+    }
+    if (e.target.id === "rp-revert") { render(); toast("Reverted"); }
+  });
+  const setMode = m => {
+    mode = m;
+    $("rp-mode-raw").setAttribute("aria-pressed", m === "raw");
+    $("rp-mode-proj").setAttribute("aria-pressed", m === "proj");
+    $("rp-tl-raw").style.display = m === "raw" ? "" : "none";
+    $("rp-tl-proj").style.display = m === "proj" ? "" : "none";
+  };
+  $("rp-mode-raw").addEventListener("click", () => setMode("raw"));
+  $("rp-mode-proj").addEventListener("click", () => setMode("proj"));
+
+  $("rp-close").addEventListener("click", () => {
+    const t = totals(), pend = Object.values(RANGES).filter(r => r.pending);
+    $("rp-dialog-line").textContent = t.dirty ? "You have unsaved edits." : "All ranges are saved. Nothing is applied yet — the draft waits in the terminal.";
+    $("rp-dialog-warn").hidden = !pend.length;
+    if (pend.length) {
+      $("rp-warn-count").textContent = pend.length;
+      $("rp-warn-list").textContent = `${pend.map(r => r.id).join(", ")} — /midcompact:commit will refuse it until a summary is written.`;
+    }
+    $("rp-dialog").classList.add("show");
+  });
+  $("rp-stay").addEventListener("click", () => $("rp-dialog").classList.remove("show"));
+  $("rp-discard").addEventListener("click", () => { Object.values(RANGES).forEach(r => (r.dirty = false)); $("rp-dialog").classList.remove("show"); render(); toast("Edits discarded"); });
+  $("rp-fix").addEventListener("click", () => {
+    $("rp-dialog").classList.remove("show");
+    const p = Object.values(RANGES).find(r => r.pending);
+    if (p) { sel = p.id; setMode("raw"); render(); $("rp-sum")?.focus(); }
+  });
+  $("rp-close-ok").addEventListener("click", () => { $("rp-dialog").classList.remove("show"); toast("原型:工作台将关闭 — 下一步在终端"); });
+
+  $("rp-dead-btn").addEventListener("click", () => {
+    const app = $("app-rp"), on = app.toggleAttribute("data-dead");
+    $("rp-banner").classList.toggle("show", on);
+    $("rp-dead-btn").textContent = on ? "恢复会话" : "模拟会话已关闭";
+  });
+  render();
+})();
+
+/* ============================== 抽屉 ============================== */
+const FULLTEXT = {
+  a0004: `Assistant: read({"path":"src/review-ui.ts"})
+
+Tool result (read):
+  import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+  import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+  … 210 more lines — 实际产品中此处为完整 atom 原文,
+  由冻结锚点按需返回 …`,
+};
+function openDrawer(ref) {
+  $("dw-ref").textContent = ref;
+  $("dw-meta").textContent = "tool_exchange · read · 2.3k chars · full text";
+  $("dw-body").textContent = FULLTEXT[ref] ?? `(${ref}) 完整原文将经由 GET /api/atom/${ref} 在此显示。`;
+  $("drawer").classList.add("show"); $("drawer-bg").classList.add("show");
+}
+$("dw-close").addEventListener("click", () => { $("drawer").classList.remove("show"); $("drawer-bg").classList.remove("show"); });
+$("drawer-bg").addEventListener("click", () => { $("drawer").classList.remove("show"); $("drawer-bg").classList.remove("show"); });
+
+/* ============================== Selection · 现状(示意) ============================== */
+(function initSelectBaseline() {
+  $("sb-runs").innerHTML = '<div class="a-empty">No atoms selected.<br>Add a group or atom from the timeline.</div>';
+  $("sb-timeline").innerHTML = [
+    { g: "g0001", label: "implement the overlay fix", rows: [["a0036", "user", "Please fix the overlay takeover — keep the diagnosis.", "0.3k"], ["a0037", "tool_exchange", 'Assistant: read({{"path":"src/review-ui.ts"}}) …', "2.1k"], ["a0038", "assistant", "Root cause: non-overlay custom expands to natural height …", "0.4k"]] },
+    { g: "g0002", label: "diagnose dock minSize regression", rows: [["a0041", "user", "The transcript disappears entirely now.", "0.2k"], ["a0042", "tool_exchange", 'Assistant: bash({{"command":"rg -n \\"minSize\\" …', "5.3k"], ["a0043", "assistant", "dock shrink=1 leaves minSize=1 for the transcript …", "0.6k"]] },
+  ].map(g => `
+    <section class="a-group">
+      <div class="a-ghead" style="cursor:default"><span class="a-chev">·</span><span class="a-gid">${g.g}</span><span class="a-gsum">${g.label}</span><span class="a-gstat"><button class="a-btn a-btn-sm ck-inert">Add group</button></span></div>
+      <div class="a-gbody">${g.rows.map(r => `
+        <div class="a-atom" style="grid-template-columns:58px minmax(0,1fr) 150px">
+          <span class="aref">${r[0]}</span>
+          <div><span class="a-tag">${r[1]}</span><div class="abody">${r[2]}</div></div>
+          <span style="display:flex;gap:4px;justify-content:flex-end"><button class="a-btn a-btn-sm ck-inert">Add</button><button class="a-btn a-btn-sm ck-inert">Keep</button></span>
+        </div>`).join("")}</div>
+    </section>`).join("");
+  $("sb-panel").innerHTML = `
+    <div class="a-etitle"><span class="eid">Selection</span><span class="erefs">shared DraftPlan</span></div>
+    <div class="a-estats">
+      <div class="a-estat"><label>atoms</label><span>0</span></div>
+      <div class="a-estat"><label>chars</label><span>0</span></div>
+      <div class="a-estat"><label>images</label><span>0</span></div>
+    </div>
+    <div class="a-hint">Add a whole user group or individual atoms. KEEP creates a hole; protected atoms stay verbatim. Save writes normalized, non-overlapping ranges to the same DraftPlan used by Agent.</div>
+    <div><button class="a-btn a-btn-primary ck-inert">Save selection</button> <button class="a-btn ck-inert">Clear selection</button></div>`;
+})();
+
+/* ============================== Selection · 提案(可交互) ============================== */
+(function initSelectProposal() {
+  let saved = false;
+  const GROUPS = [
+    { g: "g0001", label: "implement the overlay fix", atoms: [
+      { ref: "a0036", kind: "user", body: "Please fix the overlay takeover — keep the diagnosis.", chars: 3800 },
+      { ref: "a0037", kind: "tool_exchange", body: 'Assistant: read({{"path":"src/review-ui.ts"}}) Tool result: import type …', chars: 25000 },
+      { ref: "a0038", kind: "assistant", body: "Root cause: non-overlay custom expands to natural height …", chars: 4800 },
+      { ref: "a0039", kind: "tool_exchange", body: 'Assistant: read({{"path":"src/index.ts"}}) Tool result: registerCommand …', chars: 39000 },
+      { ref: "a0040", kind: "tool_exchange", body: 'Assistant: bash({{"command":"rg -n \\"ctx.ui.custom\\" …', chars: 14000 },
+    ]},
+    { g: "g0002", label: "diagnose dock minSize regression", atoms: [
+      { ref: "a0041", kind: "user", body: "The transcript disappears entirely now.", chars: 2500 },
+      { ref: "a0042", kind: "tool_exchange", body: 'Assistant: bash({{"command":"rg -n \\"minSize\\" …', chars: 63000 },
+      { ref: "a0043", kind: "assistant", body: "dock shrink=1 leaves minSize=1 for the transcript …", chars: 7700 },
+      { ref: "a0044", kind: "tool_exchange", body: 'Assistant: read({{"path":"pi-tui/dock.ts"}}) Tool result: …', chars: 10000 },
+      { ref: "a0045", kind: "compressed", body: "[midcompact summary block blk-3f2a] — already committed earlier, stays protected", chars: 1200, prot: true },
+    ]},
+    { g: "g0003", label: "write test contract", atoms: [
+      { ref: "a0046", kind: "user", body: "Add a contract test before you change the mock.", chars: 2200 },
+      { ref: "a0047", kind: "tool_exchange", body: 'Assistant: bash({{"command":"npm run typecheck:contract"}}) …', chars: 13000 },
+      { ref: "a0048", kind: "assistant", body: "Mock now mirrors the real ExtensionCommandContext surface.", chars: 4500 },
+    ]},
+  ];
+  const flat = GROUPS.flatMap(g => g.atoms);
+  const selected = new Set(["a0037", "a0038", "a0039", "a0040", "a0042", "a0043", "a0044"]);
+  let cursor = flat.findIndex(a => a.ref === "a0037");
+
+  /* 连续选中段 → runs */
+  const runs = () => {
+    const out = [];
+    flat.forEach((a, i) => {
+      if (!selected.has(a.ref)) return;
+      const last = out.at(-1);
+      if (last && last.end === i - 1) { last.end = i; last.chars += a.chars; last.refs[1] = a.ref; last.n += 1; }
+      else out.push({ start: i, end: i, refs: [a.ref, a.ref], chars: a.chars, n: 1 });
+    });
+    return out;
+  };
+  /* 展示级估算,随圈选实时更新;Agent 之后起草的摘要新增未计入 */
+  const CJK = { g0001: 0.5, g0002: 0.35, g0003: 0.4 };
+  const updateSpProjection = () => {
+    const removed = GROUPS.reduce((s, g) => s + g.atoms.reduce((t, a) =>
+      t + (selected.has(a.ref) ? a.chars * (CJK[g.g] * 0.75 + (1 - CJK[g.g]) * 0.25) : 0), 0), 0);
+    const post = Math.max(0, 160000 - removed);
+    $("sp-pb-post").textContent = `≈${fmt(post)} tok · ${(post / 2000).toFixed(0)}%`;
+    $("sp-pb-delta").textContent = removed ? `−${fmt(removed)} tok (est.)` : "";
+    const p = post / 2000;
+    $("sp-pb-kept").style.width = p.toFixed(2) + "%";
+    const f = $("sp-pb-free");
+    f.style.left = p.toFixed(2) + "%"; f.style.width = Math.max(0, 80 - p).toFixed(2) + "%";
+  };
+  const stats = () => {
+    const atoms = selected.size, chars = flat.reduce((s, a) => s + (selected.has(a.ref) ? a.chars : 0), 0);
+    return { atoms, chars, n: runs().length, pct: Math.round(chars / ANCHOR_CHARS * 100) };
+  };
+
+  const render = () => {
+    const st = stats();
+    $("sp-selchip").textContent = `${st.atoms} selected · ${fmt(st.chars)} chars`;
+    $("sp-s-atoms").textContent = st.atoms;
+    $("sp-s-chars").textContent = fmt(st.chars);
+    $("sp-s-runs").textContent = st.n;
+    $("sp-s-share").textContent = `≈${st.pct}% of anchor content selected`;
+    $("sp-savedchip").hidden = !saved;
+    updateSpProjection();
+
+    $("sp-runs").innerHTML = st.atoms === 0
+      ? '<div class="a-empty">Nothing selected.<br>点选或用键盘圈定要压缩的范围。</div>'
+      : runs().map((r, i) => `
+        <div class="a-ritem" style="cursor:default">
+          <div class="r1"><span class="rid">range ${i + 1}</span><span class="refs">${r.refs[0]}→${r.refs[1]}</span></div>
+          <div class="meta">${r.n} atoms · ${fmt(r.chars)} chars <button class="a-btn a-btn-sm" data-unsel-start="${r.refs[0]}" data-unsel-end="${r.refs[1]}" style="margin-left:auto">✕</button></div>
+        </div>`).join("");
+
+    let idx = 0;
+    $("sp-timeline").innerHTML = GROUPS.map(g => {
+      const gsel = g.atoms.filter(a => selected.has(a.ref)).length;
+      return `
+      <section class="a-group">
+        <div class="a-ghead" style="cursor:default"><span class="a-chev">·</span><span class="a-gid">${g.g}</span><span class="a-gsum">${g.label}</span>
+          <span class="a-gstat">${gsel}/${g.atoms.filter(a => !a.prot).length} selected <button class="a-btn a-btn-sm" data-group="${g.g}">${gsel === g.atoms.filter(a => !a.prot).length ? "Clear" : "Add group"}</button></span></div>
+        <div class="a-gbody">${g.atoms.map(a => {
+          const i = idx++;
+          const isSel = selected.has(a.ref);
+          return `
+          <div class="a-satom ${isSel ? "selected" : ""} ${a.prot ? "protected" : ""} ${i === cursor ? "cursor" : ""}" data-idx="${i}">
+            <span class="cursor">▸</span>
+            <span class="aref">${a.ref}</span>
+            <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis"><span class="a-tag">${a.kind}</span>${a.body}</div>
+            <span class="state">${a.prot ? '🔒 can&rsquo;t compress' : isSel ? "✓ compress" : ""}</span>
+            <span class="atok">${fmt(a.chars)}</span>
+          </div>`;
+        }).join("")}</div>
+      </section>`;
+    }).join("");
+
+    $("sp-panel").innerHTML = `
+      <div class="a-etitle"><span class="eid">Selection</span><span class="erefs">${st.n} range${st.n === 1 ? "" : "s"} pending</span></div>
+      <div class="a-estats">
+        <div class="a-estat"><label>atoms</label><span>${st.atoms}</span></div>
+        <div class="a-estat"><label>chars</label><span>${fmt(st.chars)}</span></div>
+        <div class="a-estat"><label>images</label><span>0</span></div>
+      </div>
+      <div class="a-hint">选中 = 交给 Agent 压成摘要;未选中 = 原样保留(即 KEEP)。<br>🔒 can&rsquo;t compress:SPEC 中的 protected atom(已压缩块 / 断开的工具协议 / 缺锚点条目),不可选。<br>Save 之后回到终端,告诉 Agent 继续即可。</div>
+      <div><button class="a-btn a-btn-primary" id="sp-save2" ${st.atoms ? "" : "disabled"}>Save selection</button> <button class="a-btn" id="sp-clear">Clear selection</button></div>`;
+  };
+
+  const toggle = a => { if (!a.prot) { selected.has(a.ref) ? selected.delete(a.ref) : selected.add(a.ref); saved = false; render(); } };
+  const move = d => {
+    cursor = Math.max(0, Math.min(flat.length - 1, cursor + d));
+    render();
+    document.querySelector(`#sp-timeline [data-idx="${cursor}"]`)?.scrollIntoView({ block: "nearest" });
+  };
+  $("sp-timeline").addEventListener("click", e => {
+    const gb = e.target.closest("[data-group]");
+    if (gb) {
+      const grp = GROUPS.find(g => g.g === gb.dataset.group);
+      const free = grp.atoms.filter(a => !a.prot);
+      const all = free.every(a => selected.has(a.ref));
+      free.forEach(a => all ? selected.delete(a.ref) : selected.add(a.ref));
+      saved = false; render(); return;
+    }
+    const un = e.target.closest("[data-unsel-start]");
+    if (un) {
+      const i1 = flat.findIndex(a => a.ref === un.dataset.unselStart), i2 = flat.findIndex(a => a.ref === un.dataset.unselEnd);
+      for (let i = i1; i <= i2; i++) selected.delete(flat[i].ref);
+      saved = false; render(); return;
+    }
+    const row = e.target.closest("[data-idx]");
+    if (row && !e.target.closest("button")) { cursor = Number(row.dataset.idx); toggle(flat[cursor]); }
+  });
+  $("app-sp").addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === " ") { e.preventDefault(); toggle(flat[cursor]); }
+    else if (e.key === "g" || e.key === "G") {
+      const a = flat[cursor];
+      const grp = GROUPS.find(g => g.atoms.includes(a));
+      const free = grp.atoms.filter(x => !x.prot);
+      const all = free.every(x => selected.has(x.ref));
+      free.forEach(x => all ? selected.delete(x.ref) : selected.add(x.ref));
+      saved = false; render();
+    }
+  });
+  const save = () => {
+    if (!selected.size) return;
+    saved = true; render();
+    toast("Selection saved (原型) — 回终端让 Agent 继续,或 /midcompact:commit");
+  };
+  $("sp-save").addEventListener("click", save);
+  $("sp-panel").addEventListener("click", e => {
+    if (e.target.id === "sp-save2") save();
+    if (e.target.id === "sp-clear") { selected.clear(); saved = false; render(); }
+  });
+  render();
+})();
+
+/* ============================== boot ============================== */
+route();
+</script>
+</body>
+</html>
