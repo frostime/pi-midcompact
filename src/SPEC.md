@@ -90,6 +90,12 @@ package.json → `pi.extensions`).
   atom's full text for the original-text drawer (read-only, snapshot-local).
   User-facing copy says "can't compress" for protected atoms; "protected"
   stays the agent/tool-side term.
+  Page invariants that broke once and must hold: the `<!--MIDCOMPACT_STATE-->`
+  script tag is the server's template injection point (renaming it breaks
+  state loading); `selectionRefs` initialization depends on helpers defined
+  later in the page script (order is load-bearing, TDZ); `gbody` visibility
+  is driven by the render-time `hidden` attribute, so collapse handlers must
+  sync that attribute, not just a class.
 
 ## Change rules
 

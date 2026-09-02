@@ -401,43 +401,50 @@ test("serializeReviewState carries char-class mix and the estimation table", () 
   assert.ok(state.atoms[0].wideChars >= 2); // 中文 present in the user text
 });
 
-test("Web UI serves full atom text and 404s unknown refs", async () => {
-  let ready;
-  const readyUrl = new Promise((resolve) => { ready = resolve; });
-  const ctx = {
-    ui: {
-      notify(text) {
-        const match = text.match(/http:\/\/127\.0\.0\.1:\d+\/\?view=review/);
-        if (match) ready(match[0]);
-      },
-    },
-  };
-  const messages = [user("hello", 1), assistant([{ type: "text", text: "world" }], 2)];
+test("Web UI serves full atom text (not the truncated preview) and 404s unknown refs", async () => {
+  // The distinctive marker sits in the middle of an >700-char text: the
+  // 700-char preview truncates the middle away, so only the real full-text
+  // contract can pass this assertion.
+  const longText = "HEAD" + "x".repeat(400) + "MIDDLE_MARKER_FULL_TEXT" + "y".repeat(400) + "TAIL";
+  const messages = [user(longText, 1), assistant([{ type: "text", text: "world" }], 2)];
   const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
   const atoms = buildAtoms(messages, branch);
   const draft = emptyDraft("tx-web-atom");
   const telemetry = draftTelemetry({ version: 1, id: "tx-web-atom", anchorEntryId: "e1", startedAt: "now" }, draft);
-  const workbench = showReviewWebUi(
-    ctx,
-    atoms,
-    () => ({ draft, telemetry }),
-    { editSummary() {}, editTopic() {}, remove() {} },
-    "review",
-    { openBrowser() {}, livenessConnectTimeoutMs: 5_000 },
-  );
-  const url = await readyUrl;
-  try {
-    const response = await fetch(new URL("/api/atom/a0001", url));
-    assert.equal(response.status, 200);
-    const body = await response.json();
-    assert.equal(body.ref, "a0001");
-    assert.equal(body.kind, "user");
-    assert.match(body.fullText, /hello/);
-    const missing = await fetch(new URL("/api/atom/a9999", url));
-    assert.equal(missing.status, 404);
-  } finally {
-    await fetch(new URL("/api/close", url), { method: "POST" }).catch(() => {});
-    await workbench.catch(() => {});
+  const callbacks = { editSummary() {}, editTopic() {}, remove() {} };
+  const runtime = { openBrowser() {}, livenessConnectTimeoutMs: 5_000 };
+
+  async function open(view) {
+    let ready;
+    const readyUrl = new Promise((resolve) => { ready = resolve; });
+    const ctx = {
+      ui: {
+        notify(text) {
+          const match = text.match(/http:\/\/127\.0\.0\.1:\d+\/\?view=(review|selection)/);
+          if (match) ready(match[0]);
+        },
+      },
+    };
+    const workbench = showReviewWebUi(ctx, atoms, () => ({ draft, telemetry }), callbacks, view, runtime);
+    return { url: await readyUrl, workbench };
+  }
+
+  for (const view of ["review", "selection"]) {
+    const { url, workbench } = await open(view);
+    try {
+      const response = await fetch(new URL("/api/atom/a0001", url));
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.ref, "a0001");
+      assert.equal(body.kind, "user");
+      assert.ok(body.fullText.length > 700);
+      assert.ok(body.fullText.includes("MIDDLE_MARKER_FULL_TEXT"));
+      const missing = await fetch(new URL("/api/atom/a9999", url));
+      assert.equal(missing.status, 404);
+    } finally {
+      await fetch(new URL("/api/close", url), { method: "POST" }).catch(() => {});
+      await workbench.catch(() => {});
+    }
   }
 });
 

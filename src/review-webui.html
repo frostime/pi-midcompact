@@ -316,6 +316,8 @@
     main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(130px, 26vh) minmax(240px, 1fr) auto; grid-template-areas: "ranges" "timeline" "editor"; }
     .pane.editor { max-height: 62vh; }
     .atom { grid-template-columns: 64px minmax(0, 1fr) auto; }
+    .atom.srow { grid-template-columns: 64px minmax(0, 1fr) auto; }
+    .atom.srow .mark { grid-column: 1 / -1; }
     .atom .atok { grid-column: 1 / -1; text-align: left; }
     .atom .sz { margin-left: 0; }
   }
@@ -435,6 +437,7 @@ let deadTimer = null;
 function markDead() {
   document.body.classList.add('dead');
   document.getElementById('dead-banner').classList.add('show');
+  document.querySelectorAll('input, textarea, button, select').forEach(el => { el.disabled = true; });
 }
 liveness.onopen = () => {
   clearTimeout(deadTimer); deadTimer = null;
@@ -603,6 +606,11 @@ function render() {
   const dirtyCount = d.length + (selectionDirty ? 1 : 0);
   $('dirty-badge').hidden = dirtyCount === 0;
   $('dirty-badge').textContent = `${dirtyCount} unsaved`;
+  const saved = $('saved-badge');
+  if (isSelection() && !selectionDirty && state.draft.ranges.length > 0) {
+    saved.hidden = false;
+    saved.textContent = `Saved · v${state.draft.revision}`;
+  } else saved.hidden = true;
   $('mode-title').textContent = isSelection() ? 'Selection' : 'Review';
   document.title = `Midcompact ${isSelection() ? 'Selection' : 'Review'}`;
   $('save-selection').hidden = !isSelection();
@@ -792,7 +800,7 @@ function projectedCardHtml(r, g) {
 }
 
 function toolTag(name) {
-  const tone = ['read', 'write', 'edit', 'bash'].includes(String(name).toLowerCase()) ? ` tool-${String(name).toLowerCase()}` : '';
+  const tone = ['read', 'write', 'edit', 'bash'].includes(String(name).toLowerCase()) ? ` ${String(name).toLowerCase()}` : '';
   return `<span class="tag tool${tone}">${esc(name)}</span>`;
 }
 
@@ -800,6 +808,8 @@ function atomRowRaw(a, maxChars) {
   const open = openAtoms.has(a.ref);
   const w = maxChars ? Math.round((a.contentChars ?? 0) / maxChars * 100) : 0;
   const lockTags = [
+    ...(a.toolNames ?? []).slice(0, 3).map(toolTag),
+    ...(a.roles ?? []).slice(0, 2).map(t => `<span class="tag">${esc(t)}</span>`),
     isLocked(a) ? '<span class="tag lock">can\u2019t compress</span>' : '',
     a.protocolClosed === false ? '<span class="tag lock">open protocol</span>' : '',
     a.compressedBlockId ? `<span class="tag">blk ${esc(a.compressedBlockId)}</span>` : '',
@@ -1303,6 +1313,10 @@ function moveSel(delta) {
 }
 document.addEventListener('keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if (document.body.classList.contains('dead')) {
+    if (e.key === 'Escape' && typing) e.target.blur();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     if (isSelection()) saveSelection(); else saveCurrent();
