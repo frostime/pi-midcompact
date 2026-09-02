@@ -45,7 +45,7 @@ SPEC 文字审查与交接:按反 AI 腔 skill 审查 SPEC,修了三处口径缺
 
 ### Debug 预览(避免每次真实触发 midcompact)
 
-- 用法:直接用 `pi-invoke-this.ps1` 进会话,敲 `/midcompact:debug-ui`(参数 `selection` 可选,默认 review)——用当前会话只读快照 + 内存 Draft 打开 workbench,所有保存/删除/圈选只改内存,不写 session。
+- 用法:直接用 `pi-invoke-this.ps1` 进会话,敲 `/midcompact:debug-ui` ——参数带补全(`review` 默认 / `selection`),非法参数会被拒绝并提示有效值;打开 workbench 后所有保存/删除/圈选只改内存,不写 session。
 - 隔离契约:文件 `dev/midcompact-debug-ui.ts` 不被 package.json 的 pi.extensions 引用,仅由本仓库的启动脚本以 `-e` 加载;不 import `src/index.ts`;只用 getBranch 只读;改动任何一方前先重读文件头注释。
 - 验收标准(改完 debug 相关代码后):正常 npm 安装(pi.extensions 路径,不经启动脚本)时会话内无该命令;走完一遍保存/删除/圈选后,session JSONL 无新增条目。
 
