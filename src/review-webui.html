@@ -117,6 +117,9 @@
   .pbar .free { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--bar-fill) 0 4px, var(--bar-track) 4px 8px); border-radius: 0 99px 99px 0; }
   .pbar .na { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11.5px; color: var(--fg-mute); }
 
+  .pbar[data-toggle-mode] { cursor: pointer; }
+  .pbar[data-toggle-mode]:hover { background: color-mix(in srgb, var(--elev) 70%, transparent); }
+
   /* ---- layout ---- */
   main { flex: 1 1 auto; min-height: 0; display: grid; gap: 1px; background: var(--border); grid-template-columns: 288px minmax(0, 1fr) 430px; grid-template-areas: "ranges timeline editor"; }
   .pane { background: var(--bg); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -208,8 +211,8 @@
   .tag.tool.read { background: var(--tint-read); color: var(--tint-read-fg); }
   .tag.tool.bash { background: var(--tint-bash); color: var(--tint-bash-fg); }
   .tag.lock { background: var(--tint-lock); color: var(--tint-lock-fg); }
-  .atom.selected-atom { background: var(--sel-bg); outline: 1px solid var(--sel-border); }
-  .atom.cursor-atom { outline: 2px solid var(--border-strong); outline-offset: -2px; }
+  .atom.selected-atom { background: var(--sel-bg); outline: 2px solid var(--sel-border); outline-offset: -2px; box-shadow: inset 3px 0 0 var(--sel-border); }
+  .atom.cursor-atom { outline: 2px dashed var(--border-strong); outline-offset: -2px; }
   .atom.locked { opacity: .6; }
   .atom.srow { grid-template-columns: 64px minmax(0, 1fr) 128px 78px; align-items: center; }
   .atom.srow .abody { display: block; white-space: nowrap; text-overflow: ellipsis; }
@@ -477,6 +480,9 @@ const rangeAtoms = r => {
   return start >= 0 && end >= start ? state.atoms.slice(start, end + 1) : [];
 };
 selectionRefs = new Set(state.draft.ranges.flatMap(r => rangeAtoms(r).map(a => a.ref)));
+// Old-page behavior: unselected ranges start collapsed so the timeline opens
+// on the selection, and Expand all expands from a meaningful state.
+state.draft.ranges.forEach(r => { if (r.id !== selectedId) collapsed.add(r.id); });
 const rangeById = id => state.draft.ranges.find(r => r.id === id);
 const saveOf = r => Math.max(0, (r.originalContentChars ?? 0) - (r.replacementContentChars ?? 0));
 const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
@@ -573,11 +579,13 @@ const EST_TIP = `Estimate only, never a gate: assumption table ≈${EST.narrowTo
   + `≈${EST.wideTokPerChar[0]}–${EST.wideTokPerChar[1]} tok per non-ASCII char, ≈${EST.imageTok[0]}–${EST.imageTok[1]} tok per image. `
   + 'The provider\u2019s report is the final authority.';
 
-function pbarHtml(proj, label) {
+function pbarHtml(proj, label, interactive) {
+  const tip = (interactive ? 'Click to preview the post-commit context (toggles Raw ⇄ Projected). ' : '') + EST_TIP;
+  const attrs = interactive ? ' data-toggle-mode role="button" tabindex="0"' : '';
   if (!proj) {
-    return `<div class="pbar"><div class="pl"><span>anchor usage</span></div><div class="tr"><span class="na">Pi-reported usage unavailable — the projection needs it</span></div></div>`;
+    return `<div class="pbar"${attrs}><div class="pl"><span>anchor usage</span></div><div class="tr"><span class="na">Pi-reported usage unavailable — the projection needs it</span></div></div>`;
   }
-  return `<div class="pbar" title="${esc(EST_TIP)}">
+  return `<div class="pbar"${attrs} title="${esc(tip)}">
     <div class="pl">
       <span>now <b>${fmt(proj.now)} tok</b> · ${pct(proj.nowPct)} (reported by Pi)</span>
       <span>${esc(label)} <b>≈${fmt(proj.postPoint)} tok · ${pct(proj.postPct)}</b>
@@ -639,7 +647,7 @@ function renderStrip() {
       <div class="di"><label>anchor content</label><span class="val save">−${fmt(save)} chars (−${pct(share)})</span></div>
       <div class="di"><label>pending</label><span class="val ${pending ? 'pend' : ''}">${pending}</span></div>`;
   }
-  $('strip').innerHTML = items + pbarHtml(proj, isSelection() ? 'if committed now' : 'after commit');
+  $('strip').innerHTML = items + pbarHtml(proj, isSelection() ? 'if committed now' : 'after commit', !isSelection());
 }
 
 function renderRanges() {
@@ -675,7 +683,7 @@ function renderRanges() {
       ${d.topic ? `<div class="topic">${hl(d.topic, query)}</div>` : ''}
       <div class="rsum">${hl(d.summary, query)}</div>
       <div class="meta">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} chars · ${ratio}% fewer
-        ${r.summary.trim() ? '' : '<span class="pend">pending</span>'}
+        ${draftOf(r).summary.trim() ? '' : '<span class="pend">pending</span>'}
         ${reviewed.has(r.id) ? '<span class="rev">✓ reviewed</span>' : ''}
       </div>
     </div>`;
@@ -703,18 +711,33 @@ function renderTimeline() {
 
   let shown = 0;
   const maxChars = maxContentChars();
+  const keepGroupMatch = g => {
+    const label = `${g.atoms[0]?.ref ?? ''} → ${g.atoms.at(-1)?.ref ?? ''} verbatim ${g.label ?? ''}`.toLowerCase();
+    return label.includes(query) || g.atoms.some(a => atomText(a).includes(query));
+  };
   const html = buildGroups().map(g => {
-    if (mode === 'proj' && !g.key) return keepGroupHtml(g, maxChars);
-    if (policy === 'range' && !g.key) return mode === 'raw' ? '' : keepGroupHtml(g, maxChars);
+    const gkey = g.key ?? ('keep-' + g.idx);
+    if (mode === 'proj') {
+      // SPEC §3.2: Raw and Projected share the same policy + query semantics.
+      if (!g.key) {
+        if (policy === 'range') return '';
+        if (query && !keepGroupMatch(g)) return '';
+        return keepGroupHtml(g, maxChars);
+      }
+      if (policy === 'keep') return '';
+      const r0 = rangeById(g.key);
+      if (!r0) return keepGroupHtml(g, maxChars);
+      if (query && !rangeText(r0).includes(query) && !g.atoms.some(a => atomText(a).includes(query))) return '';
+      return projectedCardHtml(r0, g);
+    }
+    if (policy === 'range' && !g.key) return '';
     if (policy === 'keep' && g.key) return '';
     const r = g.key ? rangeById(g.key) : null;
-    const gkey = g.key ?? ('keep-' + g.idx);
     const groupMatch = r ? rangeText(r).includes(query) : `${g.label ?? ''} ${gkey}`.toLowerCase().includes(query);
     const atoms = query && !groupMatch ? g.atoms.filter(a => atomText(a).includes(query)) : g.atoms;
     if (query && !groupMatch && !atoms.length) return '';
     shown += atoms.length;
     const open = !collapsed.has(gkey) || (query && !groupMatch);
-    if (mode === 'proj' && r) return projectedCardHtml(r, g);
     if (!r) return keepGroupHtml(g, maxChars, open, atoms);
     const d = draftOf(r);
     return `<section class="group ${open ? 'open' : ''} ${r.id === selectedId ? 'sel' : ''}" data-group-key="${esc(g.key)}">
@@ -723,13 +746,15 @@ function renderTimeline() {
         <span class="gid">${esc(r.id)}</span>
         <span class="gsum">${hl(d.topic || d.summary, query)}</span>
         <span class="gstat">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} <em>−${fmt(saveOf(r))}</em>
-          ${r.summary.trim() ? '' : '<span class="pend">pending</span>'}${reviewed.has(r.id) ? '<span class="rev">✓</span>' : ''}</span>
+          ${draftOf(r).summary.trim() ? '' : '<span class="pend">pending</span>'}${reviewed.has(r.id) ? '<span class="rev">✓</span>' : ''}</span>
       </button>
       <div class="gbody" ${open ? '' : 'hidden'}>${atoms.map(a => atomRowRaw(a, maxChars)).join('')}</div>
     </section>`;
   }).join('');
   tl.innerHTML = html || '<div class="empty">Nothing matches the current filter.</div>';
-  $('tl-stat').textContent = query || policy !== 'all' ? `${shown}/${state.atoms.length} atoms` : `${state.atoms.length} atoms`;
+  $('tl-stat').textContent = mode === 'proj'
+    ? `${state.atoms.length} atoms · projected`
+    : (query || policy !== 'all' ? `${shown}/${state.atoms.length} atoms` : `${state.atoms.length} atoms`);
 }
 
 function keepGroupHtml(g, maxChars, open = !collapsed.has('keep-' + g.idx), atoms = g.atoms) {
@@ -797,7 +822,7 @@ function renderSelectionTimeline(tl) {
   let idx = -1;
   const html = buildGroups().map(g => {
     if (query && !(g.label ?? '').toLowerCase().includes(query)
-      && !g.atoms.some(a => atomText(a).includes(query))) return '';
+      && !g.atoms.some(a => atomText(a).includes(query))) { idx += g.atoms.length; return ''; }
     const free = g.atoms.filter(a => !isLocked(a));
     const selCount = free.filter(a => selectionRefs.has(a.ref)).length;
     const rows = g.atoms.map(a => {
@@ -1096,7 +1121,10 @@ $('timeline').addEventListener('click', e => {
   const chevron = e.target.closest('.chev');
   if (head.dataset.select && !chevron && head.dataset.select !== selectedId) { select(head.dataset.select); return; }
   collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
-  head.closest('.group').classList.toggle('open');
+  const group = head.closest('.group');
+  group.classList.toggle('open');
+  const body = group.querySelector('.gbody');
+  if (body) body.hidden = collapsed.has(key);
   head.setAttribute('aria-expanded', String(!collapsed.has(key)));
 });
 
@@ -1148,7 +1176,7 @@ $('editor').addEventListener('input', e => {
   $('dirty-badge').textContent = `${d.length} unsaved`;
   $('save-all').hidden = d.length < 2;
   $('save-all').textContent = `Save all (${d.length})`;
-  if (e.target.id === 'topic') renderTimeline();
+  if (e.target.id === 'topic' || e.target.id === 'summary') renderTimeline();
 });
 
 $('editor').addEventListener('click', async e => {
@@ -1190,6 +1218,12 @@ $('save-all').addEventListener('click', async () => {
 });
 $('refresh').addEventListener('click', refresh);
 
+$('strip').addEventListener('click', e => {
+  if (isSelection() || !e.target.closest('[data-toggle-mode]')) return;
+  mode = mode === 'raw' ? 'proj' : 'raw';
+  syncMode();
+});
+
 async function closeWorkbench() {
   try {
     await post('/api/close', {});
@@ -1198,9 +1232,10 @@ async function closeWorkbench() {
 }
 
 $('close').addEventListener('click', () => {
-  if (dirtyIds().length || selectionDirty) {
-    const pending = pendingIds();
-    $('close-dialog-line').textContent = dirtyIds().length
+  const pending = isSelection() ? [] : pendingIds();
+  if (dirtyIds().length || selectionDirty || pending.length) {
+    const dirty = dirtyIds().length > 0 || selectionDirty;
+    $('close-dialog-line').textContent = dirty
       ? 'You have unsaved edits.'
       : 'All ranges are saved. Nothing is applied yet — the draft waits in the terminal.';
     $('close-warn').hidden = !pending.length;
