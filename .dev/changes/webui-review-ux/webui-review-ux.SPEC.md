@@ -1,6 +1,6 @@
 # WebGUI UX 改版 — Code Change Spec
 
-变更代号:`webui-review-ux` · 日期:2026-09-01 · 状态:**已实现**(分支 `feat/webui-review-ux`,待浏览器走查与合并;在途项见同目录 HANDOVER.md)
+变更代号:`webui-review-ux` · 日期:2026-09-01 · 状态:**实现完成**(分支 `feat/webui-review-ux`,待合并)
 迭代过程见同目录 `decisions.md`(原型期日志)与两份原型(`prototype.html` 功能 / `prototype-visual.html` 视觉)。本文是收口后的权威依据,与日志冲突时以本文为准。
 
 ---
