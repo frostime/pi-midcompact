@@ -34,12 +34,23 @@ const PREVIEW_TX = {
 
 type Memory = { draft: DraftPlan };
 
+const VIEWS = [
+  { value: "review", label: "review", description: "Inspect and edit the generated draft (default)" },
+  { value: "selection", label: "selection", description: "Build ranges by selecting atoms in the timeline" },
+];
+
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("midcompact:debug-ui", {
-    description:
-      "Preview the workbench with in-memory data (no session writes). Args: review (default) | selection",
+    description: "Preview the workbench with in-memory data (no session writes)",
+    getArgumentCompletions: (prefix: string) =>
+      VIEWS.filter((view) => view.value.startsWith(prefix.trim().toLowerCase())),
     handler: async (args: string, ctx: ExtensionCommandContext) => {
-      const view = String(args ?? "").trim().toLowerCase() === "selection" ? "selection" : "review";
+      const arg = String(args ?? "").trim().toLowerCase();
+      if (arg && arg !== "review" && arg !== "selection") {
+        ctx.ui.notify(`debug-ui: unknown view "${arg}" — use review or selection.`, "warning");
+        return;
+      }
+      const view = arg === "selection" ? "selection" : "review";
       const branch = ctx.sessionManager.getBranch() as SessionEntry[];
       const messageEntries = branch.filter((entry) => entry.type === "message" && entry.message);
       const atoms = buildAtoms(
