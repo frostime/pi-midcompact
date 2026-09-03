@@ -193,12 +193,12 @@
   .atom .aref { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-mute); }
   .atom .arow { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .atom .abody {
-    flex: 1 1 auto; min-width: 0;
+    flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: none; text-align: left;
     font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: var(--fg); opacity: .84;
     white-space: pre-wrap; word-break: break-word;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: zoom-in;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer;
   }
-  .atom.open .abody { -webkit-line-clamp: unset; cursor: zoom-out; opacity: 1; }
+  .atom .abody:hover { opacity: 1; }
   .atom.user .abody { font-weight: 500; opacity: 1; }
   .atom .atok { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--fg-dim); font-weight: 500; text-align: right; }
   .sz { display: block; height: 4px; width: 52px; margin: 5px 0 1px auto; border-radius: 99px; background: linear-gradient(to right, var(--bar-fill) var(--w, 30%), var(--bar-track) var(--w, 30%)); }
@@ -454,7 +454,6 @@ let policy = 'all';
 let mode = 'raw';                 // timeline: raw atoms or projected summaries
 const edits = new Map();          // rangeId -> { topic, summary }
 const collapsed = new Set();
-const openAtoms = new Set();
 let lastScrolled = null;
 let removeArmed = null;
 let selectionDirty = false;
@@ -487,7 +486,6 @@ selectionRefs = new Set(state.draft.ranges.flatMap(r => rangeAtoms(r).map(a => a
 // on the selection, and Expand all expands from a meaningful state.
 state.draft.ranges.forEach(r => { if (r.id !== selectedId) collapsed.add(r.id); });
 const rangeById = id => state.draft.ranges.find(r => r.id === id);
-const saveOf = r => Math.max(0, (r.originalContentChars ?? 0) - (r.replacementContentChars ?? 0));
 const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
 
 function hl(text, q) {
@@ -517,7 +515,28 @@ function mixOf(atoms) {
   for (const a of atoms) { narrow += a.narrowChars || 0; wide += a.wideChars || 0; images += a.imageCount || 0; }
   return { narrow, wide, images };
 }
-const estFromText = (text, images = 0) => { const c = classify(text); return estFromMix({ narrow: c.narrowChars, wide: c.wideChars, images }); };
+function replacementFieldsMix(summary, topic) {
+  return classify((topic ? `: ${topic}` : '') + summary);
+}
+function replacementMixOf(r) {
+  const savedFields = replacementFieldsMix(r.summary, r.topic);
+  const current = draftOf(r);
+  const currentFields = replacementFieldsMix(current.summary, current.topic);
+  return {
+    narrow: Math.max(0, (r.replacementNarrowChars ?? savedFields.narrowChars)
+      - savedFields.narrowChars + currentFields.narrowChars),
+    wide: Math.max(0, (r.replacementWideChars ?? savedFields.wideChars)
+      - savedFields.wideChars + currentFields.wideChars),
+    images: 0,
+  };
+}
+function replacementCharsOf(r) {
+  const mix = replacementMixOf(r);
+  return mix.narrow + mix.wide;
+}
+function saveOf(r) {
+  return Math.max(0, (r.originalContentChars ?? 0) - replacementCharsOf(r));
+}
 
 function atomText(a) {
   return [a.ref, a.kind, a.preview, ...(a.toolNames ?? []), ...(a.roles ?? [])].join(' ').toLowerCase();
@@ -557,8 +576,13 @@ function projection() {
   if (!usage || usage.tokens == null || !usage.contextWindow) return null;
   const now = usage.tokens, win = usage.contextWindow;
   const removed = estFromMix(mixOf(isSelection() ? selectionAtoms() : state.atoms.filter(a => a.owningRangeId)));
-  const added = isSelection() ? { point: 0, low: 0, high: 0 }
-    : estFromText(state.draft.ranges.map(r => draftOf(r).summary).join('\n\n'));
+  const addedMix = state.draft.ranges.reduce((total, range) => {
+    const mix = replacementMixOf(range);
+    total.narrow += mix.narrow;
+    total.wide += mix.wide;
+    return total;
+  }, { narrow: 0, wide: 0, images: 0 });
+  const added = isSelection() ? { point: 0, low: 0, high: 0 } : estFromMix(addedMix);
   const post = {
     point: Math.max(0, now - removed.point + added.point),
     low: Math.max(0, now - removed.high + added.low),
@@ -582,8 +606,8 @@ const EST_TIP = `Estimate only, never a gate: assumption table ≈${EST.narrowTo
   + `≈${EST.wideTokPerChar[0]}–${EST.wideTokPerChar[1]} tok per non-ASCII char, ≈${EST.imageTok[0]}–${EST.imageTok[1]} tok per image. `
   + 'The provider\u2019s report is the final authority.';
 
-function pbarHtml(proj, label, interactive) {
-  const tip = (interactive ? 'Click to preview the post-commit context (toggles Raw ⇄ Projected). ' : '') + EST_TIP;
+function pbarHtml(proj, label, interactive, caveat = '') {
+  const tip = caveat + (interactive ? 'Click to preview the post-commit context (toggles Raw ⇄ Projected). ' : '') + EST_TIP;
   const attrs = interactive ? ' data-toggle-mode role="button" tabindex="0"' : '';
   if (!proj) {
     return `<div class="pbar"${attrs}><div class="pl"><span>anchor usage</span></div><div class="tr"><span class="na">Pi-reported usage unavailable — the projection needs it</span></div></div>`;
@@ -655,7 +679,8 @@ function renderStrip() {
       <div class="di"><label>anchor content</label><span class="val save">−${fmt(save)} chars (−${pct(share)})</span></div>
       <div class="di"><label>pending</label><span class="val ${pending ? 'pend' : ''}">${pending}</span></div>`;
   }
-  $('strip').innerHTML = items + pbarHtml(proj, isSelection() ? 'if committed now' : 'after commit', !isSelection());
+  const caveat = isSelection() ? 'Selected content removal only; future summaries are not included. ' : '';
+  $('strip').innerHTML = items + pbarHtml(proj, isSelection() ? 'if committed now' : 'after commit', !isSelection(), caveat);
 }
 
 function renderRanges() {
@@ -680,7 +705,8 @@ function renderRanges() {
   if (!rs.length) { list.innerHTML = '<div class="empty">No range matches the filter.</div>'; return; }
   list.innerHTML = rs.map(r => {
     const d = draftOf(r);
-    const ratio = r.originalContentChars ? Math.round((1 - (r.replacementContentChars ?? 0) / r.originalContentChars) * 100) : 0;
+    const replacementChars = replacementCharsOf(r);
+    const ratio = r.originalContentChars ? Math.round((1 - replacementChars / r.originalContentChars) * 100) : 0;
     return `<div class="ritem" role="option" tabindex="0" data-range="${esc(r.id)}" aria-selected="${r.id === selectedId}">
       <div class="r1">
         <span class="rid">${hl(r.id, query)}</span>
@@ -690,7 +716,7 @@ function renderRanges() {
       </div>
       ${d.topic ? `<div class="topic">${hl(d.topic, query)}</div>` : ''}
       <div class="rsum">${hl(d.summary, query)}</div>
-      <div class="meta">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} chars · ${ratio}% fewer
+      <div class="meta">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(replacementChars)} chars · ${ratio}% fewer
         ${draftOf(r).summary.trim() ? '' : '<span class="pend">pending</span>'}
         ${reviewed.has(r.id) ? '<span class="rev">✓ reviewed</span>' : ''}
       </div>
@@ -753,7 +779,7 @@ function renderTimeline() {
         <span class="chev">▶</span>
         <span class="gid">${esc(r.id)}</span>
         <span class="gsum">${hl(d.topic || d.summary, query)}</span>
-        <span class="gstat">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)} <em>−${fmt(saveOf(r))}</em>
+        <span class="gstat">${r.atomCount} atoms · ${fmt(r.originalContentChars)}→${fmt(replacementCharsOf(r))} <em>−${fmt(saveOf(r))}</em>
           ${draftOf(r).summary.trim() ? '' : '<span class="pend">pending</span>'}${reviewed.has(r.id) ? '<span class="rev">✓</span>' : ''}</span>
       </button>
       <div class="gbody" ${open ? '' : 'hidden'}>${atoms.map(a => atomRowRaw(a, maxChars)).join('')}</div>
@@ -781,6 +807,7 @@ function keepGroupHtml(g, maxChars, open = !collapsed.has('keep-' + g.idx), atom
 
 function projectedCardHtml(r, g) {
   const d = draftOf(r);
+  const replacementChars = replacementCharsOf(r);
   if (!d.summary.trim()) {
     return `<div class="pcard pend" data-group-key="${esc(r.id)}">
       <div class="phead"><span class="pid">${esc(r.id)}</span><span class="ptopic warn">pending summary</span>
@@ -792,7 +819,7 @@ function projectedCardHtml(r, g) {
   }
   return `<div class="pcard" data-group-key="${esc(r.id)}">
     <div class="phead"><span class="pid">${esc(r.id)}</span><span class="ptopic">${hl(d.topic, query)}</span>
-      <span class="pmeta">${r.atomCount} atoms → ${fmt(r.replacementContentChars)} chars · replaces ${esc(r.startRef)}→${esc(r.endRef)}</span></div>
+      <span class="pmeta">${r.atomCount} atoms → ${fmt(replacementChars)} chars · replaces ${esc(r.startRef)}→${esc(r.endRef)}</span></div>
     <div class="ptext">${hl(d.summary, query)}</div>
     <div class="pactions"><button class="btn btn-sm" data-orig="${esc(g.atoms[0].ref)}">View original start</button>
       <button class="btn btn-sm" data-edit="${esc(r.id)}">Edit summary</button></div>
@@ -805,7 +832,6 @@ function toolTag(name) {
 }
 
 function atomRowRaw(a, maxChars) {
-  const open = openAtoms.has(a.ref);
   const w = maxChars ? Math.round((a.contentChars ?? 0) / maxChars * 100) : 0;
   const lockTags = [
     ...(a.toolNames ?? []).slice(0, 3).map(toolTag),
@@ -814,12 +840,12 @@ function atomRowRaw(a, maxChars) {
     a.protocolClosed === false ? '<span class="tag lock">open protocol</span>' : '',
     a.compressedBlockId ? `<span class="tag">blk ${esc(a.compressedBlockId)}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="atom ${a.kind === 'user' ? 'user' : ''} ${open ? 'open' : ''}" data-atom="${esc(a.ref)}">
+  return `<div class="atom ${a.kind === 'user' ? 'user' : ''}" data-atom="${esc(a.ref)}">
     <span class="aref">${hl(a.ref, query)}</span>
     <div>
       <div class="arow">
         <span class="tag kind-${esc(a.kind)}">${esc(a.kind)}</span>
-        <div class="abody">${hl(a.preview ?? '', query)}</div>
+        <button type="button" class="abody" data-orig="${esc(a.ref)}" title="View full original">${hl(a.preview ?? '', query)}</button>
       </div>
       ${lockTags ? `<div class="tags">${lockTags}</div>` : ''}
     </div>
@@ -827,12 +853,24 @@ function atomRowRaw(a, maxChars) {
   </div>`;
 }
 
+function selectionGroupMatches(g) {
+  return !query || (g.label ?? '').toLowerCase().includes(query)
+    || g.atoms.some(a => atomText(a).includes(query));
+}
+function visibleSelectionIndexes() {
+  const visibleRefs = new Set(buildGroups().filter(selectionGroupMatches).flatMap(g => g.atoms.map(a => a.ref)));
+  return state.atoms.flatMap((atom, index) => visibleRefs.has(atom.ref) ? [index] : []);
+}
+
 function renderSelectionTimeline(tl) {
   const maxChars = maxContentChars();
+  const visibleIndexes = visibleSelectionIndexes();
+  if (!visibleIndexes.includes(cursor)) cursor = visibleIndexes[0] ?? 0;
   let idx = -1;
+  let shown = 0;
   const html = buildGroups().map(g => {
-    if (query && !(g.label ?? '').toLowerCase().includes(query)
-      && !g.atoms.some(a => atomText(a).includes(query))) { idx += g.atoms.length; return ''; }
+    if (!selectionGroupMatches(g)) { idx += g.atoms.length; return ''; }
+    shown += g.atoms.length;
     const free = g.atoms.filter(a => !isLocked(a));
     const selCount = free.filter(a => selectionRefs.has(a.ref)).length;
     const rows = g.atoms.map(a => {
@@ -865,7 +903,7 @@ function renderSelectionTimeline(tl) {
     </section>`;
   }).join('');
   tl.innerHTML = html || '<div class="empty">Nothing matches the current filter.</div>';
-  $('tl-stat').textContent = query ? `${idx + 1} shown` : `${state.atoms.length} atoms`;
+  $('tl-stat').textContent = query ? `${shown}/${state.atoms.length} atoms` : `${state.atoms.length} atoms`;
 }
 
 function renderEditor() {
@@ -913,7 +951,7 @@ function renderEditor() {
     </div>
     <div class="estats">
       <div class="estat"><label>atoms</label><span>${r.atomCount}</span></div>
-      <div class="estat"><label>chars</label><span>${fmt(r.originalContentChars)}→${fmt(r.replacementContentChars)}</span></div>
+      <div class="estat"><label>chars</label><span>${fmt(r.originalContentChars)}→<span id="replacement-chars">${fmt(replacementCharsOf(r))}</span></span></div>
       <div class="estat"><label>images</label><span>${r.originalImageCount ?? 0}</span></div>
     </div>
     <div class="field" id="f-topic">
@@ -941,7 +979,9 @@ function renderEditor() {
 function updateCount() {
   const ta = $('summary');
   if (!ta) return;
-  $('sum-count').textContent = `${ta.value.length} chars`;
+  $('sum-count').textContent = `${[...ta.value].length} chars`;
+  const range = rangeById(selectedId);
+  if (range && $('replacement-chars')) $('replacement-chars').textContent = fmt(replacementCharsOf(range));
 }
 
 function renderHelp() {
@@ -1029,8 +1069,13 @@ function unselectSpan(startRef, endRef) {
   render();
 }
 function moveCursor(delta) {
-  if (!state.atoms.length) return;
-  cursor = Math.max(0, Math.min(state.atoms.length - 1, cursor + delta));
+  const visible = visibleSelectionIndexes();
+  if (!visible.length) return;
+  const current = visible.indexOf(cursor);
+  const next = current < 0
+    ? (delta < 0 ? visible.length - 1 : 0)
+    : Math.max(0, Math.min(visible.length - 1, current + delta));
+  cursor = visible[next];
   render();
   document.querySelector(`[data-idx="${cursor}"]`)?.scrollIntoView({ block: 'nearest' });
 }
@@ -1118,13 +1163,6 @@ $('timeline').addEventListener('click', e => {
   if (fix) { mode = 'raw'; syncMode(); select(fix.dataset.fix); $('summary')?.focus(); return; }
   const edit = e.target.closest('[data-edit]');
   if (edit) { mode = 'raw'; syncMode(); select(edit.dataset.edit); $('summary')?.focus(); return; }
-  const atom = e.target.closest('[data-atom]');
-  if (atom && e.target.closest('.abody')) {
-    const ref = atom.dataset.atom;
-    openAtoms.has(ref) ? openAtoms.delete(ref) : openAtoms.add(ref);
-    atom.classList.toggle('open');
-    return;
-  }
   const head = e.target.closest('[data-toggle]');
   if (!head) return;
   const key = head.dataset.toggle;
@@ -1139,10 +1177,10 @@ $('timeline').addEventListener('click', e => {
 });
 
 $('toggle-all').addEventListener('click', () => {
-  if (collapsed.size) { collapsed.clear(); $('toggle-all').textContent = 'Expand all'; }
+  if (collapsed.size) { collapsed.clear(); $('toggle-all').textContent = 'Collapse all'; }
   else {
-    buildGroups().forEach((g, i) => collapsed.add(g.key ?? ('keep-' + g.idx)));
-    $('toggle-all').textContent = 'Collapse all';
+    buildGroups().forEach(g => collapsed.add(g.key ?? ('keep-' + g.idx)));
+    $('toggle-all').textContent = 'Expand all';
   }
   renderTimeline();
 });
@@ -1333,9 +1371,13 @@ document.addEventListener('keydown', e => {
   if (isSelection()) {
     if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); return; }
-    if (e.key === ' ') { e.preventDefault(); toggleAtom(state.atoms[cursor]?.ref); return; }
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (visibleSelectionIndexes().includes(cursor)) toggleAtom(state.atoms[cursor]?.ref);
+      return;
+    }
     if (e.key === 'g' || e.key === 'G') {
-      const a = state.atoms[cursor];
+      const a = visibleSelectionIndexes().includes(cursor) ? state.atoms[cursor] : null;
       if (a) toggleGroupAtoms(a.groupRef);
       return;
     }

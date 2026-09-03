@@ -74,8 +74,8 @@ export function replacementMetrics(block: CompressionBlock): ContentMetrics {
  * Factual replacement content chars for a range, given its topic and summary.
  * Computed from the actual summary message wrapper text that projection emits.
  */
-export function replacementContentChars(summary: string, topic?: string): number {
-  const block: CompressionBlock = {
+function draftReplacementBlock(summary: string, topic?: string): CompressionBlock {
+  return {
     id: "draft",
     summary,
     topic,
@@ -89,7 +89,16 @@ export function replacementContentChars(summary: string, topic?: string): number
     originalApproxTokens: 0,
     compressedApproxTokens: 0,
   };
-  return replacementMetrics(block).contentChars;
+}
+
+/** Render the exact replacement content used for draft display estimates. */
+export function replacementContentText(summary: string, topic?: string): string {
+  const content = summaryMessage(draftReplacementBlock(summary, topic)).content;
+  return typeof content === "string" ? content : "";
+}
+
+export function replacementContentChars(summary: string, topic?: string): number {
+  return replacementMetrics(draftReplacementBlock(summary, topic)).contentChars;
 }
 
 /** @deprecated legacy heuristic; kept only for old approximate-token field compat. */

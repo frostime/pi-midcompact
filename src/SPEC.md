@@ -84,10 +84,11 @@ package.json → `pi.extensions`).
 - The tool never starts a transaction and never commits; both are command-
   or user-gated. Recall is the only action valid without a transaction.
 - Web workbench (`review-webui.html` + `review-webui.ts`): the state payload
-  carries per-atom char-class counts (`narrowChars`/`wideChars`) and the
+  carries per-atom char-class counts (`narrowChars`/`wideChars`), per-range
+  replacement char-class counts (including the actual wrapper), and the
   assumption table (`est`), so the page renders the projection band and can
-  estimate arbitrary selection spans; `GET /api/atom/:ref` serves the frozen
-  atom's full text for the original-text drawer (read-only, snapshot-local).
+  update estimates while a summary is edited; `GET /api/atom/:ref` serves the
+  frozen atom's full text for the original-text drawer (read-only, snapshot-local).
   User-facing copy says "can't compress" for protected atoms; "protected"
   stays the agent/tool-side term.
   Page invariants that broke once and must hold: the `<!--MIDCOMPACT_STATE-->`

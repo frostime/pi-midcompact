@@ -297,6 +297,8 @@ test("serializeReviewState maps atoms to ranges and tags range boundaries", () =
   assert.equal(r.id, "d1");
   assert.equal(r.topic, "intro");
   assert.equal(r.atomCount, 2);
+  assert.equal(r.replacementNarrowChars + r.replacementWideChars, r.replacementContentChars);
+  assert.ok(r.replacementContentChars > codePointCount(r.summary) + codePointCount(r.topic));
   const inRange = state.atoms.filter(a => a.owningRangeId === "d1");
   assert.equal(inRange.length, 2);
   assert.equal(inRange[0].isRangeStart, true);

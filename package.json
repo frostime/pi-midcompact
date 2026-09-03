@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/schema-contract.test.mjs test/core.test.mjs test/runtime-start.test.mjs test/runtime-agent.test.mjs test/runtime-user.test.mjs test/runtime-transaction.test.mjs test/runtime-lock.test.mjs",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/schema-contract.test.mjs test/core.test.mjs test/runtime-start.test.mjs test/runtime-agent.test.mjs test/runtime-user.test.mjs test/runtime-transaction.test.mjs test/runtime-lock.test.mjs && node test/review-webui-dom.test.mjs",
     "typecheck:contract": "tsc -p tsconfig.test.json --noEmit",
     "pack:check": "npm pack --dry-run"
   },

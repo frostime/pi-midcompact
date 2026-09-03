@@ -1,10 +1,9 @@
-// Behavioral DOM-stub smoke for src/review-webui.html (throwaway, tmp/).
-// Upgraded from the render-only stub: can dispatch clicks on captured
-// listeners, verifying R1 (ghead toggle), A2 (projected filters), F2 (pbar
-// toggle), A4 (collapse seed) without a browser.
+// Behavioral DOM-stub coverage for src/review-webui.html.
+// Executes the page module against a minimal DOM to protect stateful workbench
+// interactions that the HTTP-level tests cannot observe.
 import { readFileSync } from "node:fs";
 
-const SRC = new URL("../../../src/review-webui.html", import.meta.url);
+const SRC = new URL("../src/review-webui.html", import.meta.url);
 const html = readFileSync(SRC, "utf8");
 const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
 
@@ -22,7 +21,10 @@ function makeEl() {
       contains: (n) => classes.has(n),
     },
     addEventListener(type, fn) { (listeners[type] ??= []).push(fn); },
-    dispatch(type, target) { (listeners[type] ?? []).forEach((fn) => fn({ target, key: "" })); },
+    dispatch(type, target, init = {}) {
+      const event = { target, key: "", preventDefault() {}, ...init };
+      (listeners[type] ?? []).forEach((fn) => fn(event));
+    },
     setAttribute(k, v) { attrs[k] = v; },
     getAttribute: () => null,
     scrollIntoView() {}, focus() {},
@@ -46,8 +48,8 @@ const ATOMS = [
   { ref: "a0004", index: 3, groupRef: "g0002", groupLabel: "phase two", kind: "assistant", preview: "more work", contentChars: 2000, imageCount: 0, compressible: true, protocolClosed: true, toolNames: [], roles: [], narrowChars: 2000, wideChars: 0, owningRangeId: "d2" },
 ];
 const RANGES = [
-  { id: "d1", startRef: "a0001", endRef: "a0002", topic: "t1", summary: "s1", originalContentChars: 30011, originalImageCount: 2, originalImagePayloadBytes: 10, replacementContentChars: 100, atomCount: 2 },
-  { id: "d2", startRef: "a0004", endRef: "a0004", topic: "t2", summary: "", originalContentChars: 2000, originalImageCount: 0, originalImagePayloadBytes: 0, replacementContentChars: 0, atomCount: 1 },
+  { id: "d1", startRef: "a0001", endRef: "a0002", topic: "t1", summary: "s1", originalContentChars: 30011, originalImageCount: 2, originalImagePayloadBytes: 10, replacementContentChars: 1100, replacementNarrowChars: 1100, replacementWideChars: 0, atomCount: 2 },
+  { id: "d2", startRef: "a0004", endRef: "a0004", topic: "t2", summary: "", originalContentChars: 2000, originalImageCount: 0, originalImagePayloadBytes: 0, replacementContentChars: 900, replacementNarrowChars: 900, replacementWideChars: 0, atomCount: 1 },
 ];
 const STATE = JSON.stringify({
   view: "REPLACE_VIEW", est: { narrowTokPerChar: [0.22, 0.3], wideTokPerChar: [0.5, 1.0], imageTok: [700, 1600] },
@@ -58,6 +60,8 @@ const STATE = JSON.stringify({
 
 function boot(view) {
   const els = {};
+  const documentListeners = {};
+  const requests = [];
   const rawBtn = makeEl(); rawBtn.dataset.mode = "raw";
   const projBtn = makeEl(); projBtn.dataset.mode = "proj";
   const allBtn = makeEl(); allBtn.dataset.filter = "all";
@@ -75,7 +79,12 @@ function boot(view) {
       if (sel === "#policy-seg [data-filter]") return [allBtn, compressedBtn, keptBtn];
       return [];
     },
-    addEventListener() {},
+    addEventListener(type, fn) { (documentListeners[type] ??= []).push(fn); },
+    dispatch(type, init = {}) {
+      const target = init.target ?? makeEl();
+      const event = { target, key: "", preventDefault() {}, ...init };
+      (documentListeners[type] ?? []).forEach((fn) => fn(event));
+    },
     body: { classList: { add() {}, remove() {}, contains: () => false }, setAttribute() {}, innerHTML: "" },
     documentElement: { getAttribute: () => "dark", setAttribute() {} },
   };
@@ -87,17 +96,21 @@ function boot(view) {
     { getItem: () => null, setItem() {} },
     { sendBeacon: () => true },
     { addEventListener() {} },
-    async () => ({ ok: true, json: async () => ({}) }),
+    async (path) => {
+      requests.push(String(path));
+      return { ok: true, json: async () => ({ ref: "a0001", kind: "user", contentChars: 11, imageCount: 0, fullText: "full atom text" }) };
+    },
   );
-  return { els, rawBtn, projBtn, allBtn, compressedBtn, keptBtn };
+  return { els, document, requests, rawBtn, projBtn, allBtn, compressedBtn, keptBtn };
 }
 
 const assert = (cond, msg) => { if (!cond) { console.error("FAIL:", msg); process.exit(1); } console.log("ok:", msg); };
 
 // ---- review view ----
-const { els, rawBtn, projBtn, allBtn, compressedBtn, keptBtn } = boot("review");
-const strip = els["strip"].innerHTML, tl = els["timeline"].innerHTML, ed = els["editor"].innerHTML;
+const { els, requests, rawBtn, projBtn, allBtn, compressedBtn, keptBtn } = boot("review");
+const strip = els["strip"].innerHTML, tl = els["timeline"].innerHTML;
 assert(strip.includes("after commit") && strip.includes("(est. ±"), "T1 decision strip + pbar rendered");
+assert(strip.includes("≈149.9k tok"), "projection includes serialized replacement wrappers");
 assert(tl.includes('data-group-key="d1"') && tl.includes("KEEP"), "T1 raw timeline has range group + KEEP group");
 const hiddenCount = (tl.match(/class="gbody" hidden/g) || []).length;
 assert(hiddenCount === 1 && tl.indexOf('data-group-key="d2"') < tl.indexOf('class="gbody" hidden'), "T5/A4 seed: d2 (unselected) starts collapsed, d1 open");
@@ -117,6 +130,20 @@ els["timeline"].dispatch("click", ghead);
 assert(gbody.hidden === true && ghead._attrs["aria-expanded"] === "false", "R1 first ghead click collapses gbody");
 els["timeline"].dispatch("click", ghead);
 assert(gbody.hidden === false && ghead._attrs["aria-expanded"] === "true", "R1 second ghead click expands gbody");
+
+// Raw atom previews open the full-text drawer rather than expanding the truncated preview.
+const atomPreview = makeEl();
+atomPreview.dataset.orig = "a0002";
+atomPreview.closest = (sel) => sel === "[data-orig]" ? atomPreview : null;
+els["timeline"].dispatch("click", atomPreview);
+await Promise.resolve();
+assert(requests.includes("/api/atom/a0002"), "raw atom preview requests full original text");
+
+// Expand/collapse-all labels describe the next available action.
+els["toggle-all"].dispatch("click", els["toggle-all"]);
+assert(els["toggle-all"].textContent === "Collapse all", "expanded timeline offers Collapse all");
+els["toggle-all"].dispatch("click", els["toggle-all"]);
+assert(els["toggle-all"].textContent === "Expand all", "collapsed timeline offers Expand all");
 
 // A2: projected mode applies policy + query
 projBtn.dispatch("click", projBtn);
@@ -145,8 +172,29 @@ assert(!els["timeline"].innerHTML.includes("pcard") && els["timeline"].innerHTML
 // ---- selection view ----
 const sel = boot("selection");
 assert(sel.els["timeline"].innerHTML.length > 0 && sel.els["editor"].innerHTML.includes("Save selection"), "selection view renders");
+assert(sel.els["strip"].innerHTML.includes("future summaries are not included"), "selection projection discloses omitted summaries");
 assert(sel.els["saved-badge"].hidden === false && sel.els["saved-badge"].textContent.includes("Saved · v"), "F2/saved chip shows on selection with saved draft");
 assert(els["saved-badge"].hidden === true, "saved chip hidden in review view");
+
+// Filtering moves the keyboard cursor into the visible set; Space cannot change a hidden atom.
+sel.els["q"].value = "phase two";
+sel.els["q"].dispatch("input", sel.els["q"]);
+assert(sel.els["tl-stat"].textContent === "1/4 atoms", "selection filter reports the visible atom count");
+assert(/cursor-atom[^\"]*\"\s+data-idx=\"3\"/.test(sel.els["timeline"].innerHTML), "selection cursor moves to the visible atom");
+sel.document.dispatch("keydown", { key: " " });
+assert(!sel.els["timeline"].innerHTML.includes("selected-atom"), "Space toggles the visible filtered atom");
+
+// Unsaved summary edits update factual replacement size before a server save.
+els["topic"] = makeEl();
+els["topic"].value = "t1";
+els["summary"].value = "x".repeat(600);
+const summaryTarget = els["summary"];
+summaryTarget.id = "summary";
+els["editor"].dispatch("input", summaryTarget);
+const expectedReplacementChars = 1100 - "s1".length + 600;
+const expectedReplacementDisplay = (expectedReplacementChars / 1000).toFixed(1) + "k";
+assert(els["replacement-chars"].textContent === expectedReplacementDisplay, "live editor replacement chars follow unsaved summary");
+assert(els["range-list"].innerHTML.includes(`30.0k→${expectedReplacementDisplay} chars`), "range metrics follow unsaved summary");
 
 // tool/role tags restored on raw atom rows
 assert(els["timeline"].innerHTML.includes("tag tool read"), "F3/tool tags render on atom rows");

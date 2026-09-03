@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import { TOKEN_ESTIMATE, charClassCounts } from "./content-metrics.js";
+import { replacementContentText } from "./projection.js";
 import type { Atom, DraftPlan, DraftTelemetry, SelectionSpan } from "./types.js";
 
 const HTML_TEMPLATE = readFileSync(new URL("review-webui.html", import.meta.url), "utf8");
@@ -54,6 +55,9 @@ export interface ReviewState {
       originalImageCount: number;
       originalImagePayloadBytes: number;
       replacementContentChars: number;
+      /** Char-class counts over the exact saved replacement wrapper and summary. */
+      replacementNarrowChars: number;
+      replacementWideChars: number;
       atomCount: number;
     }>;
   };
@@ -139,18 +143,23 @@ export function serializeReviewState(
     }),
     draft: {
       revision: draft.revision,
-      ranges: draft.ranges.map((range) => ({
-        id: range.id,
-        startRef: range.startRef,
-        endRef: range.endRef,
-        topic: range.topic,
-        summary: range.summary,
-        originalContentChars: range.originalContentChars,
-        originalImageCount: range.originalImageCount,
-        originalImagePayloadBytes: range.originalImagePayloadBytes,
-        replacementContentChars: range.replacementContentChars,
-        atomCount: range.endIndex - range.startIndex + 1,
-      })),
+      ranges: draft.ranges.map((range) => {
+        const replacementMix = charClassCounts(replacementContentText(range.summary, range.topic));
+        return {
+          id: range.id,
+          startRef: range.startRef,
+          endRef: range.endRef,
+          topic: range.topic,
+          summary: range.summary,
+          originalContentChars: range.originalContentChars,
+          originalImageCount: range.originalImageCount,
+          originalImagePayloadBytes: range.originalImagePayloadBytes,
+          replacementContentChars: range.replacementContentChars,
+          replacementNarrowChars: replacementMix.narrowChars,
+          replacementWideChars: replacementMix.wideChars,
+          atomCount: range.endIndex - range.startIndex + 1,
+        };
+      }),
     },
     telemetry,
   };
