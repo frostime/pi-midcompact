@@ -8,5 +8,9 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "dev/review-webui-fixtures.ts",
+    "dev/review-webui-preview.ts"
+  ]
 }

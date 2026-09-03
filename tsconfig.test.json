@@ -10,5 +10,9 @@
     "noEmit": false,
     "allowImportingTsExtensions": false
   },
-  "include": ["src/**/*.ts", "dev/pi-test-contract.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "dev/review-webui-fixtures.ts",
+    "dev/pi-test-contract.d.ts"
+  ]
 }

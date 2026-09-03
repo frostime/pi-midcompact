@@ -89,6 +89,10 @@ package.json → `pi.extensions`).
   assumption table (`est`), so the page renders the projection band and can
   update estimates while a summary is edited; `GET /api/atom/:ref` serves the
   frozen atom's full text for the original-text drawer (read-only, snapshot-local).
+  `startReviewWebUiServer` owns the Pi-independent loopback HTTP contract;
+  `showReviewWebUi` adapts it to Pi notification, browser launch, and page-bound
+  lifetime. Development may opt into a persistent server without changing the
+  production defaults.
   User-facing copy says "can't compress" for protected atoms; "protected"
   stays the agent/tool-side term.
   Page invariants that broke once and must hold: the `<!--MIDCOMPACT_STATE-->`

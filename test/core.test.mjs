@@ -12,6 +12,7 @@ const inventoryMod = await import(new URL("inventory.js", ROOT));
 const selectionMod = await import(new URL("selection.js", ROOT));
 const reviewMod = await import(new URL("review-ui.js", ROOT));
 const reviewWebMod = await import(new URL("review-webui.js", ROOT));
+const previewFixturesMod = await import(new URL("../dev/review-webui-fixtures.js", ROOT));
 const planningLockMod = await import(new URL("planning-lock.js", ROOT));
 
 const { buildAtoms, locateAtoms, locateAtomMatches, formatLocatedAtom, MAX_LOCATE_MATCHES } = atomsMod;
@@ -32,7 +33,8 @@ const {
 } = inventoryMod;
 const { expandSelection, SelectionError } = selectionMod;
 const { buildReviewText } = reviewMod;
-const { serializeReviewState, showReviewWebUi } = reviewWebMod;
+const { serializeReviewState, showReviewWebUi, startReviewWebUiServer } = reviewWebMod;
+const { PREVIEW_FIXTURE_NAMES, createReviewWebUiFixture } = previewFixturesMod;
 const messagesMod = await import(new URL("messages.js", ROOT));
 const { renderMessage } = messagesMod;
 const { emptyPlanningLock, agentCanMutate, tryAcquireUi, acquireAgent, releaseAgent, releaseUi } = planningLockMod;
@@ -359,6 +361,41 @@ test("Web UI ends when its page liveness connection disappears", async () => {
   } finally {
     if (!completed) await fetch(new URL("/api/close", url), { method: "POST" }).catch(() => {});
   }
+});
+
+test("standalone Web UI server survives page disconnect and client Close", async () => {
+  const draft = emptyDraft("tx-web-persistent");
+  const telemetry = draftTelemetry({ version: 1, id: "tx-web-persistent", anchorEntryId: "e1", startedAt: "now" }, draft);
+  const server = await startReviewWebUiServer(
+    [],
+    () => ({ draft, telemetry }),
+    { editSummary() {}, editTopic() {}, remove() {} },
+    "review",
+    {
+      lifecycle: "persistent",
+      livenessPingIntervalMs: 20,
+    },
+  );
+
+  try {
+    const liveness = await fetch(new URL("/api/liveness", server.url));
+    await liveness.body.cancel();
+    const close = await fetch(new URL("/api/close", server.url), { method: "POST" });
+    assert.equal(close.status, 200);
+    const state = await fetch(new URL("/api/state", server.url));
+    assert.equal(state.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test("development fixtures cover distinct workbench states", () => {
+  const fixtures = PREVIEW_FIXTURE_NAMES.map(createReviewWebUiFixture);
+  assert.equal(fixtures.every((fixture) => fixture.atoms.length > 0), true);
+  assert.equal(fixtures.find((fixture) => fixture.name === "review-pending").draft.ranges.some((range) => !range.summary), true);
+  assert.equal(fixtures.find((fixture) => fixture.name === "selection-mixed").view, "selection");
+  assert.equal(fixtures.find((fixture) => fixture.name === "no-telemetry").transaction.anchorUsage, undefined);
+  assert.equal(fixtures.find((fixture) => fixture.name === "wide-content").atoms.some((atom) => atom.metrics.imageCount > 0), true);
 });
 
 // ---- Phase 2: factual content metrics ----

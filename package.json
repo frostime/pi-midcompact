@@ -32,6 +32,7 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev:webui": "tsx watch dev/review-webui-preview.ts",
     "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node test/install-mocks.mjs && node --test test/schema-contract.test.mjs test/core.test.mjs test/runtime-start.test.mjs test/runtime-agent.test.mjs test/runtime-user.test.mjs test/runtime-transaction.test.mjs test/runtime-lock.test.mjs && node test/review-webui-dom.test.mjs",
     "typecheck:contract": "tsc -p tsconfig.test.json --noEmit",
     "pack:check": "npm pack --dry-run"
@@ -45,6 +46,7 @@
     "@earendil-works/pi-ai": "^0.84.1",
     "@earendil-works/pi-coding-agent": "^0.84.1",
     "typescript": "^5.9.3",
+    "tsx": "^4.23.13",
     "@earendil-works/pi-tui": "^0.84.1"
   },
   "pi": {

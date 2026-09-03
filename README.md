@@ -222,6 +222,23 @@ Enter/Esc/q        close
 
 The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
 
+## Web UI Development
+
+From a source checkout, run the browser workbench against in-memory fixtures
+without starting Pi:
+
+```bash
+npm run dev:webui
+npm run dev:webui -- --port=4180 --no-open
+```
+
+The command opens a fixture router for `review-ready`, `review-pending`,
+`selection-mixed`, `no-telemetry`, and `wide-content`. Each button opens an
+isolated workbench with its own in-memory draft. Fixture pages survive browser
+refresh and the page's Close action, reload HTML changes automatically, and
+restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
+`dev/midcompact-debug-ui.ts` only when validating against an actual Pi session.
+
 ## Guarantees and Limits
 
 - **Original history is retained.** Compression changes what later model requests see, not the stored Pi messages.

@@ -222,6 +222,21 @@ Enter/Esc/q        关闭
 
 扩展只在事务进行期间在 Pi 页脚显示规划状态；提交或放弃后会自动清除。
 
+## Web UI 开发
+
+在源码 checkout 中，无需启动 Pi 即可用内存 fixture 运行浏览器工作台：
+
+```bash
+npm run dev:webui
+npm run dev:webui -- --port=4180 --no-open
+```
+
+命令会打开一个 fixture router，其中包含 `review-ready`、`review-pending`、
+`selection-mixed`、`no-telemetry` 和 `wide-content`。每个按钮都会打开一套独立的
+工作台和内存草案。刷新浏览器或点击 Close 不会终止 fixture；HTML 修改会自动刷新
+页面，导入的 TypeScript 修改会触发进程重启。用 `Ctrl+C` 停止 router。只有在验证
+真实 Pi 会话集成时，才需要使用 `dev/midcompact-debug-ui.ts`。
+
 ## 保证与限制
 
 - **保留原始历史。** 压缩只改变后续模型请求看到的内容，不改写存储的 Pi 消息。

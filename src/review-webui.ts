@@ -71,13 +71,28 @@ export interface ReviewWebUiCallbacks {
   remove(draftId: string): void;
 }
 
-export interface ReviewWebUiRuntimeOptions {
-  /** Test seam; production opens the system browser. */
-  openBrowser?: (url: string) => void;
-  /** Release the UI when no page establishes its liveness stream. */
+export interface ReviewWebUiServerOptions {
+  /** Fixed port for a long-running development host; production uses an ephemeral port. */
+  port?: number;
+  /** Release the server when no page establishes its liveness stream. Zero disables the timeout. */
   livenessConnectTimeoutMs?: number;
   /** Server-originated keepalive interval for detecting a disappeared page. */
   livenessPingIntervalMs?: number;
+  /** Page-bound production lifetime by default; persistent hosts survive refresh and Close. */
+  lifecycle?: "page" | "persistent";
+  /** Supply a fresh page template per request, primarily for development reloads. */
+  htmlTemplate?: () => string;
+}
+
+export interface ReviewWebUiServerHandle {
+  url: string;
+  closed: Promise<void>;
+  close(): Promise<void>;
+}
+
+export interface ReviewWebUiRuntimeOptions extends ReviewWebUiServerOptions {
+  /** Test seam; production opens the system browser. */
+  openBrowser?: (url: string) => void;
 }
 
 function owningRange(atomIndex: number, ranges: DraftPlan["ranges"]) {
@@ -165,42 +180,50 @@ export function serializeReviewState(
   };
 }
 
-/** Serve the shared Review/Selection workbench over loopback HTTP. */
-export async function showReviewWebUi(
-  ctx: ExtensionCommandContext,
+/** Start the Pi-independent Review/Selection HTTP surface on loopback. */
+export async function startReviewWebUiServer(
   atoms: Atom[],
   getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
   callbacks: ReviewWebUiCallbacks,
   view: ReviewWebUiView = "review",
-  runtime: ReviewWebUiRuntimeOptions = {},
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const connectTimeoutMs = runtime.livenessConnectTimeoutMs ?? 30_000;
-    const pingIntervalMs = runtime.livenessPingIntervalMs ?? 10_000;
-    let settled = false;
-    let closing = false;
-    let livenessResponse: http.ServerResponse | undefined;
-    let connectTimer: NodeJS.Timeout | undefined;
-    let pingTimer: NodeJS.Timeout | undefined;
+  options: ReviewWebUiServerOptions = {},
+): Promise<ReviewWebUiServerHandle> {
+  const pageBound = (options.lifecycle ?? "page") === "page";
+  const connectTimeoutMs = options.livenessConnectTimeoutMs ?? (pageBound ? 30_000 : 0);
+  const pingIntervalMs = options.livenessPingIntervalMs ?? 10_000;
+  let settled = false;
+  let closing = false;
+  let started = false;
+  let livenessResponse: http.ServerResponse | undefined;
+  let connectTimer: NodeJS.Timeout | undefined;
+  let pingTimer: NodeJS.Timeout | undefined;
+  let resolveClosed!: () => void;
+  let rejectClosed!: (error: Error) => void;
+  const closed = new Promise<void>((resolve, reject) => {
+    resolveClosed = resolve;
+    rejectClosed = reject;
+  });
 
-    const clearTimers = () => {
-      if (connectTimer) clearTimeout(connectTimer);
-      if (pingTimer) clearInterval(pingTimer);
-      connectTimer = undefined;
-      pingTimer = undefined;
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimers();
-      resolve();
-    };
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimers();
-      reject(error);
-    };
+  const clearTimers = () => {
+    if (connectTimer) clearTimeout(connectTimer);
+    if (pingTimer) clearInterval(pingTimer);
+    connectTimer = undefined;
+    pingTimer = undefined;
+  };
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    resolveClosed();
+  };
+  const fail = (error: Error) => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    rejectClosed(error);
+  };
+
+  return new Promise<ReviewWebUiServerHandle>((resolveStart, rejectStart) => {
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const path = url.pathname;
@@ -242,14 +265,15 @@ export async function showReviewWebUi(
           req.on("close", () => {
             if (livenessResponse === res) {
               livenessResponse = undefined;
-              closeServer();
+              if (pageBound) closeServer();
             }
           });
           return;
         }
         if (req.method === "GET" && path === "/") {
           const stateJson = JSON.stringify(currentState()).replace(/</g, "\\u003c");
-          sendHtml(HTML_TEMPLATE.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
+          const template = options.htmlTemplate?.() ?? HTML_TEMPLATE;
+          sendHtml(template.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
           return;
         }
         if (req.method === "GET" && path === "/api/state") {
@@ -274,7 +298,7 @@ export async function showReviewWebUi(
         }
         if (req.method === "POST" && path === "/api/close") {
           sendJson(200, { ok: true });
-          closeServer();
+          if (pageBound) closeServer();
           return;
         }
         if (req.method === "POST" && path === "/api/selection") {
@@ -332,20 +356,50 @@ export async function showReviewWebUi(
       clearTimers();
       if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
       livenessResponse = undefined;
-      server.close(finish);
+      server.close((error) => error ? fail(error) : finish());
     };
 
-    server.on("error", fail);
-    server.listen(0, "127.0.0.1", () => {
+    server.on("error", (error) => {
+      if (!started) {
+        started = true;
+        clearTimers();
+        rejectStart(error);
+        return;
+      }
+      fail(error);
+    });
+    server.listen(options.port ?? 0, "127.0.0.1", () => {
+      started = true;
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       const url = `http://127.0.0.1:${port}/?view=${view}`;
-      const token = randomBytes(3).toString("hex");
-      ctx.ui.notify(`Midcompact ${view} webui ready: ${url} (token ${token})`, "info");
-      connectTimer = setTimeout(closeServer, connectTimeoutMs);
-      (runtime.openBrowser ?? tryOpenBrowser)(url);
+      if (connectTimeoutMs > 0) connectTimer = setTimeout(closeServer, connectTimeoutMs);
+      resolveStart({
+        url,
+        closed,
+        close: () => {
+          closeServer();
+          return closed;
+        },
+      });
     });
   });
+}
+
+/** Serve the shared workbench with production Pi notification and page lifetime. */
+export async function showReviewWebUi(
+  ctx: ExtensionCommandContext,
+  atoms: Atom[],
+  getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
+  callbacks: ReviewWebUiCallbacks,
+  view: ReviewWebUiView = "review",
+  runtime: ReviewWebUiRuntimeOptions = {},
+): Promise<void> {
+  const server = await startReviewWebUiServer(atoms, getLatest, callbacks, view, runtime);
+  const token = randomBytes(3).toString("hex");
+  ctx.ui.notify(`Midcompact ${view} webui ready: ${server.url} (token ${token})`, "info");
+  (runtime.openBrowser ?? tryOpenBrowser)(server.url);
+  await server.closed;
 }
 
 function tryOpenBrowser(url: string): void {
