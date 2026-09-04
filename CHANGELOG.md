@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-05
+
 ### Added
 
 - Added a Pi-independent Web UI development router (`npm run dev:webui`) with clickable in-memory Review/Selection fixtures, persistent browser refresh, and automatic HTML/TypeScript reloads.
@@ -57,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/frostime/pi-midcompact/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/frostime/pi-midcompact/compare/v0.5.0...v0.5.1

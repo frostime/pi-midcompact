@@ -1,6 +1,6 @@
 {
   "name": "pi-midcompact",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Branch-aware mid-context compression for the Pi coding agent",
   "author": "frostime",
   "repository": {
