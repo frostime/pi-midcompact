@@ -55,7 +55,7 @@ The raw session JSONL still contains:
 
 ### A reviewed draft can reclaim meaningful context
 
-The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage separately from factual content chars and image counts; it does not derive projected token savings from local character estimates. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
 
 <p align="center">
   <a href="./figures/review-webui.png">
@@ -221,6 +221,23 @@ Enter/Esc/q        close
 | `/midcompact:status` | Displays the current draft, or the committed compression state on this branch. |
 
 The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
+
+## Web UI Development
+
+From a source checkout, run the browser workbench against in-memory fixtures
+without starting Pi:
+
+```bash
+npm run dev:webui
+npm run dev:webui -- --port=4180 --no-open
+```
+
+The command opens a fixture router for `review-ready`, `review-pending`,
+`selection-mixed`, `no-telemetry`, and `wide-content`. Each button opens an
+isolated workbench with its own in-memory draft. Fixture pages survive browser
+refresh and the page's Close action, reload HTML changes automatically, and
+restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
+`dev/midcompact-debug-ui.ts` only when validating against an actual Pi session.
 
 ## Guarantees and Limits
 

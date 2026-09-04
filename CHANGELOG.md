@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a Pi-independent Web UI development router (`npm run dev:webui`) with clickable in-memory Review/Selection fixtures, persistent browser refresh, and automatic HTML/TypeScript reloads.
+- Browser workbench rework (`review-webui` / `select-webui`): decision strip with a post-commit projection band (display-level, `est.`-labeled, derived from a documented char-class assumption table), Raw ⇄ Projected timeline toggle, atom original-text drawer (`GET /api/atom/:ref`), pending-summary surfacing (list, projection card, close dialog), reviewed checklist, sticky editor actions, and next-step commit guidance. Selection is now two-state (unselected = KEEP) with keyboard selection (arrow keys / Space / G) and live range previews. Session-loss detection flips the page read-only.
+
+### Changed
+
+- Workbench visual system rebuilt: zinc-neutral surfaces with semantic-only color, 14px base type scale with relaxed density, timeline visual anchors (group rails, user landmarks, kind tints, size meters), light + dark themes, `prefers-reduced-motion` support.
+- User-facing copy pass: "not compressible" → "can't compress"; internal jargon ("DraftPlan", "provider usage fact", "payload facts only") removed from the page.
+
 ## [0.5.3] - 2026-09-01
 
 ### Changed

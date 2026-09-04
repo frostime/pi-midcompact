@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
+import { TOKEN_ESTIMATE, charClassCounts } from "./content-metrics.js";
+import { replacementContentText } from "./projection.js";
 import type { Atom, DraftPlan, DraftTelemetry, SelectionSpan } from "./types.js";
 
 const HTML_TEMPLATE = readFileSync(new URL("review-webui.html", import.meta.url), "utf8");
@@ -13,6 +15,12 @@ export type ReviewWebUiView = "review" | "selection";
 
 export interface ReviewState {
   view: ReviewWebUiView;
+  /** Char-class token-cost assumption table shared with the page (see content-metrics). */
+  est: {
+    readonly narrowTokPerChar: readonly [number, number];
+    readonly wideTokPerChar: readonly [number, number];
+    readonly imageTok: readonly [number, number];
+  };
   atoms: Array<{
     ref: string;
     index: number;
@@ -31,6 +39,9 @@ export interface ReviewState {
     owningRangeId?: string;
     isRangeStart?: boolean;
     isRangeEnd?: boolean;
+    /** Char-class counts over the atom's full text; display-level estimation input. */
+    narrowChars: number;
+    wideChars: number;
   }>;
   draft: {
     revision: number;
@@ -44,6 +55,9 @@ export interface ReviewState {
       originalImageCount: number;
       originalImagePayloadBytes: number;
       replacementContentChars: number;
+      /** Char-class counts over the exact saved replacement wrapper and summary. */
+      replacementNarrowChars: number;
+      replacementWideChars: number;
       atomCount: number;
     }>;
   };
@@ -57,13 +71,28 @@ export interface ReviewWebUiCallbacks {
   remove(draftId: string): void;
 }
 
-export interface ReviewWebUiRuntimeOptions {
-  /** Test seam; production opens the system browser. */
-  openBrowser?: (url: string) => void;
-  /** Release the UI when no page establishes its liveness stream. */
+export interface ReviewWebUiServerOptions {
+  /** Fixed port for a long-running development host; production uses an ephemeral port. */
+  port?: number;
+  /** Release the server when no page establishes its liveness stream. Zero disables the timeout. */
   livenessConnectTimeoutMs?: number;
   /** Server-originated keepalive interval for detecting a disappeared page. */
   livenessPingIntervalMs?: number;
+  /** Page-bound production lifetime by default; persistent hosts survive refresh and Close. */
+  lifecycle?: "page" | "persistent";
+  /** Supply a fresh page template per request, primarily for development reloads. */
+  htmlTemplate?: () => string;
+}
+
+export interface ReviewWebUiServerHandle {
+  url: string;
+  closed: Promise<void>;
+  close(): Promise<void>;
+}
+
+export interface ReviewWebUiRuntimeOptions extends ReviewWebUiServerOptions {
+  /** Test seam; production opens the system browser. */
+  openBrowser?: (url: string) => void;
 }
 
 function owningRange(atomIndex: number, ranges: DraftPlan["ranges"]) {
@@ -100,9 +129,11 @@ export function serializeReviewState(
   const groups = groupMeta(atoms);
   return {
     view,
+    est: TOKEN_ESTIMATE,
     atoms: atoms.map((atom) => {
       const owner = owningRange(atom.index, draft.ranges);
       const group = groups.get(atom.index)!;
+      const mix = charClassCounts(atom.fullText);
       return {
         ref: atom.ref,
         index: atom.index,
@@ -121,63 +152,78 @@ export function serializeReviewState(
         owningRangeId: owner?.id,
         isRangeStart: owner?.startIndex === atom.index,
         isRangeEnd: owner?.endIndex === atom.index,
+        narrowChars: mix.narrowChars,
+        wideChars: mix.wideChars,
       };
     }),
     draft: {
       revision: draft.revision,
-      ranges: draft.ranges.map((range) => ({
-        id: range.id,
-        startRef: range.startRef,
-        endRef: range.endRef,
-        topic: range.topic,
-        summary: range.summary,
-        originalContentChars: range.originalContentChars,
-        originalImageCount: range.originalImageCount,
-        originalImagePayloadBytes: range.originalImagePayloadBytes,
-        replacementContentChars: range.replacementContentChars,
-        atomCount: range.endIndex - range.startIndex + 1,
-      })),
+      ranges: draft.ranges.map((range) => {
+        const replacementMix = charClassCounts(replacementContentText(range.summary, range.topic));
+        return {
+          id: range.id,
+          startRef: range.startRef,
+          endRef: range.endRef,
+          topic: range.topic,
+          summary: range.summary,
+          originalContentChars: range.originalContentChars,
+          originalImageCount: range.originalImageCount,
+          originalImagePayloadBytes: range.originalImagePayloadBytes,
+          replacementContentChars: range.replacementContentChars,
+          replacementNarrowChars: replacementMix.narrowChars,
+          replacementWideChars: replacementMix.wideChars,
+          atomCount: range.endIndex - range.startIndex + 1,
+        };
+      }),
     },
     telemetry,
   };
 }
 
-/** Serve the shared Review/Selection workbench over loopback HTTP. */
-export async function showReviewWebUi(
-  ctx: ExtensionCommandContext,
+/** Start the Pi-independent Review/Selection HTTP surface on loopback. */
+export async function startReviewWebUiServer(
   atoms: Atom[],
   getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
   callbacks: ReviewWebUiCallbacks,
   view: ReviewWebUiView = "review",
-  runtime: ReviewWebUiRuntimeOptions = {},
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const connectTimeoutMs = runtime.livenessConnectTimeoutMs ?? 30_000;
-    const pingIntervalMs = runtime.livenessPingIntervalMs ?? 10_000;
-    let settled = false;
-    let closing = false;
-    let livenessResponse: http.ServerResponse | undefined;
-    let connectTimer: NodeJS.Timeout | undefined;
-    let pingTimer: NodeJS.Timeout | undefined;
+  options: ReviewWebUiServerOptions = {},
+): Promise<ReviewWebUiServerHandle> {
+  const pageBound = (options.lifecycle ?? "page") === "page";
+  const connectTimeoutMs = options.livenessConnectTimeoutMs ?? (pageBound ? 30_000 : 0);
+  const pingIntervalMs = options.livenessPingIntervalMs ?? 10_000;
+  let settled = false;
+  let closing = false;
+  let started = false;
+  let livenessResponse: http.ServerResponse | undefined;
+  let connectTimer: NodeJS.Timeout | undefined;
+  let pingTimer: NodeJS.Timeout | undefined;
+  let resolveClosed!: () => void;
+  let rejectClosed!: (error: Error) => void;
+  const closed = new Promise<void>((resolve, reject) => {
+    resolveClosed = resolve;
+    rejectClosed = reject;
+  });
 
-    const clearTimers = () => {
-      if (connectTimer) clearTimeout(connectTimer);
-      if (pingTimer) clearInterval(pingTimer);
-      connectTimer = undefined;
-      pingTimer = undefined;
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimers();
-      resolve();
-    };
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimers();
-      reject(error);
-    };
+  const clearTimers = () => {
+    if (connectTimer) clearTimeout(connectTimer);
+    if (pingTimer) clearInterval(pingTimer);
+    connectTimer = undefined;
+    pingTimer = undefined;
+  };
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    resolveClosed();
+  };
+  const fail = (error: Error) => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    rejectClosed(error);
+  };
+
+  return new Promise<ReviewWebUiServerHandle>((resolveStart, rejectStart) => {
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const path = url.pathname;
@@ -219,23 +265,40 @@ export async function showReviewWebUi(
           req.on("close", () => {
             if (livenessResponse === res) {
               livenessResponse = undefined;
-              closeServer();
+              if (pageBound) closeServer();
             }
           });
           return;
         }
         if (req.method === "GET" && path === "/") {
           const stateJson = JSON.stringify(currentState()).replace(/</g, "\\u003c");
-          sendHtml(HTML_TEMPLATE.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
+          const template = options.htmlTemplate?.() ?? HTML_TEMPLATE;
+          sendHtml(template.replace("<!--MIDCOMPACT_STATE-->", () => stateJson));
           return;
         }
         if (req.method === "GET" && path === "/api/state") {
           sendJson(200, currentState());
           return;
         }
+        const atomMatch = path.match(/^\/api\/atom\/([^/]+)$/);
+        if (req.method === "GET" && atomMatch) {
+          const atom = atoms.find((a) => a.ref === decodeURIComponent(atomMatch[1]!));
+          if (!atom) {
+            sendJson(404, { error: `Unknown atom ${atomMatch[1]}` });
+            return;
+          }
+          sendJson(200, {
+            ref: atom.ref,
+            kind: atom.kind,
+            contentChars: atom.metrics.contentChars,
+            imageCount: atom.metrics.imageCount,
+            fullText: atom.fullText,
+          });
+          return;
+        }
         if (req.method === "POST" && path === "/api/close") {
           sendJson(200, { ok: true });
-          closeServer();
+          if (pageBound) closeServer();
           return;
         }
         if (req.method === "POST" && path === "/api/selection") {
@@ -293,20 +356,50 @@ export async function showReviewWebUi(
       clearTimers();
       if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
       livenessResponse = undefined;
-      server.close(finish);
+      server.close((error) => error ? fail(error) : finish());
     };
 
-    server.on("error", fail);
-    server.listen(0, "127.0.0.1", () => {
+    server.on("error", (error) => {
+      if (!started) {
+        started = true;
+        clearTimers();
+        rejectStart(error);
+        return;
+      }
+      fail(error);
+    });
+    server.listen(options.port ?? 0, "127.0.0.1", () => {
+      started = true;
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       const url = `http://127.0.0.1:${port}/?view=${view}`;
-      const token = randomBytes(3).toString("hex");
-      ctx.ui.notify(`Midcompact ${view} webui ready: ${url} (token ${token})`, "info");
-      connectTimer = setTimeout(closeServer, connectTimeoutMs);
-      (runtime.openBrowser ?? tryOpenBrowser)(url);
+      if (connectTimeoutMs > 0) connectTimer = setTimeout(closeServer, connectTimeoutMs);
+      resolveStart({
+        url,
+        closed,
+        close: () => {
+          closeServer();
+          return closed;
+        },
+      });
     });
   });
+}
+
+/** Serve the shared workbench with production Pi notification and page lifetime. */
+export async function showReviewWebUi(
+  ctx: ExtensionCommandContext,
+  atoms: Atom[],
+  getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
+  callbacks: ReviewWebUiCallbacks,
+  view: ReviewWebUiView = "review",
+  runtime: ReviewWebUiRuntimeOptions = {},
+): Promise<void> {
+  const server = await startReviewWebUiServer(atoms, getLatest, callbacks, view, runtime);
+  const token = randomBytes(3).toString("hex");
+  ctx.ui.notify(`Midcompact ${view} webui ready: ${server.url} (token ${token})`, "info");
+  (runtime.openBrowser ?? tryOpenBrowser)(server.url);
+  await server.closed;
 }
 
 function tryOpenBrowser(url: string): void {

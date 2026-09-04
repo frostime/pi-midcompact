@@ -55,7 +55,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 实际压缩效果
 
-下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 会把 Pi 提供的锚点 usage 与扩展统计的 content chars、图片数量分开显示，不再根据本地字符估算推导预计 token 节省量。点击图片可查看原图。
+下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。点击图片可查看原图。
 
 <p align="center">
   <a href="./figures/review-webui.png">
@@ -221,6 +221,21 @@ Enter/Esc/q        关闭
 | `/midcompact status` | 显示当前草案，或本分支已提交的压缩状态。 |
 
 扩展只在事务进行期间在 Pi 页脚显示规划状态；提交或放弃后会自动清除。
+
+## Web UI 开发
+
+在源码 checkout 中，无需启动 Pi 即可用内存 fixture 运行浏览器工作台：
+
+```bash
+npm run dev:webui
+npm run dev:webui -- --port=4180 --no-open
+```
+
+命令会打开一个 fixture router，其中包含 `review-ready`、`review-pending`、
+`selection-mixed`、`no-telemetry` 和 `wide-content`。每个按钮都会打开一套独立的
+工作台和内存草案。刷新浏览器或点击 Close 不会终止 fixture；HTML 修改会自动刷新
+页面，导入的 TypeScript 修改会触发进程重启。用 `Ctrl+C` 停止 router。只有在验证
+真实 Pi 会话集成时，才需要使用 `dev/midcompact-debug-ui.ts`。
 
 ## 保证与限制
 

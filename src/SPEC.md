@@ -32,7 +32,12 @@ package.json → `pi.extensions`).
   then appends state, abort appends nothing. Both refuse to run while the
   Agent holds the planning lock.
 - `anchorUsage` is informational only — Pi-reported awareness, never an
-  optimization target (same rule as `projectedTokens` / estimates).
+  optimization target. The web workbench may additionally render a
+  **display-level** post-commit projection derived from the documented
+  char-class assumption table in `content-metrics` (`TOKEN_ESTIMATE`): always
+  labeled `est.`, shown as a propagated band, and never feeding commit
+  gating, range validation, or any decision (same rule as `projectedTokens`
+  / `approxTokens`).
 - Atom refs are transaction-local: re-run inspect/locate in a later
   transaction; group refs (`g...`) are never locate refs.
 
@@ -78,6 +83,24 @@ package.json → `pi.extensions`).
   `skill:<name>`).
 - The tool never starts a transaction and never commits; both are command-
   or user-gated. Recall is the only action valid without a transaction.
+- Web workbench (`review-webui.html` + `review-webui.ts`): the state payload
+  carries per-atom char-class counts (`narrowChars`/`wideChars`), per-range
+  replacement char-class counts (including the actual wrapper), and the
+  assumption table (`est`), so the page renders the projection band and can
+  update estimates while a summary is edited; `GET /api/atom/:ref` serves the
+  frozen atom's full text for the original-text drawer (read-only, snapshot-local).
+  `startReviewWebUiServer` owns the Pi-independent loopback HTTP contract;
+  `showReviewWebUi` adapts it to Pi notification, browser launch, and page-bound
+  lifetime. Development may opt into a persistent server without changing the
+  production defaults.
+  User-facing copy says "can't compress" for protected atoms; "protected"
+  stays the agent/tool-side term.
+  Page invariants that broke once and must hold: the `<!--MIDCOMPACT_STATE-->`
+  script tag is the server's template injection point (renaming it breaks
+  state loading); `selectionRefs` initialization depends on helpers defined
+  later in the page script (order is load-bearing, TDZ); `gbody` visibility
+  is driven by the render-time `hidden` attribute, so collapse handlers must
+  sync that attribute, not just a class.
 
 ## Change rules
 
