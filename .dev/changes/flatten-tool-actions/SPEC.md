@@ -120,3 +120,80 @@
 | block | 块:range 经人工 commit 后的永久形态;id 形如 `c0001`,recall 的对象 |
 | measure | 度量:对候选区间做事实测量、不修改 plan 的操作(旧称 span inspection) |
 | 分页机制 | `page_size`/`cursor`,通用 cursor-pagination,非领域概念 |
+
+## 7. 术语迁移表
+
+实现完成的 old → new 全量对照,验收时可逐行核对。分四个层面:wire 动作、参数字段、运行时文案、文档词汇;最后列出**有意不迁移**的排除项。
+
+### 7.1 动作级(wire,breaking)
+
+| 旧调用(4 action + 模式) | 新 action | 说明 |
+|---|---|---|
+| `inspect`(无 spans) | `inspect` | 分页清单,预算/钳制不变 |
+| `inspect` + `spans` | `measure` | `candidates` 必填、`minItems:1`;spans+分页混用从"运行时报错"变为"结构不可能" |
+| `locate` + `ref`(±`detail`) | `locate_ref` | `detail=full⇒ref` 由 ref 必填结构性保证 |
+| `locate` + `pattern`/`tool_name`/`source`(±`direction`/`limit`) | `locate_search` | AND 合取保留;`source` 移除 `"any"`;`detail` 不再存在(全文走 `locate_ref`) |
+| `plan`(无参默认)/ `op:"show"` | `plan_show` | 零字段;旧 2×2 矩阵解体 |
+| `op:"show"` + `draft_id` + `detail:"full"` | `plan_read` | `range_id` 必填;规则②结构性消灭 |
+| `op:"show"` + `draft_id`(brief 单条) | *(裁撤)* | 退化场景:变更回显已覆盖、预算溢出续读极罕见;需要时用 `plan_show`(列表)或 `plan_read`(全文) |
+| `op:"add"` | `plan_add` | 缺 start/end 从运行时报错变为 schema required |
+| `op:"update"` | `plan_update` | `draft_id`→`range_id`;越权字段(start/end)结构不可能 |
+| `op:"remove"` | `plan_remove` | 同上 |
+| `recall`(无 ref) | `recall_list` | 免事务不变 |
+| `recall` + `ref` | `recall_read` | `ref`→`block`;`detail` 语义局部化 |
+
+### 7.2 参数/字段级
+
+| 旧 | 新 | 归属 |
+|---|---|---|
+| `draft_id` | `range_id` | `plan_read` / `plan_update` / `plan_remove` |
+| `recall` 的 `ref` | `block` | `recall_read` |
+| `inspect` 的 `spans` | `candidates` | `measure`(minItems:1) |
+| `source: "any"` | *(删除)* | `locate_search` 只保留四个真实取值 |
+| `op` | *(升格为 action 判别值)* | — |
+| `plan` 的 `detail` | *(裁撤)* | brief/full 由 `plan_show`/`plan_read` 身份承载 |
+
+### 7.3 运行时文案(报错 / 提示 / 输出头)
+
+| 旧 | 新 |
+|---|---|
+| `plan show detail=full requires draft_id.` | 结构性消灭;内部 guard 改为 "Full plan output requires a known range id." |
+| `Unknown draft range X.` | `Unknown plan range X.` |
+| `plan update requires summary or topic.` | `plan_update requires summary and/or topic; boundaries change via plan_remove + plan_add.` |
+| `Range overlaps an existing draft range.` | `Range overlaps an existing plan range; remove or replace it first.` |
+| `Unknown atom ref; run locate/inspect again…` | `Unknown atom ref; run inspect or locate again against the current anchor snapshot.` |
+| `inspect spans requires at least one start/end span.` | `measure requires at least one start/end candidate.` |
+| `re-run inspect against the current snapshot.`(measure 内) | `re-run measure against the current snapshot.` |
+| `locate accepts either one direct ref or search filters…` / `locate detail=full requires one direct atom ref.` | 结构性消灭;越权由 `locate_search does not accept: detail` 类兜底文案接管 |
+| `Use draft_id to inspect one range.`(预算通知) | `Use plan_read to inspect one range.` |
+| `call midcompact(request={action:"plan", op:"show"})`(handoff 提示) | `call midcompact(request={action:"plan_show"})` |
+| `persisted DraftPlan` / `Draft revision N` / `current shared draft` | `persisted plan` / `Plan revision N` / `shared starting point` |
+| `You may edit the DraftPlan` | `You may edit the plan` |
+| `plan show/add/update/remove … and recall`(动作列举) | `plan_show/plan_read/plan_add/plan_update/plan_remove … recall_list/recall_read` |
+| `DraftPlan saved.` / `The DraftPlan remains available` / `The DraftPlan is saved` | `Plan saved.` / `The plan remains available` / `The plan is saved` |
+| `Draft is empty; nothing to commit.` | `Plan is empty; nothing to commit.` |
+| `processing/editing the midcompact draft` | `processing/editing the midcompact plan` |
+| 命令描述 `Commit the current draft…` / `edit the draft` / `draft status` | `…the plan` / `…the plan` / `plan status` |
+| 输出头 `Draft v3: …` | `Plan v3: …` |
+| telemetry 头 `draft: N range(s)…` | `plan: N range(s)…` |
+| schema 描述 `with draft telemetry` | `with plan telemetry` |
+
+### 7.4 文档词汇(SKILL.md / tool-interface.md / AGENTS.md / src/SPEC.md)
+
+| 旧 | 新 |
+|---|---|
+| `DraftPlan` / the draft / draft range(三名一物) | `plan` / `plan range` |
+| `span`(实体名词) | `measure`(动作)/ `candidates`(参数);散文中 spans 仅作普通名词 |
+| `g…` ref(地址空间成员) | `g…` group label(纯显示、不可寻址);免责句 "A g… ref is not a locate ref" 删除 |
+| `ref`(通称,一名三义) | 按分支特化:`locate_ref.ref`(atom)、`recall_read.block`(block) |
+| `detail`(一名三义) | 各分支独立语义;plan 分支裁撤 |
+
+### 7.5 有意不迁移(排除声明)
+
+| 项 | 原因 |
+|---|---|
+| 代码类型名 `DraftPlan`/`DraftRange`/`DraftTelemetry`/`emptyDraft` 等 | 实现词汇,SPEC §3.3;契约面已全部换名 |
+| 持久化 entry `midcompact-draft` 与 `d…` id 前缀 | 兼容性冻结(STATE/DRAFT 形状不变);对模型是不透明 token |
+| README 架构图 `[draft v1]` 条目示意 | 指持久化条目历史,非契约词汇 |
+| 测试标题中的 `DraftPlan` 字样 | 内部词汇,非断言面 |
+| webui 页面文案 | v0.6.0 已完成去术语清理,无残留 |
