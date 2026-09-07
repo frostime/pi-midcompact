@@ -91,7 +91,7 @@
   - `src/SPEC.md`(External contracts 一节)
   - `README.md`(如含调用形状示例)
   - `CHANGELOG.md`(0.7.0 条目,BREAKING 标注)
-- 提交策略:分支上 checkpoint 提交(代码+测试一枚,文档同步一枚)→ `--no-ff` 合并 `main` → 仅在 `main` 上打 `v0.7.0` tag。
+- 提交策略:分支上 checkpoint 提交(代码+测试一枚,文档同步一枚)→ **用户验收通过后**,由用户决定何时 `--no-ff` 合并 `main`;合并与 `v0.7.0` tag(仅 `main`)都属发布动作,未经用户明示授权不得执行。验收项见 §5,其中用户验收(含 DeepSeek 冒烟)是合并的前置条件。
 
 ## 5. 验收标准
 
