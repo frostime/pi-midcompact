@@ -217,7 +217,7 @@ export function formatInventory(page: InventoryPage): string {
 
 /** Measure explicit, possibly overlapping candidate spans without mutating the DraftPlan. */
 export function formatSpanInspection(atoms: readonly Atom[], spans: readonly InspectSpan[]): string {
-  if (spans.length === 0) throw new Error("inspect spans requires at least one start/end span.");
+  if (spans.length === 0) throw new Error("measure requires at least one start/end candidate.");
   const byRef = new Map(atoms.map((atom) => [atom.ref, atom]));
   const anchorChars = aggregateMetrics(atoms.map((atom) => atom.metrics)).contentChars;
   const lines = [
@@ -228,7 +228,7 @@ export function formatSpanInspection(atoms: readonly Atom[], spans: readonly Ins
   for (const span of spans) {
     const start = byRef.get(span.start);
     const end = byRef.get(span.end);
-    if (!start || !end) throw new Error(`Unknown span ref ${!start ? span.start : span.end}; re-run inspect against the current snapshot.`);
+    if (!start || !end) throw new Error(`Unknown span ref ${!start ? span.start : span.end}; re-run measure against the current snapshot.`);
     if (start.index > end.index) throw new Error(`Span ${span.start} → ${span.end} is reversed.`);
 
     const selected = atoms.slice(start.index, end.index + 1);

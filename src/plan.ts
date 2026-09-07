@@ -76,7 +76,7 @@ export function updateDraftRange(
   patch: { summary?: string; topic?: string },
 ): DraftPlan {
   const target = draft.ranges.find((range) => range.id === draftId);
-  if (!target) throw new Error(`Unknown draft range ${draftId}.`);
+  if (!target) throw new Error(`Unknown plan range ${draftId}.`);
   const summary = patch.summary ?? target.summary;
   const topic = patch.topic ?? target.topic;
   const replacement = replacementContentChars(summary, topic);
@@ -90,7 +90,7 @@ export function updateDraftRange(
 }
 
 export function removeDraftRange(draft: DraftPlan, draftId: string): DraftPlan {
-  if (!draft.ranges.some((range) => range.id === draftId)) throw new Error(`Unknown draft range ${draftId}.`);
+  if (!draft.ranges.some((range) => range.id === draftId)) throw new Error(`Unknown plan range ${draftId}.`);
   return { ...draft, revision: draft.revision + 1, ranges: draft.ranges.filter((range) => range.id !== draftId) };
 }
 
@@ -153,13 +153,13 @@ export interface DraftFormatOptions {
 /** Agent-facing plan output with bounded semantic landmarks and summaries. */
 export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry, options: DraftFormatOptions = {}): string {
   if (options.detail === "full" && !options.draftId) {
-    throw new Error("plan show detail=full requires draft_id.");
+    throw new Error("Full plan output requires a known range id.");
   }
   const selected = options.draftId
     ? draft.ranges.filter((range) => range.id === options.draftId)
     : draft.ranges;
   const atomsByRef = options.atoms ? new Map(options.atoms.map((atom) => [atom.ref, atom])) : undefined;
-  if (options.draftId && selected.length === 0) throw new Error(`Unknown draft range ${options.draftId}.`);
+  if (options.draftId && selected.length === 0) throw new Error(`Unknown plan range ${options.draftId}.`);
 
   const lines: string[] = [];
   if (telemetry) lines.push(formatTelemetry(telemetry));
@@ -180,7 +180,7 @@ export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry, option
     const block = formatRangeBrief(range, atomsByRef);
     const currentLength = lines.join("\n\n").length;
     if (currentLength + 2 + block.length > DRAFT_OUTPUT_LIMIT) {
-      const notice = `Output budget reached: showed ${shown} of ${selected.length} range(s). Use draft_id to inspect one range.`;
+      const notice = `Output budget reached: showed ${shown} of ${selected.length} range(s). Use plan_read to inspect one range.`;
       if (currentLength + 2 + notice.length <= DRAFT_OUTPUT_LIMIT) lines.push(notice);
       break;
     }

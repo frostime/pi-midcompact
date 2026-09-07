@@ -37,7 +37,7 @@ test("/midcompact start chooser forwards an initial focus (Agent-first)", async 
   assert.equal(toolCtx.ui.selectCalls[0].opts, undefined, "TUI dialogs are not timed");
   assert.match(pi.sentUserMessages.at(-1), /User focus: Compress old exploration only/);
   assert.match(pi.sentUserMessages.at(-1), /inspect/);
-  assert.match(pi.sentUserMessages.at(-1), /plan show/);
+  assert.match(pi.sentUserMessages.at(-1), /plan_show/);
   assert.equal(entries.some(e => e.customType === "midcompact-transaction"), true);
   assert.equal(entries.some(e => e.customType === "midcompact-selection"), false);
 });

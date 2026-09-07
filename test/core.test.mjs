@@ -135,7 +135,7 @@ test("plan show exposes bounded landmarks and stored summaries", () => {
   const full = formatDraft(draft, undefined, { detail: "full", draftId: "d1" });
   assert.ok(full.length <= 40_000);
   assert.match(full, /chars omitted/);
-  assert.throws(() => formatDraft(draft, undefined, { detail: "full" }), /requires draft_id/);
+  assert.throws(() => formatDraft(draft, undefined, { detail: "full" }), /requires a known range id/);
 
   const legacy = {
     ...draft,
