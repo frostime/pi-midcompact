@@ -72,12 +72,20 @@
 - **Wire breaking**:模型调用形状从 `{action, op?, …}` 变为 11 个自描述分支。无持久化影响(工具调用不落盘),旧会话恢复不受影响。
 - 运行时提示(index 内 state-specific 首动作指引)同步改为 `{action:"plan_show"}` 等新形状。
 
+### 3.5 SKILL.md 概念导语(定稿文案)
+
+`SKILL.md` 在 `# Midcompact` 标题之后、路由表之前,以**单个叙事段落**(不用列表)交代五个领域名词,让 Agent 把名词对应到情景时刻(冻结 → 切分 → 起草 → 度量 → 提交 → 回读)。定稿文案:
+
+> Everything happens on a frozen copy of the conversation called the **anchor**. Inside the anchor, history is cut into **atoms** — the smallest selectable units, where a tool call and its results always stay together (ref `a0001`). You shape one **plan**: an ordered list of **ranges**, each covering a contiguous run of atoms and carrying the summary that will replace them in future context (range id `d1`). Before settling on a range you can **measure** candidate regions to see their size without changing the plan. When the user commits, each range becomes a permanent **block** (`c0001`): the original messages collapse into its summary, and **recall** is the only way to read them again.
+
+要求:不超过一段;不引入清单;五个名词各只在故事时刻出现一次;id 示例内嵌。
+
 ## 4. 实现决策
 
 - schema 定义与 dispatch 重写集中于扩展入口;`plan`/`atoms`/`inventory` 等纯函数层签名基本不动,仅调用点适配分支类型。
 - 字段描述全部重写并对齐新语义;描述与 skill reference 的同步是仓库既定约束。
 - 文档同步清单(全部完成才算闭环):
-  - `skills/midcompact/SKILL.md`(7 处 `request=` 示例 + 路由表 + 工作流措辞)
+  - `skills/midcompact/SKILL.md`(7 处 `request=` 示例 + 路由表 + 工作流措辞 + §3.5 概念导语)
   - `skills/midcompact/references/tool-interface.md`(整体重构;"混用 action 需重发"等冲突修复散文大幅缩短)
   - `AGENTS.md`(Hard constraints 中工具契约一行)
   - `src/SPEC.md`(External contracts 一节)
