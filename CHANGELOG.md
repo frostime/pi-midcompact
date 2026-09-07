@@ -8,10 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING**: `midcompact` tool request union flattened from 4 actions to 11 single-purpose branches — `inspect`, `measure`, `locate_ref`, `locate_search`, `plan_show`, `plan_read`, `plan_add`, `plan_update`, `plan_remove`, `recall_list`, `recall_read`. The former second-level discriminators (`plan` `op`, locate ref-vs-filter, recall list-vs-render, inspect inventory-vs-spans) are gone; field legality is now visible in the schema itself, and extra or cross-action fields are rejected at runtime instead of being silently ignored.
-- `plan show detail=full` is replaced by `plan_read` (required `range_id`); `draft_id` is renamed `range_id`; recall read uses `block` instead of `ref`; `measure` replaces `inspect` spans (`candidates` requires at least one span); `locate_search` drops the no-op `source: "any"` and requires at least one filter.
-- Runtime legality is reduced to exactly two rules (`locate_search` needs a filter; `plan_update` needs `summary` and/or `topic`, with boundaries changed via `plan_remove` + `plan_add`), both with recovery-hint error messages; error copy follows the new vocabulary.
-- Skill and model-facing docs restructured around five nouns (anchor, atom, plan, range, block) with a narrative intro; `g...` group labels are reclassified as display-only (never addressable refs).
+- **Breaking:** Flattened the `midcompact` tool's request union from 4 actions to 11 single-purpose actions: `inspect`, `measure`, `locate_ref`, `locate_search`, `plan_show`, `plan_read`, `plan_add`, `plan_update`, `plan_remove`, `recall_list`, `recall_read`. The former second-level selectors — the `plan` `op` field, locate ref-vs-filter, recall list-vs-render, and inspect inventory-vs-spans — no longer exist, so each action exposes only the fields that apply to it. The `request` envelope, per-branch `additionalProperties: false`, and single-value enum discriminants are unchanged.
+- **Breaking:** Renamed and replaced fields to match the new actions: `draft_id` is now `range_id`; recall's `ref` is now `block`; `inspect` spans are now `measure` `candidates` (at least one span required); `locate_search` drops the no-op `source: "any"`; and `plan` drops `detail` entirely — `plan_read` replaces `plan show detail=full`.
+- Rejected calls now always say why: fields outside the selected action are reported as errors instead of being silently ignored, and `plan_update` without `summary`/`topic` points to the `plan_remove` + `plan_add` path for boundary changes. All error and prompt copy follows the new plan/range vocabulary.
+- Restructured the `midcompact` skill and tool reference around five nouns (anchor, atom, plan, range, block) with a short narrative intro, and reclassified `g...` inventory group labels as display-only — they are no longer described as addressable refs.
 
 ## [0.6.0] - 2026-09-05
 
