@@ -96,10 +96,10 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
 
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   const handoff = await pi.emit("before_agent_start", { prompt: "continue the current midcompact draft" }, toolCtx);
-  assert.match(handoff.message.content, /persisted DraftPlan/);
+  assert.match(handoff.message.content, /persisted plan/);
   assert.match(handoff.message.content, /read the `midcompact` skill first/i);
   assert.match(handoff.message.content, /plan.*show/);
-  assert.match(handoff.message.content, /current shared draft/);
+  assert.match(handoff.message.content, /shared starting point/);
   assert.match(handoff.message.content, /preserve, refine, or extend/);
   assert.doesNotMatch(handoff.message.content, /initial proposal/);
 

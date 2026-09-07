@@ -124,7 +124,7 @@ const LocateSearchRequest = Type.Object(
 
 const PlanShowRequest = Type.Object(
   {
-    action: StringEnum(["plan_show"] as const, { description: "List every plan range in brief form with draft telemetry." }),
+    action: StringEnum(["plan_show"] as const, { description: "List every plan range in brief form with plan telemetry." }),
   },
   { additionalProperties: false },
 );
@@ -295,9 +295,9 @@ export default function (pi: ExtensionAPI) {
       message: {
         customType: "midcompact-handoff",
         content: [
-          "An active midcompact transaction exists with a persisted DraftPlan.",
-          `Draft revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
-          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(request={action:\"plan_show\"}) before any other midcompact action. Treat the existing plan as the current shared draft. Infer from the user's request whether to preserve, refine, or extend it; ask only if materially ambiguous.",
+          "An active midcompact transaction exists with a persisted plan.",
+          `Plan revision ${currentDraft.revision}; ${currentDraft.ranges.length} existing range(s), which may have been created by the user.`,
+          "If the current user request asks to continue midcompact, read the `midcompact` skill first, then call midcompact(request={action:\"plan_show\"}) before any other midcompact action. Treat the existing plan as the shared starting point. Infer from the user's request whether to preserve, refine, or extend it; ask only if materially ambiguous.",
         ].join("\n"),
         display: false,
       },
@@ -341,21 +341,21 @@ export default function (pi: ExtensionAPI) {
     },
   });
   pi.registerCommand("midcompact:commit", {
-    description: "Commit the current draft to the branch state",
+    description: "Commit the current plan to the branch state",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       return commitTransaction(ctx);
     },
   });
   pi.registerCommand("midcompact:review", {
-    description: "Open the interactive TUI review to inspect and edit the draft",
+    description: "Open the interactive TUI review to inspect and edit the plan",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       return reviewTransaction(ctx, "tui");
     },
   });
   pi.registerCommand("midcompact:review-webui", {
-    description: "Open a local web page to inspect and edit the draft (works without TUI)",
+    description: "Open a local web page to inspect and edit the plan (works without TUI)",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       return reviewTransaction(ctx, "web");
@@ -376,7 +376,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
   pi.registerCommand("midcompact:status", {
-    description: "Show current transaction and draft status",
+    description: "Show current transaction and plan status",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       return showStatus(ctx);
@@ -448,7 +448,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     if (!tryAcquireUi(planningLock)) {
-      ctx.ui.notify("The Agent is currently processing the midcompact draft. Try Selection after the Agent turn ends.", "warning");
+      ctx.ui.notify("The Agent is currently processing the midcompact plan. Try Selection after the Agent turn ends.", "warning");
       return;
     }
 
@@ -466,12 +466,12 @@ export default function (pi: ExtensionAPI) {
         if (action.action === "save") {
           try {
             applySelection(action.spans ?? [], action.keepRefs ?? []);
-            ctx.ui.notify("DraftPlan saved. Tell the Agent to continue processing it when ready.", "info");
+            ctx.ui.notify("Plan saved. Tell the Agent to continue processing it when ready.", "info");
           } catch (error) {
             ctx.ui.notify(`Selection could not be saved: ${error instanceof Error ? error.message : String(error)}`, "warning");
           }
         } else {
-          ctx.ui.notify("Selection closed. The DraftPlan remains available; reopen select or tell the Agent to continue.", "info");
+          ctx.ui.notify("Selection closed. The plan remains available; reopen select or tell the Agent to continue.", "info");
         }
         return;
       }
@@ -488,7 +488,7 @@ export default function (pi: ExtensionAPI) {
           updateStatus(ctx, currentTx, draft, planningLock.owner);
         },
       }, "selection", { openBrowser: openReviewWebBrowser });
-      ctx.ui.notify("Selection closed. The DraftPlan is saved; tell the Agent to continue when ready.", "info");
+      ctx.ui.notify("Selection closed. The plan is saved; tell the Agent to continue when ready.", "info");
     } finally {
       releaseUi(planningLock);
     }
@@ -500,7 +500,7 @@ export default function (pi: ExtensionAPI) {
       START_PROMPT_PREFIX,
       awareness,
       "The extension provides inspect for the bounded inventory, measure for candidate spans, locate for atom details, plan_show/plan_read/plan_add/plan_update/plan_remove for one shared plan, and recall_list/recall_read for committed blocks.",
-      "The user owns the final compression decision. You may edit the DraftPlan, but you must not commit. Preserve facts that future work still needs; local character and image counts are not token estimates.",
+      "The user owns the final compression decision. You may edit the plan, but you must not commit. Preserve facts that future work still needs; local character and image counts are not token estimates.",
     ];
     if (customInstructions) promptLines.push(`User focus: ${customInstructions}`);
     if (mode === "agent") {
@@ -517,7 +517,7 @@ export default function (pi: ExtensionAPI) {
 
   async function abortTransaction(ctx: ExtensionCommandContext): Promise<void> {
     if (planningLock.owner === "agent") {
-      ctx.ui.notify("The Agent is currently processing the midcompact draft. Abort after the Agent turn ends.", "warning");
+      ctx.ui.notify("The Agent is currently processing the midcompact plan. Abort after the Agent turn ends.", "warning");
       return;
     }
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
@@ -541,7 +541,7 @@ export default function (pi: ExtensionAPI) {
 
   async function commitTransaction(ctx: ExtensionCommandContext): Promise<void> {
     if (planningLock.owner === "agent") {
-      ctx.ui.notify("The Agent is currently processing the midcompact draft. Commit after the Agent turn ends.", "warning");
+      ctx.ui.notify("The Agent is currently processing the midcompact plan. Commit after the Agent turn ends.", "warning");
       return;
     }
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
@@ -552,7 +552,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     if (!currentDraft?.ranges.length) {
-      ctx.ui.notify("Draft is empty; nothing to commit.", "warning");
+      ctx.ui.notify("Plan is empty; nothing to commit.", "warning");
       return;
     }
     // Commit validation: reject empty summary, invalid boundaries, overlaps, protected atoms.
@@ -610,7 +610,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     if (!tryAcquireUi(planningLock)) {
-      ctx.ui.notify("The Agent is currently processing the midcompact draft. Try opening review after the Agent turn ends.", "warning");
+      ctx.ui.notify("The Agent is currently processing the midcompact plan. Try opening review after the Agent turn ends.", "warning");
       return;
     }
     try {
@@ -681,7 +681,7 @@ export default function (pi: ExtensionAPI) {
   /** Agent tool path: all active-transaction operations yield to an editing UI. */
   function requireAgentAccess(ctx: ExtensionContext): boolean {
     if (!acquireAgent(planningLock)) {
-      ctx.ui.notify("A Selection/Review UI is currently editing the midcompact draft. Close it before the Agent can continue.", "warning");
+      ctx.ui.notify("A Selection/Review UI is currently editing the midcompact plan. Close it before the Agent can continue.", "warning");
       return false;
     }
     return true;

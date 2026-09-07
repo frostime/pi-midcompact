@@ -100,7 +100,7 @@ export function formatTelemetry(telemetry: DraftTelemetry): string {
     lines.push("anchor: Pi context usage unavailable [Pi reported; not derived from local char counts].");
   }
   lines.push(
-    `draft: ${telemetry.rangeCount} range(s) · ${telemetry.selectedOriginalContentChars} → ${telemetry.selectedReplacementContentChars} content chars · ${telemetry.selectedImageCount} images (${telemetry.selectedImagePayloadBytes} payload bytes) · ${telemetry.pendingSummaryCount} pending summary`,
+    `plan: ${telemetry.rangeCount} range(s) · ${telemetry.selectedOriginalContentChars} → ${telemetry.selectedReplacementContentChars} content chars · ${telemetry.selectedImageCount} images (${telemetry.selectedImagePayloadBytes} payload bytes) · ${telemetry.pendingSummaryCount} pending summary`,
   );
   return lines.join("\n");
 }
