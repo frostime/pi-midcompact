@@ -6,12 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-09
+
 ### Changed
 
 - **Breaking:** Flattened the `midcompact` tool's request union from 4 actions to 11 single-purpose actions: `inspect`, `measure`, `locate_ref`, `locate_search`, `plan_show`, `plan_read`, `plan_add`, `plan_update`, `plan_remove`, `recall_list`, `recall_read`. The former second-level selectors — the `plan` `op` field, locate ref-vs-filter, recall list-vs-render, and inspect inventory-vs-spans — no longer exist, so each action exposes only the fields that apply to it. The `request` envelope, per-branch `additionalProperties: false`, and single-value enum discriminants are unchanged.
 - **Breaking:** Renamed and replaced fields to match the new actions: `draft_id` is now `range_id`; recall's `ref` is now `block`; `inspect` spans are now `measure` `candidates` (at least one span required); `locate_search` drops the no-op `source: "any"`; and `plan` drops `detail` entirely — `plan_read` replaces `plan show detail=full`.
-- Rejected calls now always say why: fields outside the selected action are reported as errors instead of being silently ignored, and `plan_update` without `summary`/`topic` points to the `plan_remove` + `plan_add` path for boundary changes. All error and prompt copy follows the new plan/range vocabulary.
-- Restructured the `midcompact` skill and tool reference around five nouns (anchor, atom, plan, range, block) with a short narrative intro, and reclassified `g...` inventory group labels as display-only — they are no longer described as addressable refs.
+- Aligned prompts, UI labels, and documentation around anchor, atom, plan, range, and block. Inventory `g...` labels are described as display-only, not addressable refs.
+- Revised the planning skill to ask for compression preferences, select worthwhile ranges instead of covering all history, and preserve important user statements, including answers collected through tools.
+- Revised summary guidance for local replacements that fit retained earlier and later context, preserve consequential actions and evidence, and avoid turning historical unfinished work into current instructions.
+- Replaced the parameter reference with intent-driven tool call patterns, from surveying context usage to refining ranges and handling truncated recall.
+
+### Fixed
+
+- Reject fields outside the selected action instead of silently ignoring them, including boundary arguments passed to `plan_update`. Empty updates now point to `plan_remove` + `plan_add` for boundary changes.
 
 ## [0.6.0] - 2026-09-05
 
@@ -66,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/frostime/pi-midcompact/compare/v0.5.1...v0.5.2
