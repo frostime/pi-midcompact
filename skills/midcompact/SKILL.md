@@ -13,8 +13,8 @@ This skill handles two independent tasks: planning compression and recalling com
 
 | Signal | Immediate duty | First action |
 |--------|----------------|--------------|
-| Runtime prompt says `FINAL STATE: USER MANUAL` | Let the user create the initial DraftPlan | Reply exactly `OK`; call no midcompact tool |
-| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Start from the new empty draft | `request={action:"inspect"}` |
+| Runtime prompt says `FINAL STATE: USER MANUAL` | Let the user create the initial plan | Reply exactly `OK`; call no midcompact tool |
+| Runtime prompt says `FINAL STATE: AGENT DIRECT` | Start from the new empty plan | `request={action:"inspect"}` |
 | A handoff reports a persisted plan and the user asks to continue | Read the shared selection and determine what help the user wants | `request={action:"plan_show"}` |
 | The user or a projected summary needs detail from a committed block | Retrieve that history only | Follow **Recall workflow** |
 
@@ -24,9 +24,9 @@ The tool's `request` is a union of single-purpose actions: `inspect`, `measure`,
 
 ## Plan compression
 
-Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one DraftPlan; the user retains final control through review and `/midcompact:commit`.
+Selected ranges become summaries in future model context; content outside them stays verbatim. Originals remain stored, but recall is a recovery path, not a substitute for a sufficient summary. Agent and user edit one plan; the user retains final control through review and `/midcompact:commit`.
 
-The start mode controls how the first draft is created. It does not determine whether a user selection is final, how much initiative the Agent should take, or how deeply the history should be investigated.
+The start mode controls how the first plan is created. It does not determine whether a user selection is final, how much initiative the Agent should take, or how deeply the history should be investigated.
 
 Apply one invariant:
 
@@ -61,7 +61,7 @@ Use little or no locate during this reconnaissance. If a phase cannot yet be des
 
 #### 3. Present semantic options and align
 
-Before deep `locate` work or substantial DraftPlan mutation, establish the user's compression preference through explicit instruction, a reliable implication, or concise clarification.
+Before deep `locate` work or substantial plan mutation, establish the user's compression preference through explicit instruction, a reliable implication, or concise clarification.
 
 Describe each proposal in recognizable conversation terms:
 
@@ -71,7 +71,7 @@ Use short recognizable excerpts when available and clear paraphrases otherwise. 
 
 When treatments involve a meaningful tradeoff, present concise alternatives and recommend one. A clear quick request may need only one proportionate proposal. Add factual content or image measurements only when they help the choice, and do not convert them into unsupported token-savings claims.
 
-#### 4. Resolve boundaries and build the DraftPlan
+#### 4. Resolve boundaries and build the plan
 
 After the intended treatment is clear, use `request={action:"locate_ref"}` and `request={action:"locate_search"}` for targeted content and boundary checks. An atom is the smallest selectable unit; a tool call and its matching results form one indivisible `tool_exchange` atom. Keep source text outside a range when exact wording or provenance matters and a summary cannot preserve it equivalently.
 

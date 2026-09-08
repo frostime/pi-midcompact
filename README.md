@@ -17,7 +17,7 @@ The name `pi-midcompact` points to the other option: **mid-context compression**
 
 ## What it does
 
-At a natural checkpoint, `pi-midcompact` freezes the active session leaf as an anchor and opens a separate transaction. The Agent proposes ranges for completed low-value phases, preserves load-bearing messages verbatim, and prepares a draft for review. Nothing changes until you explicitly commit the plan.
+At a natural checkpoint, `pi-midcompact` freezes the active session leaf as an anchor and opens a separate transaction. The Agent proposes ranges for completed low-value phases, preserves load-bearing messages verbatim, and prepares a plan for review. Nothing changes until you explicitly commit the plan.
 
 ### User-directed depth, Agent-designed plan
 
@@ -29,7 +29,7 @@ That is planning guidance, not an enforced token target: semantic importance win
 
 ### A selective projection, prepared on a temporary branch
 
-`/midcompact:start` freezes the current session leaf as an **anchor**. Planning happens on a disposable child branch, so the discussion used to create and edit the draft never becomes part of the committed working context.
+`/midcompact:start` freezes the current session leaf as an **anchor**. Planning happens on a disposable child branch, so the discussion used to create and edit the plan never becomes part of the committed working context.
 
 ```text
 Frozen anchor: raw session history
@@ -53,9 +53,9 @@ The raw session JSONL still contains:
   [original d1]──[decision to KEEP]──[original d2]──[latest work]
 ```
 
-### A reviewed draft can reclaim meaningful context
+### A reviewed plan can reclaim meaningful context
 
-The earlier browser and TUI captures below illustrate a draft with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a plan with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
 
 <p align="center">
   <a href="./figures/review-webui.png">
@@ -94,7 +94,7 @@ pi-midcompact — mid-context compression, review, then human commit
 | Starts | Automatically near the context limit, or with `/compact` | At an explicit natural checkpoint with `/midcompact:start` |
 | Selects | One older contiguous prefix; keeps a recent token-budgeted tail | One or more reviewed ranges, including non-contiguous ranges and `KEEP` holes |
 | Planning | Optional one-shot instruction to focus the generated summary | User states scope and retention depth; the Agent discusses trade-offs and drafts selective ranges and summaries |
-| Decision gate | Generates a compaction checkpoint directly | Draft → TUI or browser review → explicit human `/midcompact:commit` |
+| Decision gate | Generates a compaction checkpoint directly | Plan → TUI or browser review → explicit human `/midcompact:commit` |
 | Best fit | Automatic context maintenance and overflow recovery | Deliberate cleanup of completed phases while retaining specific decisions verbatim |
 
 `pi-midcompact` does not disable or replace Pi's automatic compaction; it gives you a separate, human-reviewed way to make selective reductions. See [Pi's compaction documentation](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/compaction.md) for the built-in mechanism.
@@ -127,7 +127,7 @@ Run:
 /midcompact:start
 ```
 
-Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the DraftPlan until the user hands off later. Save the initial DraftPlan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
+Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the plan until the user hands off later. Save the initial plan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
 
 ```text
 /midcompact:start Compress the early repository exploration, but keep user requirements verbatim.
@@ -168,7 +168,7 @@ Use Selection to create or change ranges and KEEP holes:
 /midcompact:select-webui
 ```
 
-Use the TUI or local browser Review surface to edit summaries/topics and reject ranges. Review deliberately does not create or resize ranges; reopen Selection for boundary changes. To continue with Agent after a user-created plan, send a normal message asking it to continue the current midcompact draft; the Agent is prompted to read the existing plan first.
+Use the TUI or local browser Review surface to edit summaries/topics and reject ranges. Review deliberately does not create or resize ranges; reopen Selection for boundary changes. To continue with Agent after a user-created plan, send a normal message asking it to continue the current midcompact plan; the Agent is prompted to read the existing plan first.
 
 ### 4. Commit the reviewed compression
 
@@ -216,9 +216,9 @@ Enter/Esc/q        close
 | `/midcompact:select-webui` | Opens the local browser Selection workbench. |
 | `/midcompact:review` | Opens summary/topic review in the native TUI. |
 | `/midcompact:review-webui` | Opens summary/topic review in a local browser. |
-| `/midcompact:commit` | Commits the reviewed draft. Human only. |
+| `/midcompact:commit` | Commits the reviewed plan. Human only. |
 | `/midcompact:abort` | Abandons the transaction and returns to the anchor. |
-| `/midcompact:status` | Displays the current draft, or the committed compression state on this branch. |
+| `/midcompact:status` | Displays the current plan, or the committed compression state on this branch. |
 
 The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
 
@@ -234,7 +234,7 @@ npm run dev:webui -- --port=4180 --no-open
 
 The command opens a fixture router for `review-ready`, `review-pending`,
 `selection-mixed`, `no-telemetry`, and `wide-content`. Each button opens an
-isolated workbench with its own in-memory draft. Fixture pages survive browser
+isolated workbench with its own in-memory plan. Fixture pages survive browser
 refresh and the page's Close action, reload HTML changes automatically, and
 restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
 `dev/midcompact-debug-ui.ts` only when validating against an actual Pi session.
@@ -250,4 +250,4 @@ restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
 - **Provider and extension interoperability needs more real-session validation.** Unusual message shapes, third-party context-transform ordering, and long-lived exact message fingerprints have not been broadly exercised.
 - **Very long sessions are not stress-tested.** Large review snapshots and repeated block accumulation may eventually require consolidation.
-- **Browser workbenches are local.** `select-webui` and `review-webui` bind to loopback and mutate the same branch-local DraftPlan as the native TUI surfaces.
+- **Browser workbenches are local.** `select-webui` and `review-webui` bind to loopback and mutate the same branch-local plan as the native TUI surfaces.

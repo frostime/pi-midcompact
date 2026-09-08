@@ -16,8 +16,8 @@ interface StartChoiceOption {
  * Agent-first start path, and RPC clients see the recommended entry first.
  */
 const START_CHOICES: StartChoiceOption[] = [
-  { value: "agent", label: "Agent direct — Inspect and draft with Agent" },
-  { value: "user", label: "User manual — Select the initial DraftPlan yourself" },
+  { value: "agent", label: "Agent direct — Inspect and plan with Agent" },
+  { value: "user", label: "User manual — Select the initial plan yourself" },
   { value: "cancelled", label: "Drop — Leave the session unchanged" },
 ];
 
