@@ -159,7 +159,7 @@ export async function showSelectionUi(
 
           const header = [
             rule(w, "+", "+"),
-            frame(accent(theme.bold(`Midcompact Selection | Draft v${draft.revision}`)), w),
+            frame(accent(theme.bold(`Midcompact Selection | Plan v${draft.revision}`)), w),
             frame(dim(`Anchor Pi usage: ${usageLine(telemetry)}`), w),
             frame(dim(`Selected ${selectedAtoms.length}/${atoms.length} atoms | ${chars}/${totalChars} chars (${charShare} of anchor) | up to ${charShare} fewer anchor chars | ${images} images`), w),
             rule(w, "+", "+"),

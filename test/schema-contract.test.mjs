@@ -30,5 +30,20 @@ test("midcompact parameters: root object wrapping the request union", () => {
     return discriminant.enum[0];
   });
 
-  assert.deepEqual(actions.sort(), ["inspect", "locate", "plan", "recall"]);
+  assert.deepEqual(actions.sort(), [
+    "inspect",
+    "locate_ref",
+    "locate_search",
+    "measure",
+    "plan_add",
+    "plan_read",
+    "plan_remove",
+    "plan_show",
+    "plan_update",
+    "recall_list",
+    "recall_read",
+  ]);
+
+  const measure = request.anyOf.find((branch) => branch.properties.action.enum[0] === "measure");
+  assert.equal(measure.properties.candidates.minItems, 1, "measure candidates must require at least one span");
 });

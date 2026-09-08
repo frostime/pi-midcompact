@@ -23,13 +23,16 @@ npm run pack:check         # npm pack dry-run (contents check)
 | `src/SPEC.md` | Durable module contract. Update it with any contract change. |
 | `skills/midcompact/` | Model-runtime skill shipped via `package.json` → `pi.skills`; keep in sync with tool/command behavior. |
 | `.dev/changes/` | Workspaces of completed changes; history, not authority. |
+| `.dev/docs/` | Durable cross-change references — currently the Agent-facing vocabulary glossary (`agent-vocabulary.md`), which is **authoritative** for all model/user-facing copy. |
 | `.github/workflows/` | `ci.yml` tests; `publish.yml` publishes npm on any pushed `v*` tag. |
 
 ## Hard constraints
 
-- **Tool contract**: the `midcompact` tool is a discriminated union on `action`
-  (inspect/locate/plan/recall). Each action accepts only its own parameters;
-  cross-action fields are rejected. The model-facing docs live in
+- **Tool contract**: the `midcompact` tool's `request` is a closed discriminated
+  union of 11 single-purpose actions (inspect/measure/locate_ref/locate_search/
+  plan_show/plan_read/plan_add/plan_update/plan_remove/recall_list/recall_read).
+  Each action accepts only its own fields; cross-action or extra fields are
+  rejected. The model-facing docs live in
   `skills/midcompact/references/tool-interface.md`.
 - **Command naming**: slash commands are `midcompact:start|abort|commit|review|review-webui|select|select-webui|status` — the `name:sub` convention matches Pi's own `skill:<name>` commands. There is no bare `/midcompact`.
 - **Persistence**: custom entries `midcompact-transaction`, `midcompact-draft`, `midcompact-state` on the session branch are the only persisted state. The planning lock is memory-only.

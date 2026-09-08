@@ -46,7 +46,7 @@ export async function showReviewUi(
 
           const header: string[] = [
             h("╭"),
-            framed(accent(theme.bold(`Midcompact Review · Draft v${draft.revision} · ${draft.ranges.length} range(s)`))),
+            framed(accent(theme.bold(`Midcompact Review · Plan v${draft.revision} · ${draft.ranges.length} range(s)`))),
             framed(usageLine(telemetry, theme)),
             h("├"),
           ];
@@ -195,7 +195,7 @@ export async function showReviewUi(
 
 export function buildReviewText(atoms: Atom[], draft: DraftPlan, telemetry: DraftTelemetry): string {
   const lines = [
-    `Midcompact Review · Draft v${draft.revision}`,
+    `Midcompact Review · Plan v${draft.revision}`,
     plainUsageLine(telemetry),
     "This is awareness, not a target.",
     "",

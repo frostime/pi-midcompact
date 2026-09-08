@@ -71,12 +71,16 @@ package.json → `pi.extensions`).
 ## External contracts (reference, don't duplicate)
 
 - Tool: one `midcompact` tool whose parameters are `{ request: <union> }` —
-  a root `type: "object"` wrapping a discriminated union on `action`
-  (inspect/locate/plan/recall); each branch is closed
-  (`additionalProperties: false`), so cross-action parameters are
-  schema-rejected. The `request` wrapper exists because some providers
-  (e.g. DeepSeek) reject a root-level `anyOf` before the model sees the
-  schema.
+  a root `type: "object"` wrapping a union of 11 single-purpose actions
+  (inspect/measure/locate_ref/locate_search/plan_show/plan_read/plan_add/
+  plan_update/plan_remove/recall_list/recall_read); each branch is closed
+  (`additionalProperties: false`), so extra fields are rejected (schema where
+  enforced, runtime backstop everywhere — a silently ignored field is a bug).
+  Former second-level discriminators (plan `op`, locate ref-vs-filter, recall
+  list-vs-render, inspect inventory-vs-spans) are flattened into branches so
+  field legality is schema-visible. The `request` wrapper exists because some
+  providers (e.g. DeepSeek) reject a root-level `anyOf` before the model sees
+  the schema.
   Details: `skills/midcompact/references/tool-interface.md`.
 - Commands: `midcompact:start|abort|commit|review|review-webui|select|select-webui|status`;
   no composite `/midcompact`; native naming convention `name:sub` (Pi's
@@ -104,6 +108,7 @@ package.json → `pi.extensions`).
 
 ## Change rules
 
+- Model-facing copy (schema descriptions, prompts, errors, notices, skill docs) follows `.dev/docs/agent-vocabulary.md`; a new action, field, or concept is registered there **before** implementation.
 - Adding a tool action → new request branch + handler type + tool-interface
   section + SKILL.md routing; adding parameters to an action → its branch
   only (the union stays nested under `request`).

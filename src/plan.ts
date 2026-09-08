@@ -22,14 +22,14 @@ export function addDraftRange(
 ): DraftPlan {
   const start = atoms.find((atom) => atom.ref === input.start);
   const end = atoms.find((atom) => atom.ref === input.end);
-  if (!start || !end) throw new Error("Unknown atom ref; run locate/inspect again against the current anchor snapshot.");
+  if (!start || !end) throw new Error("Unknown atom ref; run inspect or locate again against the current anchor snapshot.");
   if (start.index > end.index) throw new Error("start must not occur after end.");
   const selected = atoms.slice(start.index, end.index + 1);
   if (selected.length === 0) throw new Error("Empty range.");
   const unsafe = selected.find((atom) => isProtectedAtom(atom));
   if (unsafe) throw new Error(`Range crosses protected atom ${unsafe.ref} (${unsafe.kind}). Split the plan around it.`);
   const overlaps = draft.ranges.some((range) => !(end.index < range.startIndex || start.index > range.endIndex));
-  if (overlaps) throw new Error("Range overlaps an existing draft range.");
+  if (overlaps) throw new Error("Range overlaps an existing plan range; remove or replace it first.");
 
   const metrics = rangeMetricsForAtoms(selected);
   const summary = input.summary ?? "";
@@ -76,7 +76,7 @@ export function updateDraftRange(
   patch: { summary?: string; topic?: string },
 ): DraftPlan {
   const target = draft.ranges.find((range) => range.id === draftId);
-  if (!target) throw new Error(`Unknown draft range ${draftId}.`);
+  if (!target) throw new Error(`Unknown plan range ${draftId}.`);
   const summary = patch.summary ?? target.summary;
   const topic = patch.topic ?? target.topic;
   const replacement = replacementContentChars(summary, topic);
@@ -90,7 +90,7 @@ export function updateDraftRange(
 }
 
 export function removeDraftRange(draft: DraftPlan, draftId: string): DraftPlan {
-  if (!draft.ranges.some((range) => range.id === draftId)) throw new Error(`Unknown draft range ${draftId}.`);
+  if (!draft.ranges.some((range) => range.id === draftId)) throw new Error(`Unknown plan range ${draftId}.`);
   return { ...draft, revision: draft.revision + 1, ranges: draft.ranges.filter((range) => range.id !== draftId) };
 }
 
@@ -153,18 +153,18 @@ export interface DraftFormatOptions {
 /** Agent-facing plan output with bounded semantic landmarks and summaries. */
 export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry, options: DraftFormatOptions = {}): string {
   if (options.detail === "full" && !options.draftId) {
-    throw new Error("plan show detail=full requires draft_id.");
+    throw new Error("Full plan output requires a known range id.");
   }
   const selected = options.draftId
     ? draft.ranges.filter((range) => range.id === options.draftId)
     : draft.ranges;
   const atomsByRef = options.atoms ? new Map(options.atoms.map((atom) => [atom.ref, atom])) : undefined;
-  if (options.draftId && selected.length === 0) throw new Error(`Unknown draft range ${options.draftId}.`);
+  if (options.draftId && selected.length === 0) throw new Error(`Unknown plan range ${options.draftId}.`);
 
   const lines: string[] = [];
   if (telemetry) lines.push(formatTelemetry(telemetry));
   if (draft.ranges.length === 0) {
-    lines.push(`Draft v${draft.revision}: no compression ranges.`);
+    lines.push(`Plan v${draft.revision}: no compression ranges.`);
     return lines.join("\n\n");
   }
   lines.push(draftHeader(draft));
@@ -180,7 +180,7 @@ export function formatDraft(draft: DraftPlan, telemetry?: DraftTelemetry, option
     const block = formatRangeBrief(range, atomsByRef);
     const currentLength = lines.join("\n\n").length;
     if (currentLength + 2 + block.length > DRAFT_OUTPUT_LIMIT) {
-      const notice = `Output budget reached: showed ${shown} of ${selected.length} range(s). Use draft_id to inspect one range.`;
+      const notice = `Output budget reached: showed ${shown} of ${selected.length} range(s). Use plan_read to inspect one range.`;
       if (currentLength + 2 + notice.length <= DRAFT_OUTPUT_LIMIT) lines.push(notice);
       break;
     }
@@ -199,7 +199,7 @@ export function formatPlanMutation(
 ): string {
   const pendingCount = draft.ranges.filter((range) => range.summary.trim().length === 0).length;
   const verb = op === "add" ? "added" : op === "update" ? "updated" : "removed";
-  const lines = [`Draft v${draft.revision}: ${verb} ${changedId} · ${draft.ranges.length} range(s) · ${pendingCount} pending summary.`];
+  const lines = [`Plan v${draft.revision}: ${verb} ${changedId} · ${draft.ranges.length} range(s) · ${pendingCount} pending summary.`];
   if (op !== "remove") {
     const changed = draft.ranges.find((range) => range.id === changedId);
     const atomsByRef = atoms ? new Map(atoms.map((atom) => [atom.ref, atom])) : undefined;
@@ -211,7 +211,7 @@ export function formatPlanMutation(
 function draftHeader(draft: DraftPlan): string {
   const pendingCount = draft.ranges.filter((range) => range.summary.trim().length === 0).length;
   const reviewState = pendingCount === 0 ? "ready for review" : `${pendingCount} pending summary`;
-  return `Draft v${draft.revision}: ${draft.ranges.length} range(s) (${reviewState}).`;
+  return `Plan v${draft.revision}: ${draft.ranges.length} range(s) (${reviewState}).`;
 }
 
 function formatRangeBrief(range: DraftRange, atomsByRef?: ReadonlyMap<string, Atom>): string {
