@@ -1,94 +1,69 @@
-# Midcompact Tool Interface
+# Tool Call Patterns
 
-Read this reference when exact call requirements, limits, rejection behavior, repeated compression, or recall truncation matters. The main workflow remains in `../SKILL.md`.
+Use the schema for fields/defaults. Follow only the steps needed. Example refs and summaries must be replaced with verified content.
 
-## Parameter grouping
+## Survey where context space goes
 
-The parameters are one object with a single `request` field; `request` is a union of single-purpose actions where each branch binds one `action` value to exactly that action's fields and is closed (`additionalProperties: false`). A call that carries a field outside the selected action is rejected; re-issue the call with only the selected action's parameters. The actions:
+Start a fresh Agent-direct transaction with:
 
-`inspect` · `measure` · `locate_ref` · `locate_search` · `plan_show` · `plan_read` · `plan_add` · `plan_update` · `plan_remove` · `recall_list` · `recall_read`
-
-## Inspect
-
-`request.action="inspect"` inventories the frozen anchor. It returns factual structure and bounded user landmarks, not full message bodies, assistant/tool previews, summaries, or image base64.
-
-- `page_size`: default 20 groups, maximum 50; out-of-range values are clamped.
-- `cursor`: opaque value returned by the previous page.
-- Results include group refs, atom spans, content chars, image facts, protected/compressible counts, and Pi-reported anchor usage.
-
-Stop paging after the candidate regions are covered. Group labels (`g0001`) are display-only; they are not atom refs.
-
-## Measure
-
-To compare explicit candidates without mutating the plan, pass one or more possibly overlapping spans:
-
-```text
-midcompact(request={action:"measure", candidates=[
-  {"start":"a0006","end":"a0014"},
-  {"start":"a0006","end":"a0020"}
-]})
+```json
+{"request":{"action":"inspect"}}
 ```
 
-Measurement reports bounded endpoint landmarks, atom/message and role counts, tool exchanges and calls, factual content share, images, and protected/compressible counts. It has a 12,000-character total output budget and reports how many requested spans fit. It does not report per-span tokens: Pi supplies usage for the whole anchor, not token attribution by range. `candidates` requires at least one span.
+Read overall Pi token usage and chronological groups: user landmarks, endpoints, characters, images, protection counts. This paginated volume distribution is not a per-group token curve. Large groups invite investigation, not automatic compression.
 
-## Locate
+Continue with the returned `cursor` only where relevant. Use listed `a...` refs, not display-only `g...` labels. Landmarks are not full content; combine the overview with user preferences before selection.
 
-Two actions read atoms from the frozen anchor.
+## Find evidence and check boundaries
 
-`request.action="locate_ref"` looks up one atom by `ref` (for example `a0007`). With `detail="full"` it preserves both ends with an explicit middle-omission marker when the 12,000-character atom limit is exceeded; brief output shows a bounded preview. An unknown ref returns no match: re-run inspect/measure against the current transaction snapshot. A `g...` group label is not a locate ref; use the group's `a...` landmarks.
+For a recent bash result containing a known phrase:
 
-`request.action="locate_search"` filters atoms conjunctively (AND). Supply at least one of:
+```json
+{"request":{"action":"locate_search","source":"tool_result","tool_name":"bash","pattern":"timeout","direction":"newest"}}
+```
 
-- `pattern`: case-insensitive substring over atom text;
-- `tool_name`: exact (case-insensitive) originating tool name;
-- `source`: `user`, `assistant`, `tool_call`, or `tool_result`.
+Filters combine with AND. Use a returned atom ref to inspect the match:
 
-There is no `any` value; omit `source` instead. Matches are capped at three with bounded excerpts around the match; `direction` orders `oldest` (default) or `newest`, and `limit` may request one to three results. When more atoms match, the result reports the total and asks for a more specific pattern or an additional filter. Search has no `detail` option; use `locate_ref` for full atom text.
+```json
+{"request":{"action":"locate_ref","ref":"a0007","detail":"full"}}
+```
 
-## Plan
+Known refs need no search. Excerpts are incomplete; `full` can omit the middle. Check markers before drawing conclusions. Narrow excessive matches with filters. Recover unknown refs using `inspect` or `locate_search`; `measure` needs known refs.
 
-Agent and user mutate the same plan. Read actions:
+## Compare candidates without changing the plan
 
-- `request.action="plan_show"` — brief list of every range (bounded `from`, `to`, and `summary` landmarks plus factual metrics) under a 12,000-character budget. Takes no fields.
-- `request.action="plan_read"` — one range's stored summary and endpoint previews in full, under a 40,000-character budget. Requires `range_id`.
+```json
+{"request":{"action":"measure","candidates":[{"start":"a0006","end":"a0014"},{"start":"a0006","end":"a0020"}]}}
+```
 
-Mutations:
+Candidates may overlap without changing the plan. Compare landmarks, content share, images, and protection, not assumed token savings. If fewer candidates are reported than requested, measure the remainder separately.
 
-| action | Required fields | Optional fields |
-|--------|-----------------|-----------------|
-| `plan_add` | `start`, `end` | `summary`, `topic` |
-| `plan_update` | `range_id` and at least one of `summary`, `topic` | — |
-| `plan_remove` | `range_id` | — |
+## Keep important originals between ranges
 
-An omitted or empty `summary` creates a pending range. Review can open it, but commit requires at least one range and a non-empty summary for every range. Boundaries are immutable: changing them means `plan_remove` plus `plan_add`. Show and read are read-only and do not persist duplicate entries.
+If an important user answer occupies `a0010`, locate it and verify boundaries, then add separate ranges on its two sides:
 
-Add rejection conditions:
+```json
+{"request":{"action":"plan_add","start":"a0006","end":"a0009","summary":"<replacement for the earlier work>"}}
+{"request":{"action":"plan_add","start":"a0011","end":"a0014","summary":"<replacement for the later work>"}}
+```
 
-| Condition | Response |
-|-----------|----------|
-| The range crosses a protected atom | Split the range around that atom |
-| The range overlaps an existing plan range | Remove or replace the existing range first |
-| `start` occurs after `end` | Correct the positional order |
-| An atom ref is unknown | Re-run inspect/measure against the current transaction snapshot |
+Question-tool answers are user expression. Keep the whole tool-exchange atom containing an important answer; do not split a call from its results. Unlike measurement candidates, plan ranges cannot overlap or contain protected atoms.
 
-An atom is protected when its tool protocol is incomplete or orphaned, it represents an existing compressed block, its message kind is unsupported, or it lacks the persistent session entry needed to anchor compression.
+## Refine an existing plan
 
-Mutation responses omit the Pi-awareness header and unchanged ranges, returning only the changed range (or the removed id plus compact totals). Use explicit show/read when complete awareness is needed.
+Start with `plan_show`. Use `plan_read` with its returned `range_id` when the stored summary or endpoints need full review. Change summary/topic with `plan_update`.
 
-## Telemetry
+For new boundaries, first read and retain the existing summary/topic and verify the replacement endpoints. Then `plan_remove` the old range and `plan_add` its replacement. Do not assume the new id is unchanged. Check the resulting plan; mutation replies show the changed item and compact totals, not all ranges. Fill pending summaries before handoff; only the user commits.
 
-`plan_show` and `plan_read` include Pi-reported anchor usage when available and factual draft measurements: original/replacement content chars, image count, and decoded payload bytes. Mutation results omit awareness and report only compact totals plus the changed range where one remains. Local character or image measurements are not converted into token savings or projected-token percentages. Use measurements to compare the proposal with user-directed depth, not as an optimization target.
+## Work around protected content
 
-## Repeated compression
+Split around protected atoms. Causes include incomplete tool exchanges, unsupported message kinds, missing persistent entries, and existing committed blocks. Later transactions can compress remaining raw history around those blocks, not recompress the blocks themselves. Obtain current atom refs from `inspect`; refs are transaction-local.
 
-Committed blocks appear as protected atoms in later transaction snapshots and cannot be compressed again. A later transaction may compress newly accumulated raw history around those blocks. Re-run inspect/measure because atom refs are transaction-local.
+## Retrieve committed evidence
 
-## Recall
+```json
+{"request":{"action":"recall_list","pattern":"timeout"}}
+{"request":{"action":"recall_read","block":"c0001"}}
+```
 
-Recall actions work independently of a planning transaction and read committed blocks active on the current branch.
-
-`request.action="recall_list"` lists blocks. Without `pattern` it lists the most recent blocks; with `pattern` it matches block id, topic, and summary — not original content. `limit` defaults to 8 with a maximum of 20; out-of-range values are clamped.
-
-`request.action="recall_read"` renders one block's stored messages. It requires `block` (for example `c0001`). `detail="full"` raises the rendering cap when the normal result is truncated.
-
-Recall has no paging. The truncation marker is `[truncated; refine the recall request or inspect the source session for more]`. If `detail="full"` still truncates before the needed detail, report that recall cannot expose the omitted content; do not infer it.
+Use the actual block id returned by the list; skip listing when known. Listing searches ids/topics/summaries, not originals. Recall needs no transaction. If truncated, retry the same block with `detail:"full"`. There is no paging: if still truncated, report that recall cannot expose the omitted evidence. Do not infer it or start another transaction as a recovery workaround. Inspecting the source session requires a separate available means; this tool offers none.
