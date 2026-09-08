@@ -108,6 +108,7 @@ package.json → `pi.extensions`).
 
 ## Change rules
 
+- Model-facing copy (schema descriptions, prompts, errors, notices, skill docs) follows `.dev/docs/agent-vocabulary.md`; a new action, field, or concept is registered there **before** implementation.
 - Adding a tool action → new request branch + handler type + tool-interface
   section + SKILL.md routing; adding parameters to an action → its branch
   only (the union stays nested under `request`).

@@ -23,6 +23,7 @@ npm run pack:check         # npm pack dry-run (contents check)
 | `src/SPEC.md` | Durable module contract. Update it with any contract change. |
 | `skills/midcompact/` | Model-runtime skill shipped via `package.json` → `pi.skills`; keep in sync with tool/command behavior. |
 | `.dev/changes/` | Workspaces of completed changes; history, not authority. |
+| `.dev/docs/` | Durable cross-change references — currently the Agent-facing vocabulary glossary (`agent-vocabulary.md`), which is **authoritative** for all model/user-facing copy. |
 | `.github/workflows/` | `ci.yml` tests; `publish.yml` publishes npm on any pushed `v*` tag. |
 
 ## Hard constraints
