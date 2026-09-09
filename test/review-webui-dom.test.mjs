@@ -176,6 +176,17 @@ assert(sel.els["strip"].innerHTML.includes("future summaries are not included"),
 assert(sel.els["saved-badge"].hidden === false && sel.els["saved-badge"].textContent.includes("Saved · v"), "F2/saved chip shows on selection with saved draft");
 assert(els["saved-badge"].hidden === true, "saved chip hidden in review view");
 
+// Selection previews expose click-to-view full original, matching review rows.
+assert(sel.els["timeline"].innerHTML.includes('title="View full original"') && sel.els["timeline"].innerHTML.includes('data-orig="a0001"'), "selection rows render clickable full-original previews");
+const selPreview = makeEl();
+selPreview.dataset.orig = "a0002";
+selPreview.closest = (s) => (s === "[data-orig]" ? selPreview : null);
+const selBefore = sel.els["timeline"].innerHTML;
+sel.els["timeline"].dispatch("click", selPreview);
+await Promise.resolve();
+assert(sel.requests.includes("/api/atom/a0002"), "selection preview requests full original text");
+assert(sel.els["timeline"].innerHTML === selBefore, "selection preview click does not toggle the atom");
+
 // Filtering moves the keyboard cursor into the visible set; Space cannot change a hidden atom.
 sel.els["q"].value = "phase two";
 sel.els["q"].dispatch("input", sel.els["q"]);

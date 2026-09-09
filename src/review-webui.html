@@ -884,7 +884,7 @@ function renderSelectionTimeline(tl) {
         <div>
           <div class="arow">
             <span class="tag kind-${esc(a.kind)}">${esc(a.kind)}</span>
-            <div class="abody">${hl(a.preview ?? '', query)}</div>
+            <button type="button" class="abody" data-orig="${esc(a.ref)}" title="View full original">${hl(a.preview ?? '', query)}</button>
           </div>
         </div>
         <span class="mark ${sel ? 'sel' : locked ? 'lock' : ''}">${locked ? '🔒 can\u2019t compress' : sel ? '✓ compress' : ''}</span>
@@ -1153,6 +1153,13 @@ $('timeline').addEventListener('click', e => {
   if (isSelection()) {
     const groupBtn = e.target.closest('[data-group]');
     if (groupBtn) { toggleGroupAtoms(groupBtn.dataset.group); return; }
+    const orig = e.target.closest('[data-orig]');
+    if (orig) {
+      const origRow = orig.closest('.srow[data-idx]');
+      if (origRow) cursor = Number(origRow.dataset.idx);
+      openDrawer(orig.dataset.orig);
+      return;
+    }
     const row = e.target.closest('.srow[data-idx]');
     if (row) { cursor = Number(row.dataset.idx); toggleAtom(row.dataset.atom); return; }
     return;
