@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-10
+
+### Fixed
+
+- Selection workbench atom previews now open the original-text drawer on click, matching Review view; clicking elsewhere on a row still toggles selection.
+
 ## [0.7.0] - 2026-09-09
 
 ### Changed
@@ -74,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/frostime/pi-midcompact/compare/v0.5.2...v0.5.3
