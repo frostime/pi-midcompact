@@ -55,18 +55,11 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 实际压缩效果
 
-下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。点击图片可查看原图。
+下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。
 
-<p align="center">
-  <a href="./figures/review-webui.png">
-    <img src="./figures/review-webui.png" alt="浏览器审查界面：73 个对话原子中有 42 个分布在两个压缩区段内" width="49%">
-  </a>
-  <a href="./figures/review-tui.png">
-    <img src="./figures/review-tui.png" alt="原生 TUI 审查界面：展示选中的压缩区段及其中的对话原子" width="49%">
-  </a>
-</p>
+![可编辑的浏览器审查界面：73 个对话原子中有 42 个分布在两个压缩区段内](./figures/review-webui.webp)
 
-<p align="center"><sub>可编辑的浏览器审查界面 · Pi 原生 TUI 审查界面</sub></p>
+![Pi 原生 TUI 审查界面：展示选中的压缩区段及其中的对话原子](./figures/review-tui.webp)
 
 ### 前缀压缩与上下文中段压缩
 

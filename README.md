@@ -55,18 +55,11 @@ The raw session JSONL still contains:
 
 ### A reviewed plan can reclaim meaningful context
 
-The earlier browser and TUI captures below illustrate a plan with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a plan with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it.
 
-<p align="center">
-  <a href="./figures/review-webui.png">
-    <img src="./figures/review-webui.png" alt="Browser review UI showing 42 of 73 atoms selected across two compression ranges" width="49%">
-  </a>
-  <a href="./figures/review-tui.png">
-    <img src="./figures/review-tui.png" alt="Native TUI review showing a selected compression range and its retained atoms" width="49%">
-  </a>
-</p>
+![Editable browser review UI showing 42 of 73 atoms selected across two compression ranges](./figures/review-webui.webp)
 
-<p align="center"><sub>Editable browser review UI · Native Pi TUI review</sub></p>
+![Native Pi TUI review showing a selected compression range and its retained atoms](./figures/review-tui.webp)
 
 ### Prefix compaction versus mid-context compression
 
