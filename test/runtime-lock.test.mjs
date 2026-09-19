@@ -19,13 +19,13 @@ test("planning lock: Agent turn blocks Selection until the turn settles", async 
   const frameCount = toolCtx.ui.reviewFrames.length;
 
   await pi.emit("agent_start", { type: "agent_start" }, toolCtx);
-  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  await pi.commands.get("midcompact:select").handler("tui", commandCtx);
   assert.equal(toolCtx.ui.reviewFrames.length, frameCount);
   assert.match(toolCtx.ui.messages.at(-1).text, /Agent is currently processing/i);
 
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
   toolCtx.ui.customInputs = ["\x1b"];
-  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  await pi.commands.get("midcompact:select").handler("tui", commandCtx);
   assert.equal(toolCtx.ui.reviewFrames.length, frameCount + 1);
   assert.match(toolCtx.ui.messages.at(-1).text, /Selection closed/i);
 });

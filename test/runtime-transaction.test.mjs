@@ -27,7 +27,7 @@ test("reload restores transaction startMode and draft", async () => {
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
   const tool = pi.tools.get("midcompact");
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.selectResults = [1, 1]; // User manual, then TUI Selection
   toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact:start").handler("", commandCtx);
   await tool.execute("tc-preadd", { request: { action: "plan_add", start: "a0001", end: "a0002" } }, null, null, toolCtx);

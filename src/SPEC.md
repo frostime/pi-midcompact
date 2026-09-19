@@ -25,6 +25,10 @@ package.json → `pi.extensions`).
 
 ## Transactions
 
+- Cancelling a Selection/Review surface chooser changes neither the shared
+  DraftPlan nor the transaction. User-manual start uses that same Selection
+  chooser after the Agent acknowledgement; cancelling it leaves the new
+  transaction active.
 - Start freezes the current leaf as anchor, appends TXN + DRAFT, and routes
   Agent-direct or User-manual. All planning happens on the child branch; the
   discussion never enters the working context.
@@ -84,7 +88,10 @@ package.json → `pi.extensions`).
   Details: `skills/midcompact/references/tool-interface.md`.
 - Commands: `midcompact:start|abort|commit|review|review-webui|select|select-webui|status`;
   no composite `/midcompact`; native naming convention `name:sub` (Pi's
-  `skill:<name>`).
+  `skill:<name>`). `select` and `review` accept optional `tui|webui`; omitted
+  arguments require an explicit built-in surface choice when extension UI is
+  available and otherwise warn. They never silently fall back between
+  surfaces. The `*-webui` commands remain compatibility aliases.
 - The tool never starts a transaction and never commits; both are command-
   or user-gated. Recall is the only action valid without a transaction.
 - Web workbench (`review-webui.html` + `review-webui.ts`): the state payload

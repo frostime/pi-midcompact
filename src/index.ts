@@ -16,6 +16,7 @@ import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
 import { showSelectionUi } from "./selection-ui.js";
 import { showStartChoice } from "./start-ui.js";
+import { parseSurfaceRequest, resolvePlanningSurface, type PlanningSurfaceRequest } from "./surface-ui.js";
 import { showReviewWebUi } from "./review-webui.js";
 
 /**
@@ -348,31 +349,41 @@ export default function (pi: ExtensionAPI) {
     },
   });
   pi.registerCommand("midcompact:review", {
-    description: "Open the interactive TUI review to inspect and edit the plan",
-    handler: async (_args: string, ctx: ExtensionCommandContext) => {
+    description: "Open Review; optionally choose the tui or webui surface",
+    handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
-      return reviewTransaction(ctx, "tui");
+      const parsed = parseSurfaceRequest(args, "review");
+      if (!parsed.request) {
+        ctx.ui.notify(parsed.usage!, "warning");
+        return;
+      }
+      return reviewTransaction(ctx, parsed.request);
     },
   });
   pi.registerCommand("midcompact:review-webui", {
-    description: "Open a local web page to inspect and edit the plan (works without TUI)",
+    description: "Compatibility alias for /midcompact:review webui",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
-      return reviewTransaction(ctx, "web");
+      return reviewTransaction(ctx, "webui");
     },
   });
   pi.registerCommand("midcompact:select", {
-    description: "Open the TUI Selection surface to edit range boundaries",
-    handler: async (_args: string, ctx: ExtensionCommandContext) => {
+    description: "Open Selection; optionally choose the tui or webui surface",
+    handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
-      return openSelectionUi(ctx, "auto");
+      const parsed = parseSurfaceRequest(args, "select");
+      if (!parsed.request) {
+        ctx.ui.notify(parsed.usage!, "warning");
+        return;
+      }
+      return openSelectionUi(ctx, parsed.request);
     },
   });
   pi.registerCommand("midcompact:select-webui", {
-    description: "Open Selection in a local browser",
+    description: "Compatibility alias for /midcompact:select webui",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
-      return openSelectionUi(ctx, "web");
+      return openSelectionUi(ctx, "webui");
     },
   });
   pi.registerCommand("midcompact:status", {
@@ -431,7 +442,7 @@ export default function (pi: ExtensionAPI) {
     // acknowledgement only before opening the user editing surface.
     await sendAgentStartPrompt(transaction, customInstructions, "user");
     await ctx.waitForIdle();
-    await openSelectionUi(ctx);
+    await openSelectionUi(ctx, "choose");
   }
 
   async function chooseStartMode(ctx: ExtensionCommandContext): Promise<StartMode | "cancelled" | "unrecognized"> {
@@ -441,7 +452,7 @@ export default function (pi: ExtensionAPI) {
     return showStartChoice(ctx);
   }
 
-  async function openSelectionUi(ctx: ExtensionCommandContext, mode: "auto" | "tui" | "web" = "auto"): Promise<void> {
+  async function openSelectionUi(ctx: ExtensionCommandContext, request: PlanningSurfaceRequest): Promise<void> {
     const currentTx = transaction;
     if (!currentTx || !draft) {
       ctx.ui.notify("No active midcompact transaction.", "warning");
@@ -461,7 +472,9 @@ export default function (pi: ExtensionAPI) {
     };
 
     try {
-      if (mode === "tui" || (mode === "auto" && ctx.mode === "tui")) {
+      const surface = await resolvePlanningSurface(ctx, request, "select");
+      if (!surface) return;
+      if (surface === "tui") {
         const action = await showSelectionUi(ctx, snapshot.atoms, draft, draftTelemetry(currentTx, draft));
         if (action.action === "save") {
           try {
@@ -601,7 +614,7 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.notify(activeStateStatus(activeState), "info");
   }
 
-  async function reviewTransaction(ctx: ExtensionCommandContext, mode: "tui" | "web" = "tui"): Promise<void> {
+  async function reviewTransaction(ctx: ExtensionCommandContext, request: PlanningSurfaceRequest): Promise<void> {
     const restored = restoreTransaction(ctx.sessionManager.getBranch() as SessionEntry[]);
     const currentTx = withCompatDefaults(restored.transaction ?? transaction);
     const currentDraft = restored.draft ?? draft;
@@ -614,7 +627,8 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     try {
-      const currentPlan = currentDraft ?? emptyDraft(currentTx.id);
+      const surface = await resolvePlanningSurface(ctx, request, "review");
+      if (!surface) return;
       const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
 
       const commitMutation = (next: DraftPlan): void => {
@@ -623,7 +637,7 @@ export default function (pi: ExtensionAPI) {
         updateStatus(ctx, currentTx, next, planningLock.owner);
       };
 
-    if (mode === "web") {
+    if (surface === "webui") {
       const getLatest = (): { draft: DraftPlan; telemetry: DraftTelemetry } => ({
         draft: draft ?? emptyDraft(currentTx.id),
         telemetry: draftTelemetry(currentTx, draft),
@@ -634,14 +648,6 @@ export default function (pi: ExtensionAPI) {
         remove: (id) => commitMutation(removeDraftRange(draft ?? emptyDraft(currentTx.id), id)),
       }, undefined, { openBrowser: openReviewWebBrowser });
       ctx.ui.notify("Midcompact review-webui closed.", "info");
-      return;
-    }
-
-    if (ctx.mode !== "tui") {
-      ctx.ui.notify(
-        "Interactive TUI review is only available in interactive (tui) mode. Use /midcompact:review-webui to open a local web page instead.",
-        "warning",
-      );
       return;
     }
 

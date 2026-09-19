@@ -52,8 +52,14 @@ test("Agent-first workflow: inspect → plan add (pending) → update → review
   const tool = await runAgentFirstWorkflow(pi, toolCtx, commandCtx, { instructions: "Compress old exploration only" });
   await pi.emit("agent_settled", { type: "agent_settled" }, toolCtx);
 
-  // Review UI still maps ranges and KEEP holes.
+  // Review UI still maps ranges and KEEP holes; no argument requires an explicit surface choice.
+  toolCtx.ui.selectResults = [1]; // TUI Review
   await pi.commands.get("midcompact:review").handler("", commandCtx);
+  assert.deepEqual(toolCtx.ui.selectCalls.at(-1).options, [
+    "Web UI — Recommended",
+    "TUI — Built into Pi",
+    "Cancel",
+  ]);
   assert.ok(toolCtx.ui.reviewFrames.length > 0);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /Midcompact Review/);
   assert.match(toolCtx.ui.reviewFrames.at(-1).join("\n"), /d1/);
