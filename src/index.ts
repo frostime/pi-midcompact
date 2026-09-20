@@ -1,4 +1,5 @@
 import { StringEnum, Type, type Static } from "@earendil-works/pi-ai";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
   buildSessionContext,
   type ExtensionAPI,
@@ -16,7 +17,7 @@ import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
 import { showSelectionUi } from "./selection-ui.js";
 import { showStartChoice } from "./start-ui.js";
-import { parseSurfaceRequest, resolvePlanningSurface, type PlanningSurfaceRequest } from "./surface-ui.js";
+import { parseSurfaceRequest, resolvePlanningSurface, surfaceCompletions, type PlanningSurfaceRequest } from "./surface-ui.js";
 import { showReviewWebUi } from "./review-webui.js";
 
 /**
@@ -350,6 +351,7 @@ export default function (pi: ExtensionAPI) {
   });
   pi.registerCommand("midcompact:review", {
     description: "Open Review; optionally choose the tui or webui surface",
+    getArgumentCompletions: (prefix) => surfaceCompletions(prefix),
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       const parsed = parseSurfaceRequest(args, "review");
@@ -369,6 +371,7 @@ export default function (pi: ExtensionAPI) {
   });
   pi.registerCommand("midcompact:select", {
     description: "Open Selection; optionally choose the tui or webui surface",
+    getArgumentCompletions: (prefix) => surfaceCompletions(prefix),
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       await ctx.waitForIdle();
       const parsed = parseSurfaceRequest(args, "select");

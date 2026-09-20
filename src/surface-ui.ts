@@ -1,4 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export type PlanningSurface = "tui" | "webui";
 export type PlanningSurfaceRequest = PlanningSurface | "choose";
@@ -20,6 +21,15 @@ const SURFACE_CHOICES: SurfaceChoiceOption[] = [
 ];
 
 const SURFACE_DIALOG_TIMEOUT_MS = 120_000;
+
+/** Argument values accepted by `/midcompact:select` and `/midcompact:review`. */
+export const SURFACE_ARGUMENTS = ["tui", "webui"] as const;
+
+/** Complete the optional surface argument; used by both commands. */
+export function surfaceCompletions(prefix: string): AutocompleteItem[] | null {
+  const matches = SURFACE_ARGUMENTS.filter((argument) => argument.startsWith(prefix));
+  return matches.length > 0 ? matches.map((argument) => ({ value: argument, label: argument })) : null;
+}
 
 export function parseSurfaceRequest(args: string, command: "select" | "review"): ParsedSurfaceRequest {
   const argument = args.trim().toLowerCase();
