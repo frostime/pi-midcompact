@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-20
+
 ### Changed
 
 - `/midcompact:select` and `/midcompact:review` accept an optional `tui` or `webui` argument and, with no argument, prompt for a surface instead of defaulting to the native TUI in interactive mode and the browser elsewhere. They no longer fall back between surfaces on their own; `/midcompact:select-webui` and `/midcompact:review-webui` remain compatibility aliases.
@@ -84,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/frostime/pi-midcompact/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/frostime/pi-midcompact/compare/v0.5.3...v0.6.0
