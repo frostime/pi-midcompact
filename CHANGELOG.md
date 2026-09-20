@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `/midcompact:select` and `/midcompact:review` accept an optional `tui` or `webui` argument and, with no argument, prompt for a surface instead of defaulting to the native TUI in interactive mode and the browser elsewhere. They no longer fall back between surfaces on their own; `/midcompact:select-webui` and `/midcompact:review-webui` remain compatibility aliases.
+
 ## [0.7.1] - 2026-09-10
 
 ### Fixed

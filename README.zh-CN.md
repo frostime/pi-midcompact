@@ -29,7 +29,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 在临时分支中规划，提交后选择性投影
 
-`/midcompact start` 会把当前会话叶节点冻结为**锚点**。规划工作发生在临时子分支上，因此用于制定和修改草案的对话不会进入提交后的工作上下文。
+`/midcompact:start` 会把当前会话叶节点冻结为**锚点**。规划工作发生在临时子分支上，因此用于制定和修改草案的对话不会进入提交后的工作上下文。
 
 ```text
 冻结锚点：原始会话历史
@@ -42,7 +42,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
   ... [最近工作] ──┬── [事务] ── [草案 v1] ── [草案 v2]  ◀ 审查 / 修改
                    │                  （提交时舍弃）
                    └── [midcompact-state]                ◀ 提交后的叶节点
-                         （记录已审查的选择；不是模型消息；仅由 /midcompact commit 写入）
+                         （记录已审查的选择；不是模型消息；仅由 /midcompact:commit 写入）
 
 后续模型请求看到的是选择性投影后的上下文：
 
@@ -84,10 +84,10 @@ pi-midcompact —— 上下文中段压缩，审查后由用户提交
 
 | 项目 | Pi `/compact` | `pi-midcompact` |
 | --- | --- | --- |
-| 开始条件 | 接近上下文上限时自动触发，或运行 `/compact` | 在合适的工作节点运行 `/midcompact start` |
+| 开始条件 | 接近上下文上限时自动触发，或运行 `/compact` | 在合适的工作节点运行 `/midcompact:start` |
 | 选择范围 | 一段较早的连续前缀，并按 token 预算保留近期内容 | 一个或多个经过审查的区段；支持不连续区段和 `KEEP` 保留区 |
 | 规划方式 | 支持一次性指令，用于限定生成摘要的重点 | 用户说明范围和保留深度；Agent 讨论取舍并拟定区段与摘要 |
-| 提交约束 | 直接生成压缩检查点 | 先形成草案，再用 TUI 或浏览器审查，最后由用户运行 `/midcompact commit` |
+| 提交约束 | 直接生成压缩检查点 | 先形成草案，再用 TUI 或浏览器审查，最后由用户运行 `/midcompact:commit` |
 | 适用场景 | 自动维护上下文、从上下文溢出中恢复 | 清理已经完成的工作阶段，同时保留特定决策原文 |
 
 `pi-midcompact` 不会关闭或替代 Pi 的自动压缩；它提供另一条经过人工审查的选择性压缩路径。Pi 内置机制可参阅 [Pi 的 compaction 文档](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/compaction.md)。
@@ -120,7 +120,7 @@ pi install git:github.com/frostime/pi-midcompact
 /midcompact:start
 ```
 
-Pi 会在创建事务状态前提供三个选项：**Drop**、**Agent direct** 和 **User manual**。Agent direct 进入现有的 inventory-first Agent 流程；选择 User manual 后，可以使用 Web UI 或 TUI 粗选范围，再让 Agent 细化区段并撰写摘要。也可以在命令中直接写明初始重点：
+Pi 会在创建事务状态前提供三个选项：**Agent direct**、**User manual** 和 **Drop**。Agent direct 进入现有的 inventory-first Agent 流程；选择 User manual 后，可以使用 Web UI 或 TUI 粗选范围，再让 Agent 细化区段并撰写摘要。也可以在命令中直接写明初始重点：
 
 ```text
 /midcompact:start 压缩前期仓库探索过程，但保留用户需求原文。
@@ -200,7 +200,7 @@ Enter/Esc/q        关闭
 
 | 命令 | 作用 |
 | --- | --- |
-| `/midcompact:start [instructions]` | 显示 Drop / Agent direct / User manual，并在当前会话树叶节点启动事务。 |
+| `/midcompact:start [instructions]` | 显示 Agent direct / User manual / Drop，并在当前会话树叶节点启动事务。 |
 | `/midcompact:select [tui\|webui]` | 选择 Selection 界面，或直接打开指定界面。 |
 | `/midcompact:select-webui` | `/midcompact:select webui` 的兼容别名。 |
 | `/midcompact:review [tui\|webui]` | 选择 Review 界面，或直接打开指定界面。 |
@@ -231,7 +231,7 @@ npm run dev:webui -- --port=4180 --no-open
 - **保留原始历史。** 压缩只改变后续模型请求看到的内容，不改写存储的 Pi 消息。
 - **匹配失败时保留原文。** 若无法精确定位已审查的消息序列，扩展会原样发送历史，而不会删除不确定的内容。
 - **状态只在分支内生效。** 用 `/tree` 回到压缩状态之前的节点会恢复原始历史；回到其后代节点则恢复投影。
-- **必须人工审查。** Agent 可以提出方案，不能执行 `/midcompact commit`。
+- **必须人工审查。** Agent 可以提出方案，不能执行 `/midcompact:commit`。
 - **保护工具调用协议。** 未知、不完整或孤立的工具调用交互不能压缩。
 - **支持重复事务。** 后续事务可以继续压缩新积累的原始上下文；已有摘要保持受保护状态。
 - **与 Pi 原生 `/compact` 的组合仍需更多真实会话验证。** 在完成充分验证前，不应在关键工作中依赖两者混用。
