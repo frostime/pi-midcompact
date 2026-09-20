@@ -10,7 +10,7 @@ test("User-first start sends a waiting prompt, then opens Selection without furt
   const { sm, pi, toolCtx, commandCtx } = setupRuntime(entries);
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.selectResults = [1, 1]; // User manual, then TUI Selection
   toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact:start").handler("", commandCtx);
 
@@ -34,7 +34,7 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   ];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.selectResults = [1, 1]; // User manual, then TUI Selection
   toolCtx.ui.customInputs = [[" ", "s"]];
 
   await pi.commands.get("midcompact:start").handler("", commandCtx);
@@ -47,7 +47,7 @@ test("User-first TUI selection writes pending ranges into the shared DraftPlan",
   assert.equal(pi.sentUserMessages.length, 1);
 
   toolCtx.ui.customInputs = ["s"];
-  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  await pi.commands.get("midcompact:select").handler("tui", commandCtx);
   const selectionFrame = toolCtx.ui.reviewFrames.at(-1).join("\n");
   assert.match(selectionFrame, /Selected 1\/2 atoms \| 9\/24 chars \(37\.5% of anchor\) \| up to 37\.5% fewer anchor chars/);
 });
@@ -59,7 +59,7 @@ test("User-first ESC closes without discarding the transaction, and select can r
   ];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.selectResults = [1, 1]; // User manual, then TUI Selection
   toolCtx.ui.customInputs = ["\x1b"];
   await pi.commands.get("midcompact:start").handler("", commandCtx);
 
@@ -67,7 +67,7 @@ test("User-first ESC closes without discarding the transaction, and select can r
   assert.equal([...entries].reverse().find(entry => entry.customType === "midcompact-draft").data.ranges.length, 0);
 
   toolCtx.ui.customInputs = [[" ", "s"]];
-  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  await pi.commands.get("midcompact:select").handler("tui", commandCtx);
   const draftEntry = [...entries].reverse().find(entry => entry.customType === "midcompact-draft");
   assert.equal(draftEntry.data.ranges.length, 1);
   assert.equal(pi.sentUserMessages.length, 1);
@@ -85,7 +85,7 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
 
   // User-first start.
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
-  toolCtx.ui.selectResults = [1]; // User manual (second option)
+  toolCtx.ui.selectResults = [1, 1]; // User manual, then TUI Selection
   toolCtx.ui.customInputs = ["s"];
   await pi.commands.get("midcompact:start").handler("", commandCtx);
 
@@ -113,4 +113,48 @@ test("Agent discovers an existing user DraftPlan via plan show after handoff", a
   assert.match(shown.content[0].text, /to: Assistant: old exploration/);
   assert.match(shown.content[0].text, /summary: <pending>/);
   assert.equal(entries.filter(entry => entry.customType === "midcompact-draft").length, draftEntriesBeforeShow);
+});
+
+test("Selection command validates arguments, offers an explicit chooser, and never defaults a surface", async () => {
+  const entries = [
+    { type: "message", id: "e1", parentId: null, message: user("phase one", 1) },
+    { type: "message", id: "e2", parentId: "e1", message: assistant("old exploration", 2) },
+  ];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  toolCtx.ui.selectResults = [0]; // Agent direct
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
+
+  const chooserCallsBefore = toolCtx.ui.selectCalls.length;
+  await pi.commands.get("midcompact:select").handler("browser", commandCtx);
+  assert.match(toolCtx.ui.messages.at(-1).text, /Usage: \/midcompact:select \[tui\|webui\]/);
+  assert.equal(toolCtx.ui.selectCalls.length, chooserCallsBefore);
+  assert.equal(toolCtx.ui.reviewFrames.length, 0);
+
+  const draftEntriesBeforeCancel = entries.filter(entry => entry.customType === "midcompact-draft").length;
+  toolCtx.ui.selectResults = [2]; // Cancel
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  assert.deepEqual(toolCtx.ui.selectCalls.at(-1).options, [
+    "Web UI — Recommended",
+    "TUI — Built into Pi",
+    "Cancel",
+  ]);
+  assert.equal(entries.filter(entry => entry.customType === "midcompact-draft").length, draftEntriesBeforeCancel);
+  assert.equal(toolCtx.ui.reviewFrames.length, 0);
+  assert.match(toolCtx.ui.messages.at(-1).text, /opening cancelled/i);
+
+  commandCtx.hasUI = false;
+  commandCtx.mode = "print";
+  await pi.commands.get("midcompact:select").handler("", commandCtx);
+  assert.match(toolCtx.ui.messages.at(-1).text, /No interactive UI.*specify.*select (?:tui|webui)/i);
+
+  await pi.commands.get("midcompact:select").handler("tui", commandCtx);
+  assert.match(toolCtx.ui.messages.at(-1).text, /TUI.*only available.*\/midcompact:select webui/i);
+
+  commandCtx.hasUI = true;
+  commandCtx.mode = "tui";
+  toolCtx.ui.customInputs = ["\x1b"];
+  await pi.commands.get("midcompact:select").handler(" TUI ", commandCtx);
+  assert.equal(toolCtx.ui.selectCalls.length, chooserCallsBefore + 1, "an explicit surface must not open another chooser");
+  assert.equal(toolCtx.ui.reviewFrames.length, 1);
 });

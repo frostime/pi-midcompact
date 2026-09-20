@@ -55,18 +55,11 @@ The raw session JSONL still contains:
 
 ### A reviewed plan can reclaim meaningful context
 
-The earlier browser and TUI captures below illustrate a plan with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it. Click either image to open it at full resolution.
+The earlier browser and TUI captures below illustrate a plan with **2 ranges** covering **42 of 73 atoms**, while the other 31 atoms remain verbatim. The current UI reports Pi-provided anchor usage as the baseline and derives a **display-only** projection of post-commit usage from documented char-class assumptions (labeled `est.`, shown as a range, never used for gating); factual content chars and image counts stay alongside it.
 
-<p align="center">
-  <a href="./figures/review-webui.png">
-    <img src="./figures/review-webui.png" alt="Browser review UI showing 42 of 73 atoms selected across two compression ranges" width="49%">
-  </a>
-  <a href="./figures/review-tui.png">
-    <img src="./figures/review-tui.png" alt="Native TUI review showing a selected compression range and its retained atoms" width="49%">
-  </a>
-</p>
+![Editable browser review UI showing 42 of 73 atoms selected across two compression ranges](./figures/review-webui.webp)
 
-<p align="center"><sub>Editable browser review UI · Native Pi TUI review</sub></p>
+![Native Pi TUI review showing a selected compression range and its retained atoms](./figures/review-tui.webp)
 
 ### Prefix compaction versus mid-context compression
 
@@ -127,7 +120,7 @@ Run:
 /midcompact:start
 ```
 
-Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. User manual sends the same transaction guidance with a final “acknowledge only” instruction; after the Agent replies briefly, the Selection workbench opens (browser-based outside interactive mode). It does not start planning or mutate the plan until the user hands off later. Save the initial plan, close the UI, then tell the Agent to continue when you are ready. You can include an initial focus in the same command:
+Pi opens a three-way chooser before creating transaction state: **Agent direct**, **User manual**, or **Drop**. Agent direct is the first and default-highlighted option, matching the previous fast path. The chooser is the standard `select` dialog, identical in interactive and RPC mode; RPC carries it as an extension UI `select` message with a bounded timeout, so an unresponsive client cancels instead of blocking. print/JSON modes have no dialog and default to **Agent direct**. Agent direct starts the existing inventory-first Agent workflow. With User manual, choose Web UI or TUI, make a rough initial selection, then ask the Agent to refine the ranges and write their summaries. You can include an initial focus in the same command:
 
 ```text
 /midcompact:start Compress the early repository exploration, but keep user requirements verbatim.
@@ -147,25 +140,21 @@ The Agent locates relevant parts of the frozen conversation, proposes one or mor
 
 ### 3. Review the proposal
 
-Run:
+Run `/midcompact:review` and choose the recommended Web UI or the built-in TUI. You can also open either surface directly:
 
 ```text
-/midcompact:review
+/midcompact:review webui
+/midcompact:review tui
 ```
 
-In interactive mode, the native TUI displays the frozen conversation as a linear timeline. Each item is marked either `KEEP` or as belonging to a proposed range. Review the range boundaries and the summary that will replace each range.
-
-For RPC, print, or other no-TUI modes, use the editable local browser interface instead:
-
-```text
-/midcompact:review-webui
-```
+Each surface displays the frozen conversation as a linear timeline. Every item is marked either `KEEP` or as belonging to a proposed range. Review the range boundaries and the summary that will replace each range.
 
 Use Selection to create or change ranges and KEEP holes:
 
 ```text
 /midcompact:select
-/midcompact:select-webui
+/midcompact:select webui
+/midcompact:select tui
 ```
 
 Use the TUI or local browser Review surface to edit summaries/topics and reject ranges. Review deliberately does not create or resize ranges; reopen Selection for boundary changes. To continue with Agent after a user-created plan, send a normal message asking it to continue the current midcompact plan; the Agent is prompted to read the existing plan first.
@@ -194,7 +183,7 @@ This returns to the anchor and discards the transaction without changing the act
 
 ## Native TUI Controls
 
-Inside `/midcompact:review`:
+Inside `/midcompact:review tui`:
 
 ```text
 n/p or Left/Right  select a proposed range
@@ -212,10 +201,10 @@ Enter/Esc/q        close
 | Command | Result |
 | --- | --- |
 | `/midcompact:start [instructions]` | Opens Agent direct / User manual / Drop, then starts a transaction at the current session-tree leaf. |
-| `/midcompact:select` | Opens the native TUI Selection workbench for range and KEEP editing. |
-| `/midcompact:select-webui` | Opens the local browser Selection workbench. |
-| `/midcompact:review` | Opens summary/topic review in the native TUI. |
-| `/midcompact:review-webui` | Opens summary/topic review in a local browser. |
+| `/midcompact:select [tui\|webui]` | Chooses a Selection surface, or opens the requested one directly. |
+| `/midcompact:select-webui` | Compatibility alias for `/midcompact:select webui`. |
+| `/midcompact:review [tui\|webui]` | Chooses a Review surface, or opens the requested one directly. |
+| `/midcompact:review-webui` | Compatibility alias for `/midcompact:review webui`. |
 | `/midcompact:commit` | Commits the reviewed plan. Human only. |
 | `/midcompact:abort` | Abandons the transaction and returns to the anchor. |
 | `/midcompact:status` | Displays the current plan, or the committed compression state on this branch. |
@@ -250,4 +239,4 @@ restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
 - **Provider and extension interoperability needs more real-session validation.** Unusual message shapes, third-party context-transform ordering, and long-lived exact message fingerprints have not been broadly exercised.
 - **Very long sessions are not stress-tested.** Large review snapshots and repeated block accumulation may eventually require consolidation.
-- **Browser workbenches are local.** `select-webui` and `review-webui` bind to loopback and mutate the same branch-local plan as the native TUI surfaces.
+- **Browser workbenches are local.** The Web UI surfaces bind to loopback and mutate the same branch-local plan as the native TUI surfaces.

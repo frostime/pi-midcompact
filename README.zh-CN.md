@@ -29,7 +29,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 在临时分支中规划，提交后选择性投影
 
-`/midcompact start` 会把当前会话叶节点冻结为**锚点**。规划工作发生在临时子分支上，因此用于制定和修改草案的对话不会进入提交后的工作上下文。
+`/midcompact:start` 会把当前会话叶节点冻结为**锚点**。规划工作发生在临时子分支上，因此用于制定和修改草案的对话不会进入提交后的工作上下文。
 
 ```text
 冻结锚点：原始会话历史
@@ -42,7 +42,7 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
   ... [最近工作] ──┬── [事务] ── [草案 v1] ── [草案 v2]  ◀ 审查 / 修改
                    │                  （提交时舍弃）
                    └── [midcompact-state]                ◀ 提交后的叶节点
-                         （记录已审查的选择；不是模型消息；仅由 /midcompact commit 写入）
+                         （记录已审查的选择；不是模型消息；仅由 /midcompact:commit 写入）
 
 后续模型请求看到的是选择性投影后的上下文：
 
@@ -55,18 +55,11 @@ Pi 内置的 `/compact` 可理解为**前缀压缩**（prefix compaction）：�
 
 ### 实际压缩效果
 
-下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。点击图片可查看原图。
+下面的早期浏览器和 TUI 截图展示了一份包含 **2 个区段**、覆盖 **73 个 atom 中 42 个**的草案，其余 31 个 atom 保留原文。当前 UI 以 Pi 上报的锚点 usage 为基线，并根据文档化的字符分类假设推导**仅供展示**的 commit 后占用预计（标注 `est.`、以区间呈现、绝不参与门禁）；事实性的 content chars 与图片数量仍然并列展示。
 
-<p align="center">
-  <a href="./figures/review-webui.png">
-    <img src="./figures/review-webui.png" alt="浏览器审查界面：73 个对话原子中有 42 个分布在两个压缩区段内" width="49%">
-  </a>
-  <a href="./figures/review-tui.png">
-    <img src="./figures/review-tui.png" alt="原生 TUI 审查界面：展示选中的压缩区段及其中的对话原子" width="49%">
-  </a>
-</p>
+![可编辑的浏览器审查界面：73 个对话原子中有 42 个分布在两个压缩区段内](./figures/review-webui.webp)
 
-<p align="center"><sub>可编辑的浏览器审查界面 · Pi 原生 TUI 审查界面</sub></p>
+![Pi 原生 TUI 审查界面：展示选中的压缩区段及其中的对话原子](./figures/review-tui.webp)
 
 ### 前缀压缩与上下文中段压缩
 
@@ -91,10 +84,10 @@ pi-midcompact —— 上下文中段压缩，审查后由用户提交
 
 | 项目 | Pi `/compact` | `pi-midcompact` |
 | --- | --- | --- |
-| 开始条件 | 接近上下文上限时自动触发，或运行 `/compact` | 在合适的工作节点运行 `/midcompact start` |
+| 开始条件 | 接近上下文上限时自动触发，或运行 `/compact` | 在合适的工作节点运行 `/midcompact:start` |
 | 选择范围 | 一段较早的连续前缀，并按 token 预算保留近期内容 | 一个或多个经过审查的区段；支持不连续区段和 `KEEP` 保留区 |
 | 规划方式 | 支持一次性指令，用于限定生成摘要的重点 | 用户说明范围和保留深度；Agent 讨论取舍并拟定区段与摘要 |
-| 提交约束 | 直接生成压缩检查点 | 先形成草案，再用 TUI 或浏览器审查，最后由用户运行 `/midcompact commit` |
+| 提交约束 | 直接生成压缩检查点 | 先形成草案，再用 TUI 或浏览器审查，最后由用户运行 `/midcompact:commit` |
 | 适用场景 | 自动维护上下文、从上下文溢出中恢复 | 清理已经完成的工作阶段，同时保留特定决策原文 |
 
 `pi-midcompact` 不会关闭或替代 Pi 的自动压缩；它提供另一条经过人工审查的选择性压缩路径。Pi 内置机制可参阅 [Pi 的 compaction 文档](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/compaction.md)。
@@ -124,13 +117,13 @@ pi install git:github.com/frostime/pi-midcompact
 运行：
 
 ```text
-/midcompact start
+/midcompact:start
 ```
 
-Pi 会在创建事务状态前提供三个选项：**Drop**、**Agent direct** 和 **User manual**。Agent direct 进入现有的 inventory-first Agent 流程；User manual 会发送同样的事务说明，但末尾要求 Agent 只确认知悉。Agent 简短回复后，才打开 Selection 工作台；在用户交接前不会开始规划或修改 DraftPlan。用户保存初始 DraftPlan 并关闭界面后，可在准备好时再让 Agent 继续。也可以在命令中直接写明初始重点：
+Pi 会在创建事务状态前提供三个选项：**Agent direct**、**User manual** 和 **Drop**。Agent direct 进入现有的 inventory-first Agent 流程；选择 User manual 后，可以使用 Web UI 或 TUI 粗选范围，再让 Agent 细化区段并撰写摘要。也可以在命令中直接写明初始重点：
 
 ```text
-/midcompact start 压缩前期仓库探索过程，但保留用户需求原文。
+/midcompact:start 压缩前期仓库探索过程，但保留用户需求原文。
 ```
 
 ### 2. 与 Agent 讨论压缩方案
@@ -147,25 +140,21 @@ Agent 会在冻结的会话快照中定位相关内容，提出一个或多个�
 
 ### 3. 审查草案
 
-运行：
+运行 `/midcompact:review`，选择推荐的 Web UI 或内置 TUI。也可以直接打开指定界面：
 
 ```text
-/midcompact review
+/midcompact:review webui
+/midcompact:review tui
 ```
 
-在交互模式下，原生 TUI 会把冻结的对话显示为线性时间线。每个条目都会标为 `KEEP`，或标明其所属的拟压缩区段。请检查区段边界，以及将用来替换原文的摘要。
-
-在 RPC、print 或其他没有 TUI 的模式下，请改用可编辑的本地浏览器界面：
-
-```text
-/midcompact review-webui
-```
+两种界面都会把冻结的对话显示为线性时间线。每个条目都会标为 `KEEP`，或标明其所属的拟压缩区段。请检查区段边界，以及将用来替换原文的摘要。
 
 需要创建或调整区段与 `KEEP` 保留洞时，使用 Selection：
 
 ```text
-/midcompact select
-/midcompact select-webui
+/midcompact:select
+/midcompact:select webui
+/midcompact:select tui
 ```
 
 TUI 与本地浏览器 Review 界面用于编辑摘要/主题和否决区段。Review 不创建或调整区段边界；边界变化应重新打开 Selection。用户先创建计划后，只需发送普通消息要求 Agent 继续当前 midcompact draft，Agent 会先读取已有计划。
@@ -175,7 +164,7 @@ TUI 与本地浏览器 Review 界面用于编辑摘要/主题和否决区段。R
 方案确认后，运行：
 
 ```text
-/midcompact commit
+/midcompact:commit
 ```
 
 这个命令只能由用户执行，Agent 无法自行提交压缩。
@@ -187,14 +176,14 @@ Pi 会回到锚点，放弃临时规划分支，保存已审查的压缩状态�
 提交后可以继续正常工作。若决定不压缩，运行：
 
 ```text
-/midcompact abort
+/midcompact:abort
 ```
 
 该命令会回到锚点，丢弃事务，不改变当前生效的上下文。
 
 ## 原生 TUI 快捷键
 
-在 `/midcompact review` 中：
+在 `/midcompact:review tui` 中：
 
 ```text
 n/p 或 Left/Right  选择拟压缩区段
@@ -211,14 +200,14 @@ Enter/Esc/q        关闭
 
 | 命令 | 作用 |
 | --- | --- |
-| `/midcompact start [instructions]` | 显示 Drop / Agent direct / User manual，并在当前会话树叶节点启动事务。 |
-| `/midcompact select` | 在原生 TUI 中打开 Selection 工作台，编辑区段和 `KEEP`。 |
-| `/midcompact select-webui` | 在本地浏览器中打开 Selection 工作台。 |
-| `/midcompact review` | 在原生 TUI 中审查摘要和主题。 |
-| `/midcompact review-webui` | 在本地浏览器中审查摘要和主题。 |
-| `/midcompact commit` | 提交已审查的草案；只能由用户执行。 |
-| `/midcompact abort` | 放弃事务并回到锚点。 |
-| `/midcompact status` | 显示当前草案，或本分支已提交的压缩状态。 |
+| `/midcompact:start [instructions]` | 显示 Agent direct / User manual / Drop，并在当前会话树叶节点启动事务。 |
+| `/midcompact:select [tui\|webui]` | 选择 Selection 界面，或直接打开指定界面。 |
+| `/midcompact:select-webui` | `/midcompact:select webui` 的兼容别名。 |
+| `/midcompact:review [tui\|webui]` | 选择 Review 界面，或直接打开指定界面。 |
+| `/midcompact:review-webui` | `/midcompact:review webui` 的兼容别名。 |
+| `/midcompact:commit` | 提交已审查的草案；只能由用户执行。 |
+| `/midcompact:abort` | 放弃事务并回到锚点。 |
+| `/midcompact:status` | 显示当前草案，或本分支已提交的压缩状态。 |
 
 扩展只在事务进行期间在 Pi 页脚显示规划状态；提交或放弃后会自动清除。
 
@@ -242,10 +231,10 @@ npm run dev:webui -- --port=4180 --no-open
 - **保留原始历史。** 压缩只改变后续模型请求看到的内容，不改写存储的 Pi 消息。
 - **匹配失败时保留原文。** 若无法精确定位已审查的消息序列，扩展会原样发送历史，而不会删除不确定的内容。
 - **状态只在分支内生效。** 用 `/tree` 回到压缩状态之前的节点会恢复原始历史；回到其后代节点则恢复投影。
-- **必须人工审查。** Agent 可以提出方案，不能执行 `/midcompact commit`。
+- **必须人工审查。** Agent 可以提出方案，不能执行 `/midcompact:commit`。
 - **保护工具调用协议。** 未知、不完整或孤立的工具调用交互不能压缩。
 - **支持重复事务。** 后续事务可以继续压缩新积累的原始上下文；已有摘要保持受保护状态。
 - **与 Pi 原生 `/compact` 的组合仍需更多真实会话验证。** 在完成充分验证前，不应在关键工作中依赖两者混用。
 - **Provider 与扩展互操作性仍需更多真实会话验证。** 非常规消息形态、第三方上下文转换顺序，以及长时间运行的精确消息指纹尚未得到广泛验证。
 - **超长会话尚未完成压力测试。** 审查快照很大、压缩块反复累积时，最终可能需要进一步整合。
-- **浏览器工作台仅在本机开放。** `select-webui` 与 `review-webui` 绑定到 loopback，并与原生 TUI 操作同一份分支内 DraftPlan。
+- **浏览器工作台仅在本机开放。** Web UI 界面绑定到 loopback，并与原生 TUI 操作同一份分支内 DraftPlan。

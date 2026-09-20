@@ -113,7 +113,7 @@ test("/midcompact start in RPC mode can pick User manual and opens the browser w
   const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
   const { pi, toolCtx, commandCtx } = setupRuntime(entries);
   commandCtx.mode = "rpc";
-  commandCtx.ui.selectResults = [1]; // User manual (second option)
+  commandCtx.ui.selectResults = [1, 0]; // User manual, then recommended Web UI Selection
   setOpenReviewWebBrowser(() => {}); // keep the test from spawning a system browser
 
   await pi.emit("session_start", { reason: "startup" }, toolCtx);
@@ -128,12 +128,32 @@ test("/midcompact start in RPC mode can pick User manual and opens the browser w
   await pending;
 
   assert.equal(toolCtx.ui.reviewFrames.length, 0);
-  assert.equal(toolCtx.ui.selectCalls.length, 1);
+  assert.equal(toolCtx.ui.selectCalls.length, 2);
+  assert.deepEqual(toolCtx.ui.selectCalls[1].options, [
+    "Web UI — Recommended",
+    "TUI — Built into Pi",
+    "Cancel",
+  ]);
   assert.match(pi.sentUserMessages.at(-1), /USER MANUAL/);
   assert.match(pi.sentUserMessages.at(-1), /Acknowledge with OK only/);
   const tx = entries.find(e => e.customType === "midcompact-transaction");
   assert.ok(tx, "transaction entry must exist");
   assert.equal(tx.data.startMode, "user");
+});
+
+test("User manual can cancel its Selection surface chooser without cancelling the transaction", async () => {
+  const entries = [{ type: "message", id: "e1", parentId: null, message: user("current work", 1) }];
+  const { pi, toolCtx, commandCtx } = setupRuntime(entries);
+  toolCtx.ui.selectResults = [1, 2]; // User manual, then Cancel Selection opening
+
+  await pi.emit("session_start", { reason: "startup" }, toolCtx);
+  await pi.commands.get("midcompact:start").handler("", commandCtx);
+
+  assert.equal(toolCtx.ui.selectCalls.length, 2);
+  assert.equal(toolCtx.ui.reviewFrames.length, 0);
+  assert.ok(entries.some(entry => entry.customType === "midcompact-transaction"));
+  assert.equal([...entries].reverse().find(entry => entry.customType === "midcompact-draft").data.ranges.length, 0);
+  assert.match(toolCtx.ui.messages.at(-1).text, /opening cancelled/i);
 });
 
 test("/midcompact start without UI (json/print) defaults to Agent direct and never prompts", async () => {

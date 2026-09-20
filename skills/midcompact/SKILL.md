@@ -90,7 +90,7 @@ Call `plan_show`; use `plan_read` when a stored summary needs full review. Check
 - **Selection:** Does each range serve the user's direction? Are important originals and intended KEEP holes retained? Has unnecessary full-history coverage crept in?
 - **Replacement:** Mentally remove the originals. Do summaries plus retained context explain the necessary causes, actions, evidence, and outcomes without gaps, vague claims, stale instructions, or state conflicts?
 
-Report replacements, retained originals, and stopping rationale. Boundaries: `/midcompact:select` or `/midcompact:select-webui`. Summaries: `/midcompact:review` or `/midcompact:review-webui`. Prefer browser variants when TUI is unavailable or unwanted. Only the user runs `/midcompact:commit`.
+Report replacements, retained originals, and stopping rationale. Boundaries: `/midcompact:select [tui|webui]`. Summaries: `/midcompact:review [tui|webui]`. Without an argument, the user chooses a surface; do not choose one for them. Only the user runs `/midcompact:commit`.
 
 ## Recall
 
