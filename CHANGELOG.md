@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-09-25
+
+### Fixed
+
+- Frozen tool calls with no result anywhere in the anchor can now be compressed as abandoned exchanges; ambiguous tool protocol and orphan results remain protected.
+
 ## [0.7.2] - 2026-09-20
 
 ### Changed
@@ -86,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/frostime/pi-midcompact/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/frostime/pi-midcompact/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/frostime/pi-midcompact/compare/v0.6.0...v0.7.0

@@ -54,11 +54,12 @@ package.json → `pi.extensions`).
 
 ## Atoms and ranges
 
-- The atom is the smallest selectable unit; a tool call plus its matching
-  results is one indivisible `tool_exchange` atom.
-- Protected (never compressible): incomplete/orphaned tool protocol,
-  existing compressed blocks, unsupported message kinds, entries lacking
-  the persistent anchor entry.
+- The atom is the smallest selectable unit. Tool calls plus their canonical
+  adjacent results form one indivisible `tool_exchange` atom. A frozen call
+  with no result anywhere in the anchor is an `abandoned exchange` and may be
+  compressed as a whole. Ambiguous tool protocol and orphan results remain
+  protected, as do existing compressed blocks, unsupported message kinds, and
+  entries lacking the persistent anchor entry.
 - Draft ranges never overlap and never contain protected atoms; boundaries
   cannot be updated in place (remove + re-add). Empty `summary` = pending;
   commit rejects pending, reversed, overlapping, or protected-crossing

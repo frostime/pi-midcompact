@@ -1,4 +1,4 @@
-import type { Atom, LocateQuery, MessageLike, MessageRef, SessionEntryLike } from "./types.js";
+import type { Atom, LocateQuery, MessageLike, MessageRef, SessionEntryLike, ToolProtocolStatus } from "./types.js";
 import { aggregateMetrics, measureMessage } from "./content-metrics.js";
 import { approxTokens, excerptAround, mapEntryIds, messageKey, renderMessage, toolCalls, truncateMiddle } from "./messages.js";
 
@@ -9,6 +9,7 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
     key: messageKey(message),
     entryId: entryIds[index],
   }));
+  const protocolLocations = indexToolProtocol(refs);
   const atoms: Atom[] = [];
   let i = 0;
   while (i < refs.length) {
@@ -37,8 +38,15 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
           j += 1;
           if (seen.size === expected.size) break;
         }
-        const closed = seen.size === expected.size;
-        atoms.push(makeAtom(atoms.length, "tool_exchange", chunk, closed && chunk.every(hasEntry), closed));
+        const toolProtocol = classifyToolExchange(calls, seen, i, j, protocolLocations);
+        const atom = makeAtom(
+          atoms.length,
+          "tool_exchange",
+          chunk,
+          toolProtocol !== "ambiguous" && chunk.every(hasEntry),
+          toolProtocol === "closed",
+        );
+        atoms.push({ ...atom, toolProtocol });
         i = j;
         continue;
       }
@@ -48,7 +56,8 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
     }
 
     if (message.role === "toolResult") {
-      atoms.push(makeAtom(atoms.length, "orphan_tool_result", [current], false, false));
+      const atom = makeAtom(atoms.length, "orphan_tool_result", [current], false, false);
+      atoms.push({ ...atom, toolProtocol: "orphan" });
       i += 1;
       continue;
     }
@@ -73,7 +82,52 @@ export function buildAtoms(messages: MessageLike[], branch: readonly SessionEntr
 
 /** A protected atom cannot be part of any compressible range. */
 export function isProtectedAtom(atom: Atom): boolean {
-  return !atom.compressible || !atom.protocolClosed || atom.kind === "compressed";
+  return !atom.compressible || atom.kind === "compressed";
+}
+
+interface ToolProtocolLocations {
+  callIndexesById: Map<string, number[]>;
+  resultIndexesById: Map<string, number[]>;
+}
+
+function indexToolProtocol(refs: readonly MessageRef[]): ToolProtocolLocations {
+  const callIndexesById = new Map<string, number[]>();
+  const resultIndexesById = new Map<string, number[]>();
+
+  refs.forEach((ref, index) => {
+    for (const call of toolCalls(ref.message)) appendLocation(callIndexesById, call.id, index);
+    if (ref.message.role === "toolResult" && ref.message.toolCallId) {
+      appendLocation(resultIndexesById, ref.message.toolCallId, index);
+    }
+  });
+  return { callIndexesById, resultIndexesById };
+}
+
+function appendLocation(locations: Map<string, number[]>, id: string, index: number): void {
+  const indexes = locations.get(id) ?? [];
+  indexes.push(index);
+  locations.set(id, indexes);
+}
+
+function classifyToolExchange(
+  calls: readonly { id: string }[],
+  seen: ReadonlySet<string>,
+  assistantIndex: number,
+  endIndex: number,
+  locations: ToolProtocolLocations,
+): Exclude<ToolProtocolStatus, "orphan"> {
+  const expectedIds = calls.map((call) => call.id);
+  const expected = new Set(expectedIds);
+  const hasUniqueCalls = expected.size === expectedIds.length
+    && expectedIds.every((id) => locations.callIndexesById.get(id)?.length === 1);
+  const hasOnlyLocalResults = expectedIds.every((id) => {
+    const resultIndexes = locations.resultIndexesById.get(id) ?? [];
+    return resultIndexes.length <= 1
+      && resultIndexes.every((index) => index > assistantIndex && index < endIndex);
+  });
+
+  if (!hasUniqueCalls || !hasOnlyLocalResults) return "ambiguous";
+  return seen.size === expected.size ? "closed" : "abandoned";
 }
 
 function hasEntry(ref: MessageRef): boolean {
@@ -162,7 +216,8 @@ function matchesSource(atom: Atom, source: NonNullable<LocateQuery["source"]>): 
 }
 
 export function formatLocatedAtom(atom: Atom, detail: "brief" | "full" = "brief", pattern?: string): string {
-  const flags = [atom.kind, atom.compressible ? "compressible" : "protected", atom.protocolClosed ? "closed" : "open"].join(", ");
+  const protocol = atom.toolProtocol ? toolProtocolLabel(atom.toolProtocol) : atom.protocolClosed ? "closed" : "open";
+  const flags = [atom.kind, atom.compressible ? "compressible" : "protected", protocol].join(", ");
   const text = detail === "full"
     ? atom.fullText.length <= 12_000 ? atom.fullText : truncateMiddle(atom.fullText, 12_000)
     : pattern
@@ -173,4 +228,11 @@ export function formatLocatedAtom(atom: Atom, detail: "brief" | "full" = "brief"
     atom.toolNames.length ? `tools: ${atom.toolNames.join(", ")}` : "",
     text,
   ].filter(Boolean).join("\n");
+}
+
+function toolProtocolLabel(status: ToolProtocolStatus): string {
+  if (status === "closed") return "closed tool protocol";
+  if (status === "abandoned") return "abandoned exchange";
+  if (status === "ambiguous") return "ambiguous tool protocol";
+  return "orphan result";
 }

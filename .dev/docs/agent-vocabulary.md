@@ -17,7 +17,7 @@
 | 词 | 指称 | id | 禁用同义词 |
 |---|---|---|---|
 | **anchor** | 冻结快照:事务开启时的历史只读视图,一切规划操作的背景 | — | snapshot(单独使用)、frozen context |
-| **atom** | 最小可选单元;一次工具调用与其结果不可分;有 protected/compressible 之分 | `a0001` | message、item、chunk、entry |
+| **atom** | 最小可选单元;一次工具调用与其相邻结果不可分;无结果的冻结调用可构成 abandoned exchange;有 protected/compressible 之分 | `a0001` | message、item、chunk、entry |
 | **plan** | 每事务唯一的压缩提案;用户与 Agent 共享编辑 | — | DraftPlan、the draft、draft range |
 | **range** | plan 的成员:连续 atom 区间 + 替换摘要(±topic);summary 为空 = pending;边界不可就地修改 | `d1` | draft range、span、selection |
 | **block** | range 经人工 commit 后的永久形态;唯一可 recall 的对象 | `c0001` | compressed draft、commit result |
@@ -41,6 +41,9 @@
 
 - `page_size` / `cursor`:通用 cursor 分页,非领域概念,无需同义词管理。
 - `detail`:仅存在于 `locate_ref`(输出深度)与 `recall_read`(渲染上限);不得再承担操作判别或携带跨字段前置条件。
+- `abandoned exchange`:冻结 anchor 中含工具调用、但对应结果在 anchor 任何位置都不存在的 atom;可整体压缩。禁止 `open protocol`、`incomplete exchange`。
+- `ambiguous tool protocol`:调用/结果关系非相邻、重复或无法唯一归属;对应 atom 为 protected。
+- `orphan result`:没有被相邻调用 atom 接纳的工具结果;为 protected。
 
 ## id 空间与标签
 

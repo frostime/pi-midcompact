@@ -43,8 +43,8 @@ function makeEl() {
 
 const ATOMS = [
   { ref: "a0001", index: 0, groupRef: "g0001", groupLabel: "phase", kind: "user", preview: "hello world", contentChars: 11, imageCount: 0, compressible: true, protocolClosed: true, toolNames: [], roles: [], narrowChars: 11, wideChars: 0, owningRangeId: "d1" },
-  { ref: "a0002", index: 1, groupRef: "g0001", groupLabel: "phase", kind: "tool_exchange", preview: "read x", contentChars: 30000, imageCount: 2, compressible: true, protocolClosed: true, toolNames: ["read"], roles: [], narrowChars: 30000, wideChars: 0, owningRangeId: "d1" },
-  { ref: "a0003", index: 2, groupRef: "g0001", groupLabel: "phase", kind: "tool_exchange", preview: "locked", contentChars: 500, imageCount: 0, compressible: false, protocolClosed: false, toolNames: [], roles: [], narrowChars: 500, wideChars: 0 },
+  { ref: "a0002", index: 1, groupRef: "g0001", groupLabel: "phase", kind: "tool_exchange", preview: "read x", contentChars: 30000, imageCount: 2, compressible: true, protocolClosed: false, toolProtocol: "abandoned", toolNames: ["read"], roles: [], narrowChars: 30000, wideChars: 0, owningRangeId: "d1" },
+  { ref: "a0003", index: 2, groupRef: "g0001", groupLabel: "phase", kind: "tool_exchange", preview: "locked", contentChars: 500, imageCount: 0, compressible: false, protocolClosed: false, toolProtocol: "ambiguous", toolNames: [], roles: [], narrowChars: 500, wideChars: 0 },
   { ref: "a0004", index: 3, groupRef: "g0002", groupLabel: "phase two", kind: "assistant", preview: "more work", contentChars: 2000, imageCount: 0, compressible: true, protocolClosed: true, toolNames: [], roles: [], narrowChars: 2000, wideChars: 0, owningRangeId: "d2" },
 ];
 const RANGES = [
@@ -112,6 +112,7 @@ const strip = els["strip"].innerHTML, tl = els["timeline"].innerHTML;
 assert(strip.includes("after commit") && strip.includes("(est. ±"), "T1 decision strip + pbar rendered");
 assert(strip.includes("≈149.9k tok"), "projection includes serialized replacement wrappers");
 assert(tl.includes('data-group-key="d1"') && tl.includes("KEEP"), "T1 raw timeline has range group + KEEP group");
+assert(tl.includes("abandoned exchange") && tl.includes("ambiguous tool protocol"), "tool protocol status distinguishes selectable abandoned exchanges from locked ambiguity");
 const hiddenCount = (tl.match(/class="gbody" hidden/g) || []).length;
 assert(hiddenCount === 1 && tl.indexOf('data-group-key="d2"') < tl.indexOf('class="gbody" hidden'), "T5/A4 seed: d2 (unselected) starts collapsed, d1 open");
 

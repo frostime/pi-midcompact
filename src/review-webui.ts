@@ -33,6 +33,7 @@ export interface ReviewState {
     imagePayloadBytes: number;
     compressible: boolean;
     protocolClosed: boolean;
+    toolProtocol?: Atom["toolProtocol"];
     toolNames: string[];
     roles: string[];
     compressedBlockId?: string;
@@ -146,6 +147,7 @@ export function serializeReviewState(
         imagePayloadBytes: atom.metrics.images.reduce((sum, image) => sum + image.payloadBytes, 0),
         compressible: atom.compressible,
         protocolClosed: atom.protocolClosed,
+        toolProtocol: atom.toolProtocol,
         toolNames: atom.toolNames,
         roles: atom.roles,
         compressedBlockId: atom.compressedBlockId,

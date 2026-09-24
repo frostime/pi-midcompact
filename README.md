@@ -234,7 +234,7 @@ restart for imported TypeScript changes. Stop the router with `Ctrl+C`. Use
 - **Fail-open projection.** If an exact reviewed sequence no longer resolves, the extension sends the raw history unchanged rather than removing uncertain content.
 - **State is branch-local.** Navigating with `/tree` to a point before a committed state restores raw history; returning to its descendant restores the projection.
 - **Human review is required.** The Agent can propose a plan but cannot execute `/midcompact:commit`.
-- **Tool protocol is protected.** Unknown, incomplete, or orphaned tool exchanges are not compressible.
+- **Tool protocol boundaries are protected.** Calls and matching results cannot be split across a compression boundary. A frozen call with no result anywhere in the anchor may be compressed as an abandoned exchange; ambiguous tool protocol and orphan results remain protected.
 - **Repeated transactions work.** Later transactions can compress newly accumulated raw context; existing summaries remain protected.
 - **Native Pi `/compact` interaction needs more real-session validation.** Avoid relying on mixed automatic/native compaction behavior for critical work until it has been exercised in your environment.
 - **Provider and extension interoperability needs more real-session validation.** Unusual message shapes, third-party context-transform ordering, and long-lived exact message fingerprints have not been broadly exercised.

@@ -57,7 +57,7 @@ For new boundaries, first read and retain the existing summary/topic and verify 
 
 ## Work around protected content
 
-Split around protected atoms. Causes include incomplete tool exchanges, unsupported message kinds, missing persistent entries, and existing committed blocks. Later transactions can compress remaining raw history around those blocks, not recompress the blocks themselves. Obtain current atom refs from `inspect`; refs are transaction-local.
+Split around protected atoms. Causes include ambiguous tool protocol (nonlocal, duplicate, or non-unique call/result relationships), orphan results, unsupported message kinds, missing persistent entries, and existing committed blocks. An abandoned exchange has a frozen tool call with no result anywhere in the anchor and can be compressed as a whole. Later transactions can compress remaining raw history around committed blocks, not recompress the blocks themselves. Obtain current atom refs from `inspect`; refs are transaction-local.
 
 ## Retrieve committed evidence
 

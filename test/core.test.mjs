@@ -53,7 +53,7 @@ const PNG_1x1_BASE64 =
 const GIF_1x1_BASE64 =
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-test("atomizer keeps a multi-tool assistant exchange closed", () => {
+test("atomizer keeps a multi-tool exchange compressible when one result is an error", () => {
   const messages = [
     user("start", 1),
     assistant([
@@ -62,7 +62,7 @@ test("atomizer keeps a multi-tool assistant exchange closed", () => {
       { type: "toolCall", id: "t2", name: "bash", arguments: { command: "test" } },
     ], 2),
     result("t1", "read", "A", 3),
-    result("t2", "bash", "ok", 4),
+    { ...result("t2", "bash", "command failed", 4), isError: true },
     assistant([{ type: "text", text: "done" }], 5),
   ];
   const branch = messages.map((m, i) => entry(`e${i + 1}`, m));
@@ -71,8 +71,45 @@ test("atomizer keeps a multi-tool assistant exchange closed", () => {
   assert.equal(atoms[1].kind, "tool_exchange");
   assert.equal(atoms[1].messages.length, 3);
   assert.equal(atoms[1].protocolClosed, true);
+  assert.equal(atoms[1].toolProtocol, "closed");
   assert.equal(atoms[1].compressible, true);
   assert.deepEqual(atoms[1].toolNames.sort(), ["bash", "read"]);
+});
+
+test("tool call with no result anywhere is a compressible abandoned exchange", () => {
+  const messages = [
+    assistant([{ type: "toolCall", id: "t1", name: "edit", arguments: { path: "a" } }], 1),
+    assistant([{ type: "text", text: "continued after interruption" }], 2),
+  ];
+  const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
+  const atoms = buildAtoms(messages, branch);
+
+  assert.equal(atoms[0].kind, "tool_exchange");
+  assert.equal(atoms[0].protocolClosed, false);
+  assert.equal(atoms[0].toolProtocol, "abandoned");
+  assert.equal(atoms[0].compressible, true);
+  assert.doesNotThrow(() => addDraftRange(emptyDraft("tx-abandoned"), atoms, {
+    start: "a0001",
+    end: "a0001",
+    summary: "The edit attempt was interrupted before producing a result.",
+  }));
+});
+
+test("nonlocal matching result keeps the tool exchange protected", () => {
+  const messages = [
+    assistant([{ type: "toolCall", id: "t1", name: "edit", arguments: { path: "a" } }], 1),
+    user("intervening message", 2),
+    result("t1", "edit", "late result", 3),
+  ];
+  const branch = messages.map((message, index) => entry(`e${index + 1}`, message));
+  const atoms = buildAtoms(messages, branch);
+
+  assert.equal(atoms[0].toolProtocol, "ambiguous");
+  assert.equal(atoms[0].compressible, false);
+  assert.throws(
+    () => addDraftRange(emptyDraft("tx-ambiguous"), atoms, { start: "a0001", end: "a0001", summary: "unsafe" }),
+    /protected atom a0001/,
+  );
 });
 
 test("orphan tool result is protected", () => {
