@@ -151,7 +151,11 @@ export async function showSelectionUi(
             const marker = isKeep ? "K" : isSelected ? "*" : " ";
             const state = isKeep ? success("KEEP") : isSelected ? warning("PLAN") : dim("....");
             const tools = atom.toolNames.length ? ` tools:${atom.toolNames.join(",")}` : "";
-            const line = `${isCursor ? ">" : " "} [${marker}] ${atom.ref} ${atom.kind.padEnd(15)} ${String(atom.metrics.contentChars).padStart(6)} chars ${String(atom.metrics.imageCount).padStart(2)} img ${tools}`;
+            const protocol = atom.toolProtocol === "abandoned" ? " [abandoned exchange]"
+              : atom.toolProtocol === "ambiguous" ? " [ambiguous tool protocol]"
+              : atom.toolProtocol === "orphan" ? " [orphan result]"
+              : "";
+            const line = `${isCursor ? ">" : " "} [${marker}] ${atom.ref} ${atom.kind.padEnd(15)} ${String(atom.metrics.contentChars).padStart(6)} chars ${String(atom.metrics.imageCount).padStart(2)} img ${tools}${protocol}`;
             body.push(frame(isCursor ? accent(line) : state + " " + line.slice(2), w));
             const preview = short(atom.preview, Math.max(30, w - 24));
             for (const wrapped of wrapTextWithAnsi(`    ${preview}`, Math.max(20, w - 8)).slice(0, 2)) body.push(frame(dim(wrapped), w));

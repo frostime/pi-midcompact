@@ -475,7 +475,7 @@ const pct = n => n == null || Number.isNaN(n) ? '—' : n.toFixed(n % 1 ? 1 : 0)
 const clamp = n => Math.max(0, Math.min(100, n));
 const isSelection = () => state.view === 'selection';
 const atomByRef = ref => state.atoms.find(a => a.ref === ref);
-const isLocked = a => !a.compressible || !a.protocolClosed || a.kind === 'compressed';
+const isLocked = a => !a.compressible || a.kind === 'compressed';
 const rangeAtoms = r => {
   const start = state.atoms.findIndex(a => a.ref === r.startRef);
   const end = state.atoms.findIndex(a => a.ref === r.endRef);
@@ -837,7 +837,9 @@ function atomRowRaw(a, maxChars) {
     ...(a.toolNames ?? []).slice(0, 3).map(toolTag),
     ...(a.roles ?? []).slice(0, 2).map(t => `<span class="tag">${esc(t)}</span>`),
     isLocked(a) ? '<span class="tag lock">can\u2019t compress</span>' : '',
-    a.protocolClosed === false ? '<span class="tag lock">open protocol</span>' : '',
+    a.toolProtocol === 'abandoned' ? '<span class="tag">abandoned exchange</span>' : '',
+    a.toolProtocol === 'ambiguous' ? '<span class="tag lock">ambiguous tool protocol</span>' : '',
+    a.toolProtocol === 'orphan' ? '<span class="tag lock">orphan result</span>' : '',
     a.compressedBlockId ? `<span class="tag">blk ${esc(a.compressedBlockId)}</span>` : '',
   ].filter(Boolean).join('');
   return `<div class="atom ${a.kind === 'user' ? 'user' : ''}" data-atom="${esc(a.ref)}">
@@ -920,7 +922,7 @@ function renderEditor() {
         <div class="estat"><label>images</label><span>${images}</span></div>
       </div>
       <div class="hint">Selected atoms are handed to the Agent for summarization; everything left unselected stays verbatim (that is KEEP).
-        Locked atoms can never be compressed: existing compressed blocks, incomplete tool protocol, or messages without a persistent anchor entry.
+        Locked atoms can never be compressed: existing compressed blocks, ambiguous tool protocol, orphan results, or messages without a persistent anchor entry.
         After saving, return to the terminal and tell the Agent to continue.</div>
       <div class="erow" style="position:static;margin:0;padding:0;border:0">
         <button class="btn btn-primary" id="selection-save-side" ${sel.length ? '' : 'disabled'}>Save selection</button>

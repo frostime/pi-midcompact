@@ -40,6 +40,8 @@ export type AtomKind =
   | "orphan_tool_result"
   | "other";
 
+export type ToolProtocolStatus = "closed" | "abandoned" | "ambiguous" | "orphan";
+
 /** Factual measurement of a single image content part. */
 export interface ImageFact {
   /** Sequence within the owning message. */
@@ -74,7 +76,10 @@ export interface Atom {
   /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   approxTokens: number;
   compressible: boolean;
+  /** Whether every call in a tool exchange has its canonical adjacent result. */
   protocolClosed: boolean;
+  /** Present only for atoms containing tool-protocol messages. */
+  toolProtocol?: ToolProtocolStatus;
   toolNames: string[];
   roles: string[];
   compressedBlockId?: string;

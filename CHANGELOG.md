@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Frozen tool calls with no result anywhere in the anchor can now be compressed as abandoned exchanges; ambiguous tool protocol and orphan results remain protected.
+
 ## [0.7.2] - 2026-09-20
 
 ### Changed
