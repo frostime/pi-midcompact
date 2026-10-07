@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `/midcompact:close-webui` closes Selection/Review WebUI, including a server stuck shutting down, and releases its UI-owned planning lock. It preserves the saved plan and transaction, warns about unsaved browser edits, and leaves Agent-held and unrelated TUI locks unchanged.
+
+### Changed
+
+- WebUI opening commands return control to the terminal once the URL is ready, so recovery commands remain available while the workbench retains its editing lock.
+
+### Fixed
+
+- Prevent queued browser reconnections and delayed edits from reviving a closing WebUI or changing the plan after shutdown starts.
+- Close old WebUI workbenches before session or branch changes and reject overlapping Selection/Review UIs, preventing stale workbenches from editing a different plan or releasing another UI's lock.
+
 ## [0.7.3] - 2026-09-25
 
 ### Fixed
