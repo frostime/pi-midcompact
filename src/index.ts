@@ -18,7 +18,7 @@ import { showReviewUi } from "./review-ui.js";
 import { showSelectionUi } from "./selection-ui.js";
 import { showStartChoice } from "./start-ui.js";
 import { parseSurfaceRequest, resolvePlanningSurface, surfaceCompletions, type PlanningSurfaceRequest } from "./surface-ui.js";
-import { showReviewWebUi } from "./review-webui.js";
+import { openReviewWebUi, type ReviewWebUiServerHandle } from "./review-webui.js";
 
 /**
  * Browser opener for the web workbenches. Tests override it to keep the suites
@@ -246,6 +246,10 @@ function rejectExtraFields(request: ToolParams["request"]): void {
 }
 
 type RuntimeSnapshot = { atoms: Atom[]; anchorState?: CompressionState };
+type ActiveWebUi = {
+  server: ReviewWebUiServerHandle;
+  finished: Promise<void>;
+};
 
 export default function (pi: ExtensionAPI) {
   let activeState: CompressionState | undefined;
@@ -253,6 +257,36 @@ export default function (pi: ExtensionAPI) {
   let draft: DraftPlan | undefined;
   // Runtime mutex over DraftPlan edits. Not persisted: lost on reload by design.
   const planningLock: PlanningLockState = emptyPlanningLock();
+  const activeWebUis = new Set<ActiveWebUi>();
+
+  function trackWebUi(server: ReviewWebUiServerHandle, ctx: ExtensionContext, closedNotice: string): ActiveWebUi {
+    const webUi: ActiveWebUi = {
+      server,
+      finished: server.closed.then(
+        () => ctx.ui.notify(closedNotice, "info"),
+        (error) => ctx.ui.notify(`Midcompact WebUI failed: ${error instanceof Error ? error.message : String(error)}`, "error"),
+      ).finally(() => {
+        activeWebUis.delete(webUi);
+        releaseUi(planningLock);
+        updateStatus(ctx, transaction, draft, planningLock.owner);
+      }),
+    };
+    activeWebUis.add(webUi);
+    // Command input remains available; retain and observe asynchronous cleanup.
+    void webUi.finished.catch((error) => console.error("Midcompact WebUI cleanup failed:", error));
+    return webUi;
+  }
+
+  async function closeWebUiServers(workbenches = [...activeWebUis]): Promise<void> {
+    await Promise.all(workbenches.map(async (webUi) => {
+      try {
+        await webUi.server.forceClose();
+      } finally {
+        // The workbench's cleanup, not this recovery command, releases its UI lock.
+        await webUi.finished;
+      }
+    }));
+  }
 
   registerStateRenderer(pi);
 
@@ -272,9 +306,16 @@ export default function (pi: ExtensionAPI) {
     updateStatus(ctx, transaction, draft, planningLock.owner);
   }
 
-  pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
-  pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreRuntime(ctx));
+  pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
+    await closeWebUiServers();
+    restoreRuntime(ctx);
+  });
+  pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => {
+    await closeWebUiServers();
+    restoreRuntime(ctx);
+  });
   pi.on("session_shutdown", async (_event: unknown, ctx: ExtensionContext) => {
+    await closeWebUiServers();
     ctx.ui.setStatus(STATUS_KEY, undefined);
     activeState = undefined;
     transaction = undefined;
@@ -389,6 +430,10 @@ export default function (pi: ExtensionAPI) {
       return openSelectionUi(ctx, "webui");
     },
   });
+  pi.registerCommand("midcompact:close-webui", {
+    description: "Close Selection/Review WebUI without changing the saved plan or transaction",
+    handler: async (_args: string, ctx: ExtensionCommandContext) => closeWebUi(ctx),
+  });
   pi.registerCommand("midcompact:status", {
     description: "Show current transaction and plan status",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
@@ -396,6 +441,31 @@ export default function (pi: ExtensionAPI) {
       return showStatus(ctx);
     },
   });
+
+  async function closeWebUi(ctx: ExtensionCommandContext): Promise<void> {
+    const workbenches = [...activeWebUis];
+    if (workbenches.length === 0) {
+      ctx.ui.notify("No midcompact WebUI is open in this session. No planning lock was changed.", "info");
+      return;
+    }
+    const warning = "The saved plan and transaction will be kept. Unsaved browser edits will not be saved.";
+    if (ctx.hasUI) {
+      if (!await ctx.ui.confirm("Close midcompact WebUI?", warning)) return;
+    } else {
+      ctx.ui.notify(warning, "warning");
+    }
+    await closeWebUiServers(workbenches);
+    ctx.ui.notify("Midcompact WebUI closed. The saved plan and transaction are unchanged.", "info");
+  }
+
+  function planningUiAlreadyOpen(ctx: ExtensionContext): boolean {
+    if (planningLock.owner !== "ui" && activeWebUis.size === 0) return false;
+    ctx.ui.notify(
+      "A planning UI is already open. Close it before opening another; use /midcompact:close-webui if its WebUI is stuck.",
+      "warning",
+    );
+    return true;
+  }
 
   // ---- Transaction lifecycle ----
 
@@ -461,10 +531,12 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("No active midcompact transaction.", "warning");
       return;
     }
+    if (planningUiAlreadyOpen(ctx)) return;
     if (!tryAcquireUi(planningLock)) {
       ctx.ui.notify("The Agent is currently processing the midcompact plan. Try Selection after the Agent turn ends.", "warning");
       return;
     }
+    let webUi: ActiveWebUi | undefined;
 
     const snapshot = buildAnchorSnapshot(ctx.sessionManager, currentTx);
     const applySelection = (spans: SelectionSpan[], keepRefs: string[]): void => {
@@ -491,7 +563,7 @@ export default function (pi: ExtensionAPI) {
         }
         return;
       }
-      await showReviewWebUi(ctx, snapshot.atoms, () => ({
+      await openReviewWebUi(ctx, snapshot.atoms, () => ({
         draft: draft ?? emptyDraft(currentTx.id),
         telemetry: draftTelemetry(currentTx, draft),
       }), {
@@ -503,10 +575,14 @@ export default function (pi: ExtensionAPI) {
           pi.appendEntry(DRAFT_ENTRY, draft);
           updateStatus(ctx, currentTx, draft, planningLock.owner);
         },
-      }, "selection", { openBrowser: openReviewWebBrowser });
-      ctx.ui.notify("Selection closed. The plan is saved; tell the Agent to continue when ready.", "info");
+      }, "selection", {
+        openBrowser: openReviewWebBrowser,
+        onStart: (server) => {
+          webUi = trackWebUi(server, ctx, "Selection closed. The plan is saved; tell the Agent to continue when ready.");
+        },
+      });
     } finally {
-      releaseUi(planningLock);
+      if (!webUi) releaseUi(planningLock);
     }
   }
 
@@ -625,10 +701,12 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("No active midcompact transaction.", "warning");
       return;
     }
+    if (planningUiAlreadyOpen(ctx)) return;
     if (!tryAcquireUi(planningLock)) {
       ctx.ui.notify("The Agent is currently processing the midcompact plan. Try opening review after the Agent turn ends.", "warning");
       return;
     }
+    let webUi: ActiveWebUi | undefined;
     try {
       const surface = await resolvePlanningSurface(ctx, request, "review");
       if (!surface) return;
@@ -645,12 +723,14 @@ export default function (pi: ExtensionAPI) {
         draft: draft ?? emptyDraft(currentTx.id),
         telemetry: draftTelemetry(currentTx, draft),
       });
-      await showReviewWebUi(ctx, snapshot.atoms, getLatest, {
+      await openReviewWebUi(ctx, snapshot.atoms, getLatest, {
         editSummary: (id, summary) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { summary })),
         editTopic: (id, topic) => commitMutation(updateDraftRange(draft ?? emptyDraft(currentTx.id), id, { topic: topic || undefined })),
         remove: (id) => commitMutation(removeDraftRange(draft ?? emptyDraft(currentTx.id), id)),
-      }, undefined, { openBrowser: openReviewWebBrowser });
-      ctx.ui.notify("Midcompact review-webui closed.", "info");
+      }, undefined, {
+        openBrowser: openReviewWebBrowser,
+        onStart: (server) => { webUi = trackWebUi(server, ctx, "Midcompact review-webui closed."); },
+      });
       return;
     }
 
@@ -681,7 +761,7 @@ export default function (pi: ExtensionAPI) {
       }
     }
     } finally {
-      releaseUi(planningLock);
+      if (!webUi) releaseUi(planningLock);
     }
   }
 

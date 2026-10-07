@@ -205,9 +205,12 @@ Enter/Esc/q        关闭
 | `/midcompact:select-webui` | `/midcompact:select webui` 的兼容别名。 |
 | `/midcompact:review [tui\|webui]` | 选择 Review 界面，或直接打开指定界面。 |
 | `/midcompact:review-webui` | `/midcompact:review webui` 的兼容别名。 |
+| `/midcompact:close-webui` | 关闭 Selection/Review WebUI，包括关闭过程卡住的服务器。保留已保存的 plan 和事务；不会保存浏览器内未保存的编辑。 |
 | `/midcompact:commit` | 提交已审查的草案；只能由用户执行。 |
 | `/midcompact:abort` | 放弃事务并回到锚点。 |
 | `/midcompact:status` | 显示当前草案，或本分支已提交的压缩状态。 |
+
+WebUI 命令在链接准备好后就返回终端。WebUI 打开期间，plan 仍由 UI 锁定。如果关闭浏览器后 Agent 仍被该锁阻止，请运行 `/midcompact:close-webui`。
 
 扩展只在事务进行期间在 Pi 页脚显示规划状态；提交或放弃后会自动清除。
 
