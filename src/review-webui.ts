@@ -1,4 +1,5 @@
 import http from "node:http";
+import type { Socket } from "node:net";
 import { exec } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -89,11 +90,15 @@ export interface ReviewWebUiServerHandle {
   url: string;
   closed: Promise<void>;
   close(): Promise<void>;
+  /** Revoke API access and terminate all sockets, including during a pending shutdown. */
+  forceClose(): Promise<void>;
 }
 
 export interface ReviewWebUiRuntimeOptions extends ReviewWebUiServerOptions {
   /** Test seam; production opens the system browser. */
   openBrowser?: (url: string) => void;
+  /** Register the handle before publishing the URL so the session can close the workbench. */
+  onStart?: (server: ReviewWebUiServerHandle) => void;
 }
 
 function owningRange(atomIndex: number, ranges: DraftPlan["ranges"]) {
@@ -196,6 +201,7 @@ export async function startReviewWebUiServer(
   let settled = false;
   let closing = false;
   let started = false;
+  const sockets = new Set<Socket>();
   let livenessResponse: http.ServerResponse | undefined;
   let connectTimer: NodeJS.Timeout | undefined;
   let pingTimer: NodeJS.Timeout | undefined;
@@ -241,6 +247,7 @@ export async function startReviewWebUiServer(
       const readBody = async (): Promise<string> => {
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        if (closing) throw new Error("WebUI is closing.");
         return Buffer.concat(chunks).toString("utf8");
       };
       const currentState = () => {
@@ -249,6 +256,10 @@ export async function startReviewWebUiServer(
       };
 
       try {
+        if (closing) {
+          sendJson(410, { error: "WebUI is closing." });
+          return;
+        }
         if (req.method === "GET" && path === "/api/liveness") {
           if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
           livenessResponse = res;
@@ -352,13 +363,21 @@ export async function startReviewWebUiServer(
       }
     });
 
-    const closeServer = () => {
-      if (closing || settled) return;
-      closing = true;
-      clearTimers();
-      if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
-      livenessResponse = undefined;
-      server.close((error) => error ? fail(error) : finish());
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+
+    const closeServer = (force = false) => {
+      if (settled) return;
+      if (!closing) {
+        closing = true;
+        clearTimers();
+        if (livenessResponse && !livenessResponse.writableEnded) livenessResponse.end();
+        livenessResponse = undefined;
+        server.close((error) => error ? fail(error) : finish());
+      }
+      if (force) for (const socket of sockets) socket.destroy();
     };
 
     server.on("error", (error) => {
@@ -368,6 +387,7 @@ export async function startReviewWebUiServer(
         rejectStart(error);
         return;
       }
+      closeServer(true);
       fail(error);
     });
     server.listen(options.port ?? 0, "127.0.0.1", () => {
@@ -383,12 +403,38 @@ export async function startReviewWebUiServer(
           closeServer();
           return closed;
         },
+        forceClose: () => {
+          closeServer(true);
+          return closed;
+        },
       });
     });
   });
 }
 
-/** Serve the shared workbench with production Pi notification and page lifetime. */
+/** Start the shared workbench and return its handle without blocking Pi command input. */
+export async function openReviewWebUi(
+  ctx: ExtensionCommandContext,
+  atoms: Atom[],
+  getLatest: () => { draft: DraftPlan; telemetry: DraftTelemetry },
+  callbacks: ReviewWebUiCallbacks,
+  view: ReviewWebUiView = "review",
+  runtime: ReviewWebUiRuntimeOptions = {},
+): Promise<ReviewWebUiServerHandle> {
+  const server = await startReviewWebUiServer(atoms, getLatest, callbacks, view, runtime);
+  try {
+    runtime.onStart?.(server);
+    const token = randomBytes(3).toString("hex");
+    ctx.ui.notify(`Midcompact ${view} webui ready: ${server.url} (token ${token})`, "info");
+    (runtime.openBrowser ?? tryOpenBrowser)(server.url);
+    return server;
+  } catch (error) {
+    await server.forceClose();
+    throw error;
+  }
+}
+
+/** Blocking adapter for callers that explicitly wait for the page's lifetime. */
 export async function showReviewWebUi(
   ctx: ExtensionCommandContext,
   atoms: Atom[],
@@ -397,11 +443,12 @@ export async function showReviewWebUi(
   view: ReviewWebUiView = "review",
   runtime: ReviewWebUiRuntimeOptions = {},
 ): Promise<void> {
-  const server = await startReviewWebUiServer(atoms, getLatest, callbacks, view, runtime);
-  const token = randomBytes(3).toString("hex");
-  ctx.ui.notify(`Midcompact ${view} webui ready: ${server.url} (token ${token})`, "info");
-  (runtime.openBrowser ?? tryOpenBrowser)(server.url);
-  await server.closed;
+  const server = await openReviewWebUi(ctx, atoms, getLatest, callbacks, view, runtime);
+  try {
+    await server.closed;
+  } finally {
+    await server.forceClose();
+  }
 }
 
 function tryOpenBrowser(url: string): void {

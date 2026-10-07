@@ -205,9 +205,12 @@ Enter/Esc/q        close
 | `/midcompact:select-webui` | Compatibility alias for `/midcompact:select webui`. |
 | `/midcompact:review [tui\|webui]` | Chooses a Review surface, or opens the requested one directly. |
 | `/midcompact:review-webui` | Compatibility alias for `/midcompact:review webui`. |
+| `/midcompact:close-webui` | Closes Selection/Review WebUI, including a stuck server. Keeps the saved plan and transaction; unsaved browser edits are not saved. |
 | `/midcompact:commit` | Commits the reviewed plan. Human only. |
 | `/midcompact:abort` | Abandons the transaction and returns to the anchor. |
 | `/midcompact:status` | Displays the current plan, or the committed compression state on this branch. |
+
+WebUI opening commands return control to the terminal once the URL is ready. The plan remains locked while the WebUI is open. Use `/midcompact:close-webui` if closing the browser leaves the Agent blocked by that lock.
 
 The extension shows planning status in Pi's footer only while a transaction is active. It disappears after commit or abort.
 

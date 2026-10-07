@@ -71,7 +71,25 @@ package.json → `pi.extensions`).
   hold it for their whole lifetime (`agent_start` → `agent_settled`); UIs
   hold it per session via the `midcompactPlanningLock` API object (exposed
   for UI and tests).
-- Blocked operations notify and return — there is no queue.
+- Blocked operations notify and return — there is no queue. Selection/Review
+  commands refuse a second planning UI while the UI lock or a registered WebUI
+  is held, so an old workbench's cleanup cannot release a newer UI's lock.
+- `/midcompact:close-webui` closes registered WebUI servers, including a server
+  already shutting down, then waits for their cleanup to release the lock.
+  It is not a generic unlock: Agent-held and unrelated TUI locks remain
+  unchanged. The saved plan and transaction remain unchanged;
+  interactive UI confirms unsaved browser edits will not be saved, otherwise
+  the command warns. No registered WebUI is a no-op with a notice.
+- WebUI opening commands return once the URL is ready: Pi's idle input loop
+  awaits slash commands, so waiting for page closure would queue the recovery
+  command behind the workbench it must close. The registered workbench retains
+  the UI lock until its asynchronous cleanup finishes.
+- WebUI handles remain registered until cleanup finishes and are closed before
+  session/branch state is restored, and on session shutdown. Forced close
+  revokes API access before destroying sockets. Closing servers reject queued
+  liveness requests and edits whose
+  request bodies finish after shutdown starts; neither may revive the server
+  or mutate the plan after access is revoked.
 
 ## External contracts (reference, don't duplicate)
 
@@ -87,12 +105,12 @@ package.json → `pi.extensions`).
   providers (e.g. DeepSeek) reject a root-level `anyOf` before the model sees
   the schema.
   Details: `skills/midcompact/references/tool-interface.md`.
-- Commands: `midcompact:start|abort|commit|review|review-webui|select|select-webui|status`;
+- Commands: `midcompact:start|abort|commit|review|review-webui|select|select-webui|close-webui|status`;
   no composite `/midcompact`; native naming convention `name:sub` (Pi's
   `skill:<name>`). `select` and `review` accept optional `tui|webui`; omitted
   arguments require an explicit built-in surface choice when extension UI is
   available and otherwise warn. They never silently fall back between
-  surfaces. The `*-webui` commands remain compatibility aliases.
+  surfaces. `select-webui` and `review-webui` remain compatibility aliases.
 - The tool never starts a transaction and never commits; both are command-
   or user-gated. Recall is the only action valid without a transaction.
 - Web workbench (`review-webui.html` + `review-webui.ts`): the state payload
@@ -102,9 +120,10 @@ package.json → `pi.extensions`).
   update estimates while a summary is edited; `GET /api/atom/:ref` serves the
   frozen atom's full text for the original-text drawer (read-only, snapshot-local).
   `startReviewWebUiServer` owns the Pi-independent loopback HTTP contract;
-  `showReviewWebUi` adapts it to Pi notification, browser launch, and page-bound
-  lifetime. Development may opt into a persistent server without changing the
-  production defaults.
+  `openReviewWebUi` adapts it to Pi notification and browser launch, returning
+  a handle for session-owned cleanup. `showReviewWebUi` is the blocking adapter
+  for callers that explicitly await the page lifetime. Development may opt into
+  a persistent server without changing the production defaults.
   User-facing copy says "can't compress" for protected atoms; "protected"
   stays the agent/tool-side term.
   Page invariants that broke once and must hold: the `<!--MIDCOMPACT_STATE-->`

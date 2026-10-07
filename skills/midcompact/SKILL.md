@@ -92,6 +92,8 @@ Call `plan_show`; use `plan_read` when a stored summary needs full review. Check
 
 Report replacements, retained originals, and stopping rationale. Boundaries: `/midcompact:select [tui|webui]`. Summaries: `/midcompact:review [tui|webui]`. Without an argument, the user chooses a surface; do not choose one for them. Only the user runs `/midcompact:commit`.
 
+If the Agent remains blocked by a WebUI planning lock after the browser is closed, ask the user to run `/midcompact:close-webui`. It closes Selection/Review WebUI without changing the saved plan or transaction. Unsaved browser edits are not saved. It does not release an Agent-held lock; there is no tool action to bypass the lock.
+
 ## Recall
 
 Recall reads active committed blocks without changing a plan and needs no transaction. If the id is unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, and summaries, not originals. Projected summaries carry block ids and recall calls.
