@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-09
+
 ### Added
 
 - `/midcompact:close-webui` closes Selection/Review WebUI, including a server stuck shutting down, and releases its UI-owned planning lock. It preserves the saved plan and transaction, warns about unsaved browser edits, and leaves Agent-held and unrelated TUI locks unchanged.
