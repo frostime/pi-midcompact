@@ -59,6 +59,10 @@ For new boundaries, first read and retain the existing summary/topic and verify 
 
 Split around protected atoms. Causes include ambiguous tool protocol (nonlocal, duplicate, or non-unique call/result relationships), orphan results, unsupported message kinds, missing persistent entries, and existing committed blocks. An abandoned exchange has a frozen tool call with no result anywhere in the anchor and can be compressed as a whole. Later transactions can compress remaining raw history around committed blocks, not recompress the blocks themselves. Obtain current atom refs from `inspect`; refs are transaction-local.
 
+## Recover a stuck WebUI
+
+Only the user runs `/midcompact:close-webui` to close Selection/Review WebUI, including a server stuck shutting down. It keeps the saved plan and transaction, but does not save unsaved browser edits. Interactive UI asks for confirmation; without interactive UI, the command warns and closes. If no WebUI is open, it reports that and changes no planning lock. It never releases an Agent-held lock. This is a user command, not a tool action.
+
 ## Retrieve committed evidence
 
 ```json

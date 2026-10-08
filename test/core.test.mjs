@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import net from "node:net";
+import { once } from "node:events";
 
 const ROOT = new URL("../.test-dist/src/", import.meta.url);
 const atomsMod = await import(new URL("atoms.js", ROOT));
@@ -424,6 +426,51 @@ test("standalone Web UI server survives page disconnect and client Close", async
   } finally {
     await server.close();
   }
+});
+
+test("WebUI shutdown rejects queued liveness and edits whose bodies finish after closing", { timeout: 3000 }, async t => {
+  const draft = emptyDraft("tx-closing");
+  let mutations = 0;
+  const server = await startReviewWebUiServer(
+    [], () => ({ draft, telemetry: {} }),
+    { applySelection() { mutations++; }, editSummary() {}, editTopic() {}, remove() {} },
+    "selection", { livenessConnectTimeoutMs: 0 },
+  );
+  t.after(() => server.forceClose());
+  const connect = async () => {
+    const socket = net.connect(Number(new URL(server.url).port), "127.0.0.1");
+    socket.on("error", () => {});
+    t.after(() => socket.destroy());
+    await once(socket, "connect");
+    return socket;
+  };
+  const readUntil = (socket, pattern) => new Promise(resolve => {
+    let response = "";
+    const onData = chunk => {
+      response += chunk.toString();
+      if (pattern.test(response)) {
+        socket.off("data", onData);
+        resolve(response);
+      }
+    };
+    socket.on("data", onData);
+  });
+  const edit = await connect();
+  const body = JSON.stringify({ spans: [], keepRefs: [] });
+  const accepted = readUntil(edit, /100 Continue/);
+  edit.write(`POST /api/selection HTTP/1.1\r\nHost: localhost\r\nContent-Length: ${Buffer.byteLength(body)}\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n${body.slice(0, 5)}`);
+  await accepted;
+
+  const pipelined = await connect();
+  const rejected = readUntil(pipelined, /410 Gone/);
+  pipelined.write("POST /api/close HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\nGET /api/liveness HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+  const response = await rejected;
+  assert.doesNotMatch(response, /text\/event-stream/);
+  const editRejected = readUntil(edit, /WebUI is closing/);
+  edit.write(body.slice(5));
+  await editRejected;
+  await server.closed;
+  assert.equal(mutations, 0);
 });
 
 test("development fixtures cover distinct workbench states", () => {

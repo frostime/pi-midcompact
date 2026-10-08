@@ -45,6 +45,10 @@
 - `ambiguous tool protocol`:调用/结果关系非相邻、重复或无法唯一归属;对应 atom 为 protected。
 - `orphan result`:没有被相邻调用 atom 接纳的工具结果;为 protected。
 
+## 用户命令
+
+- `/midcompact:close-webui`:关闭当前会话的 Selection/Review WebUI,保留已保存的 plan 和事务。用于关闭窗口后 planning lock 未释放的恢复;不是通用 unlock,不释放 Agent 持有的 planning lock。关闭前提示浏览器内未保存的编辑不会保存。
+
 ## id 空间与标签
 
 | 形态 | 性质 | 文案必须称 |
