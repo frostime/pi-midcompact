@@ -2,6 +2,7 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
 import type { Atom, DraftPlan, DraftRange, DraftTelemetry, ReviewAction } from "./types.js";
+import { replacementSummary } from "./projection.js";
 
 /**
  * Interactive TUI review. Rendered as a centered overlay (not a full-height
@@ -79,7 +80,7 @@ export async function showReviewUi(
                 body.push(framed(dim(`  topic: ${head.topic ?? "—"}`)));
                 body.push(framed(dim(`  chars: ${formatCount(head.originalContentChars)} → ${formatCount(head.replacementContentChars)} (−${formatCount(savedChars)}) · ${head.originalImageCount} images`)));
                 const wrapWidth = Math.max(10, inner - 6);
-                for (const line of wrapTextWithAnsi(`${accent("summary:")} ${head.summary}`, wrapWidth)) {
+                for (const line of wrapTextWithAnsi(`${accent("summary:")} ${replacementSummary(head.summary, head.fileActivity)}`, wrapWidth)) {
                   body.push(framed(`  ${line}`));
                 }
                 body.push(framed(dim(`  [e] edit summary · [t] edit topic · [d] remove · [x] ${expandSelected ? "collapse" : "expand"} atoms`)));
@@ -206,7 +207,7 @@ export function buildReviewText(atoms: Atom[], draft: DraftPlan, telemetry: Draf
   }
   if (draft.ranges.length) {
     lines.push("", "Proposed summaries:");
-    for (const range of draft.ranges) lines.push(`${range.id} ${range.startRef} → ${range.endRef}: ${range.summary}`);
+    for (const range of draft.ranges) lines.push(`${range.id} ${range.startRef} → ${range.endRef}: ${replacementSummary(range.summary, range.fileActivity)}`);
   }
   return lines.join("\n");
 }

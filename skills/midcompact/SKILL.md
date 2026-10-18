@@ -49,9 +49,11 @@ One range reduces repetition in coherent discussion but may flatten distinctions
 
 ### Preserve important user expression
 
-Keep important user goals, constraints, preferences, corrections, authorizations, and refusals verbatim by default. Summaries can alter their scope or force. Ask for explicit agreement before summarizing them; general permission for aggressive compression is insufficient.
+Keep the whole original atom containing important user goals, constraints, preferences, corrections, authorizations, or refusals by default; split ranges around it. Ask for explicit consent to compress that expression; general permission for aggressive compression is insufficient.
 
-Ask Question, questionnaire, and similar tool results may contain user expression. Judge by the speaker, not entry type. Retain the whole indivisible tool-exchange atom containing an important answer; split around it.
+If compression is authorized, quote important instructions exactly from the source and identify the speaker. Preserve their conditions, negations, exceptions, and scope. Never reconstruct quotes from memory or duplicate instructions already retained outside the range.
+
+Ask Question, questionnaire, and similar tool results may contain user expression. Judge by the speaker, not entry type. Keep their whole indivisible tool-exchange atom unless this compression is explicitly authorized.
 
 Routine acknowledgements can be candidates; task completion alone does not invalidate important statements.
 
@@ -65,9 +67,27 @@ Stop when the goal is reasonably served or further compression is not worth the 
 
 Summaries belong between retained earlier and later context, not as compression instructions or standalone handoffs.
 
-Preserve necessary causes, consequential actions and findings, and resulting knowledge. Name important files, symbols, commands, or artifacts with their roles. Distinguish proposals from changes and assumptions from observed results. Length follows information needs, not a fixed ratio.
+Use these four headings in every replacement, in this order. Fill them with concrete source facts, not generic summaries. Use `N/A` only when genuinely inapplicable, not when facts are unknown.
 
-Preserve consequential process, not activity logs. Replace vague “files changed, tests passed” with specific evidence: “Compared caller and parser, found ignored boundary arguments, added rejection, and verified an invalid-argument test.” Include relevant paths and results from the source.
+```markdown
+### Goal / Topic
+State the concrete goal, question, or information topic and necessary source-grounded background.
+### Actions / Findings / Outcome
+State consequential actions, findings, reasons, and observed results with evidence.
+### Important references
+- User instructions: Include authorized exact quotes with the speaker, or note that relevant instructions remain outside the range; otherwise N/A.
+- Files / Symbols / Commands / Artifacts: Name relevant references and explain their roles.
+### Constraints / Context
+State applicable limits, dependencies, and historical context needed by retained surroundings.
+```
+
+Describe facts neutrally, without evaluations such as “excellent solution” or “successfully fixed.” Distinguish proposals, attempted actions, completed changes, and verified outcomes; label assumptions as assumptions. Prefer accurate source excerpts over paraphrasing facts whose wording affects decisions or behavior. Never invent missing facts; use targeted lookups for unseen facts needed by the replacement. Length follows information needs, not a fixed ratio.
+
+The code supplies a separate **file activity** index: paths from read calls and write/edit calls. It records historical attempts, not success; it neither infers activity from bash nor provides a complete audit. Do not manually reproduce the index. Still supply each consequential action's purpose and observed result, with relevant references and evidence.
+
+Illustrative wording (not a complete replacement):
+- **Bad:** “Improved validation; tests passed. Next: deploy.”
+- **Good:** “Because `parseArgs` ignored unknown flags, added rejection in `src/args.ts`. `npm test -- args` reported 3 passing tests. Deployment was proposed, not performed.” Use this wording only if those facts appear in the source.
 
 ### Fit the retained surroundings
 
@@ -88,7 +108,12 @@ Resolve boundaries with targeted lookups; split around protected atoms. Use `pla
 Call `plan_show`; use `plan_read` when a stored summary needs full review. Check both:
 
 - **Selection:** Does each range serve the user's direction? Are important originals and intended KEEP holes retained? Has unnecessary full-history coverage crept in?
-- **Replacement:** Mentally remove the originals. Do summaries plus retained context explain the necessary causes, actions, evidence, and outcomes without gaps, vague claims, stale instructions, or state conflicts?
+- **Replacement:** Mentally remove the originals and check:
+  - Are all four headings and both reference subitems present, with concrete facts or `N/A` only where genuinely inapplicable?
+  - Do retained context and replacements explain necessary reasons, actions, references, evidence, and outcomes without vague evaluations or gaps? Are load-bearing excerpts accurate and unseen facts looked up rather than invented?
+  - Are important user atoms kept whole unless explicitly authorized for compression? Are authorized quotes source-exact, attributed, complete in scope, and not duplicated from retained context?
+  - Are proposals, attempts, changes, assumptions, and verified results distinct? Does each historical boundary remain historical, without stale TODOs, later outcomes imported into the range, or standalone-handoff instructions?
+  - Does the replacement supply purposes and results without reproducing the code-owned file activity index or treating it as proof of success or a complete audit?
 
 Report replacements, retained originals, and stopping rationale. Boundaries: `/midcompact:select [tui|webui]`. Summaries: `/midcompact:review [tui|webui]`. Without an argument, the user chooses a surface; do not choose one for them. Only the user runs `/midcompact:commit`.
 
@@ -96,7 +121,7 @@ If the Agent remains blocked by a WebUI planning lock after the browser is close
 
 ## Recall
 
-Recall reads active committed blocks without changing a plan and needs no transaction. If the id is unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, and summaries, not originals. Projected summaries carry block ids and recall calls.
+Recall reads active committed blocks without changing a plan and needs no transaction. If the id is unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, summaries, and file activity, not originals. Projected summaries carry block ids and recall calls.
 
 Use `request={action:"recall_read",block:"c0001"}`; retry truncation with `detail:"full"`. If still truncated, read `references/tool-interface.md`. Retrieve only needed content.
 

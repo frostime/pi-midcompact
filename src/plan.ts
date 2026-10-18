@@ -6,7 +6,8 @@
 
 import type { Atom, DraftPlan, DraftRange, DraftTelemetry } from "./types.js";
 import { isProtectedAtom } from "./atoms.js";
-import { estimateCompressedTokens, rangeMetricsForAtoms, replacementContentChars } from "./projection.js";
+import { estimateCompressedTokens, rangeMetricsForAtoms, replacementContentChars, replacementSummary } from "./projection.js";
+import { extractFileActivity } from "./file-activity.js";
 import { formatTelemetry } from "./telemetry.js";
 import { truncateMiddle } from "./messages.js";
 
@@ -33,7 +34,8 @@ export function addDraftRange(
 
   const metrics = rangeMetricsForAtoms(selected);
   const summary = input.summary ?? "";
-  const replacement = replacementContentChars(summary, input.topic);
+  const fileActivity = extractFileActivity(selected);
+  const replacement = replacementContentChars(summary, input.topic, fileActivity);
   const id = nextDraftId(draft);
   const range: DraftRange = {
     id,
@@ -43,6 +45,7 @@ export function addDraftRange(
     endIndex: end.index,
     topic: input.topic,
     summary,
+    fileActivity,
     entryIds: selected.flatMap((atom) => atom.entryIds),
     messageKeys: selected.flatMap((atom) => atom.messageKeys),
     originalContentChars: metrics.contentChars,
@@ -50,7 +53,7 @@ export function addDraftRange(
     originalImagePayloadBytes: metrics.images.reduce((sum, image) => sum + image.payloadBytes, 0),
     replacementContentChars: replacement,
     originalApproxTokens: selected.reduce((sum, atom) => sum + atom.approxTokens, 0),
-    compressedApproxTokens: estimateCompressedTokens(summary, input.topic),
+    compressedApproxTokens: estimateCompressedTokens(summary, input.topic, fileActivity),
     startPreview: start.preview,
     endPreview: end.preview,
   };
@@ -79,12 +82,12 @@ export function updateDraftRange(
   if (!target) throw new Error(`Unknown plan range ${draftId}.`);
   const summary = patch.summary ?? target.summary;
   const topic = patch.topic ?? target.topic;
-  const replacement = replacementContentChars(summary, topic);
+  const replacement = replacementContentChars(summary, topic, target.fileActivity);
   return {
     ...draft,
     revision: draft.revision + 1,
     ranges: draft.ranges.map((range) => range.id === draftId
-      ? { ...range, summary, topic, replacementContentChars: replacement, compressedApproxTokens: estimateCompressedTokens(summary, topic) }
+      ? { ...range, summary, topic, replacementContentChars: replacement, compressedApproxTokens: estimateCompressedTokens(summary, topic, range.fileActivity) }
       : range),
   };
 }
@@ -220,7 +223,7 @@ function formatRangeBrief(range: DraftRange, atomsByRef?: ReadonlyMap<string, At
     `${range.id}: ${range.startRef} → ${range.endRef}${range.topic ? ` | ${truncateMiddle(range.topic, BRIEF_LANDMARK_LIMIT)}` : ""} [${pending ? "pending summary" : "summarized"}]`,
     `from: ${truncateMiddle(rangeEndpoint(range, "start", atomsByRef), BRIEF_LANDMARK_LIMIT)}`,
     `to: ${truncateMiddle(rangeEndpoint(range, "end", atomsByRef), BRIEF_LANDMARK_LIMIT)}`,
-    `summary: ${pending ? "<pending>" : truncateMiddle(range.summary, BRIEF_SUMMARY_LIMIT)}`,
+    `summary: ${truncateMiddle(replacementSummary(pending ? "<pending>" : range.summary, range.fileActivity), BRIEF_SUMMARY_LIMIT)}`,
     `metrics: ${range.originalContentChars} → ${range.replacementContentChars} content chars · ${range.originalImageCount} images (${range.originalImagePayloadBytes} payload bytes)`,
   ].join("\n");
 }
@@ -235,10 +238,8 @@ function formatRangeFull(range: DraftRange, outputLimit: number, atomsByRef?: Re
   ];
   const fixedLength = prefix.join("\n").length;
   const summaryBudget = Math.max(1, outputLimit - fixedLength);
-  const summary = range.summary.trim()
-    ? range.summary.length <= summaryBudget ? range.summary : truncateMiddle(range.summary, summaryBudget)
-    : "<pending>";
-  prefix[3] = `summary: ${summary}`;
+  const body = replacementSummary(range.summary.trim() ? range.summary : "<pending>", range.fileActivity);
+  prefix[3] = `summary: ${body.length <= summaryBudget ? body : truncateMiddle(body, summaryBudget)}`;
   return prefix.join("\n");
 }
 

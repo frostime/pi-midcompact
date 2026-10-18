@@ -232,6 +232,7 @@
   .ptopic.warn { color: var(--warn); }
   .pmeta { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--fg-mute); white-space: nowrap; }
   .ptext { color: var(--fg-dim); font-size: 13px; line-height: 1.65; }
+  .file-activity { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
   .pwarnline { color: var(--warn); font-size: 12.5px; }
   .pactions { margin-top: 10px; display: flex; gap: 8px; }
 
@@ -542,7 +543,7 @@ function atomText(a) {
   return [a.ref, a.kind, a.preview, ...(a.toolNames ?? []), ...(a.roles ?? [])].join(' ').toLowerCase();
 }
 function rangeText(r) {
-  return [r.id, r.startRef, r.endRef, r.topic ?? '', r.summary].join(' ').toLowerCase();
+  return [r.id, r.startRef, r.endRef, r.topic ?? '', r.summary, r.fileActivityText ?? ''].join(' ').toLowerCase();
 }
 function draftOf(r) {
   const e = edits.get(r.id);
@@ -805,14 +806,19 @@ function keepGroupHtml(g, maxChars, open = !collapsed.has('keep-' + g.idx), atom
   </section>`;
 }
 
+function fileActivityHtml(r) {
+  return r.fileActivityText ? `<div class="ptext file-activity" data-file-activity="${esc(r.id)}">${hl(r.fileActivityText, query)}</div>` : '';
+}
+
 function projectedCardHtml(r, g) {
   const d = draftOf(r);
   const replacementChars = replacementCharsOf(r);
   if (!d.summary.trim()) {
     return `<div class="pcard pend" data-group-key="${esc(r.id)}">
       <div class="phead"><span class="pid">${esc(r.id)}</span><span class="ptopic warn">pending summary</span>
-        <span class="pmeta">${r.atomCount} atoms → 0 chars</span></div>
+        <span class="pmeta">${r.atomCount} atoms → ${fmt(replacementChars)} chars (pending)</span></div>
       <div class="pwarnline">⚠ No summary yet — <span class="mono">/midcompact:commit</span> will refuse this range.</div>
+      ${fileActivityHtml(r)}
       <div class="pactions"><button class="btn btn-sm" data-fix="${esc(r.id)}">Write summary</button>
         <button class="btn btn-sm" data-orig="${esc(g.atoms[0].ref)}">View raw start</button></div>
     </div>`;
@@ -821,6 +827,7 @@ function projectedCardHtml(r, g) {
     <div class="phead"><span class="pid">${esc(r.id)}</span><span class="ptopic">${hl(d.topic, query)}</span>
       <span class="pmeta">${r.atomCount} atoms → ${fmt(replacementChars)} chars · replaces ${esc(r.startRef)}→${esc(r.endRef)}</span></div>
     <div class="ptext">${hl(d.summary, query)}</div>
+    ${fileActivityHtml(r)}
     <div class="pactions"><button class="btn btn-sm" data-orig="${esc(g.atoms[0].ref)}">View original start</button>
       <button class="btn btn-sm" data-edit="${esc(r.id)}">Edit summary</button></div>
   </div>`;
@@ -961,9 +968,10 @@ function renderEditor() {
       <input id="topic" value="${esc(d.topic)}" placeholder="short label, e.g. auth refactor" autocomplete="off" spellcheck="false">
     </div>
     <div class="field ${d.summary.trim() ? '' : 'invalid'}" id="f-summary">
-      <label for="summary">Summary — the model will see this instead of ${r.atomCount} atoms <span class="count" id="sum-count"></span></label>
+      <label for="summary">Summary — replaces ${r.atomCount} atoms together with file activity, if present <span class="count" id="sum-count"></span></label>
       <textarea id="summary" spellcheck="false" placeholder="What must survive after these atoms are replaced?">${esc(d.summary)}</textarea>
     </div>
+    ${fileActivityHtml(r)}
     <div class="erow">
       <button class="btn btn-primary" id="save-btn" ${dirty ? '' : 'disabled'}>Save ${esc(r.id)}</button>
       <button class="btn" id="revert-btn" ${dirty ? '' : 'disabled'}>Revert</button>

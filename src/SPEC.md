@@ -52,6 +52,25 @@ package.json → `pi.extensions`).
   recall never re-projects. Committed blocks appear as protected atoms in
   later snapshots (no double compression).
 
+## File activity
+
+- New ranges capture a code-owned file activity index from their selected frozen
+  atoms, separately from editable summary. Only structured `read`/`write`/`edit`
+  calls with string paths and Pi-recorded nested calls are indexed. Paths are
+  exact, deduplicated and sorted per category; no current filesystem reads,
+  shell inference, cross-range accumulation or success claim.
+- Review (plan reads, TUI and WebUI) and projection share the same appendix;
+  replacement metrics include it, including live WebUI edits. An appendix does
+  not make an empty authored summary commit-ready. Summary/topic edits retain
+  the index; changed boundaries create a new one. Commit copies the reviewed
+  index without re-extraction or hidden additions.
+- Optional `fileActivity` keeps persisted v1 ranges and blocks readable. Missing
+  metadata stays missing, including at commit; old content is never silently
+  augmented. Malformed present metadata is rejected at restoration.
+- `recall_list` includes and searches file activity alongside summaries, not
+  originals. The index records calls, including failed/abandoned attempts;
+  it is not a complete file audit or evidence of current file state.
+
 ## Atoms and ranges
 
 - The atom is the smallest selectable unit. Tool calls plus their canonical

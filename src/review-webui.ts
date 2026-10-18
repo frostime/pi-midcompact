@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import { TOKEN_ESTIMATE, charClassCounts } from "./content-metrics.js";
+import { formatFileActivity } from "./file-activity.js";
 import { replacementContentText } from "./projection.js";
 import type { Atom, DraftPlan, DraftTelemetry, SelectionSpan } from "./types.js";
 
@@ -53,6 +54,8 @@ export interface ReviewState {
       endRef: string;
       topic?: string;
       summary: string;
+      /** Read-only automatic appendix, separate from editable summary. */
+      fileActivityText: string;
       originalContentChars: number;
       originalImageCount: number;
       originalImagePayloadBytes: number;
@@ -166,13 +169,14 @@ export function serializeReviewState(
     draft: {
       revision: draft.revision,
       ranges: draft.ranges.map((range) => {
-        const replacementMix = charClassCounts(replacementContentText(range.summary, range.topic));
+        const replacementMix = charClassCounts(replacementContentText(range.summary, range.topic, range.fileActivity));
         return {
           id: range.id,
           startRef: range.startRef,
           endRef: range.endRef,
           topic: range.topic,
           summary: range.summary,
+          fileActivityText: formatFileActivity(range.fileActivity),
           originalContentChars: range.originalContentChars,
           originalImageCount: range.originalImageCount,
           originalImagePayloadBytes: range.originalImagePayloadBytes,

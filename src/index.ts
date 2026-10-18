@@ -12,7 +12,7 @@ import { buildInventory, formatInventory, formatSpanInspection } from "./invento
 import { messageText } from "./messages.js";
 import { addDraftRange, emptyDraft, formatDraft, formatPlanMutation, removeDraftRange, replaceDraftRanges, updateDraftRange } from "./plan.js";
 import { expandSelection } from "./selection.js";
-import { projectMessages } from "./projection.js";
+import { projectMessages, replacementSummary } from "./projection.js";
 import { registerStateRenderer, stateTreeLabel } from "./renderers.js";
 import { showReviewUi } from "./review-ui.js";
 import { showSelectionUi } from "./selection-ui.js";
@@ -133,7 +133,7 @@ const PlanShowRequest = Type.Object(
 
 const PlanReadRequest = Type.Object(
   {
-    action: StringEnum(["plan_read"] as const, { description: "Read one plan range in full: stored summary and endpoint previews under a 40,000-character budget." }),
+    action: StringEnum(["plan_read"] as const, { description: "Read one plan range in full: stored summary, file activity, and endpoint previews under a 40,000-character budget." }),
     range_id: Type.String({ description: "Target range id from plan_show, e.g. d1." }),
   },
   { additionalProperties: false },
@@ -171,7 +171,7 @@ const PlanRemoveRequest = Type.Object(
 const RecallListRequest = Type.Object(
   {
     action: StringEnum(["recall_list"] as const, { description: "List committed blocks; works without a transaction." }),
-    pattern: Type.Optional(Type.String({ description: "Case-insensitive filter over block id, topic, and summary (not original content)." })),
+    pattern: Type.Optional(Type.String({ description: "Case-insensitive filter over block id, topic, summary, and file activity (not original content)." })),
     limit: Type.Optional(Type.Number({ description: "Blocks to list (default 8, max 20; out-of-range values are clamped)." })),
   },
   { additionalProperties: false },
@@ -850,10 +850,10 @@ export default function (pi: ExtensionAPI) {
     const branchState = restoreBranchState(ctx);
     if (!branchState?.blocks.length) return "No compressed blocks are active on this branch.";
     const query = (params.pattern ?? "").trim().toLocaleLowerCase();
-    const matches = branchState.blocks.filter((block) => !query || `${block.id}\n${block.topic ?? ""}\n${block.summary}`.toLocaleLowerCase().includes(query));
+    const matches = branchState.blocks.filter((block) => !query || `${block.id}\n${block.topic ?? ""}\n${replacementSummary(block.summary, block.fileActivity)}`.toLocaleLowerCase().includes(query));
     if (!matches.length) return "No compressed blocks matched.";
     return matches.slice(0, Math.max(1, Math.min(params.limit ?? 8, 20))).map((block) =>
-      `${block.id}${block.topic ? ` | ${block.topic}` : ""} | ${block.originalContentChars ?? 0} original chars${block.originalImageCount ? ` · ${block.originalImageCount} images` : ""}\n${block.summary}`
+      `${block.id}${block.topic ? ` | ${block.topic}` : ""} | ${block.originalContentChars ?? 0} original chars${block.originalImageCount ? ` · ${block.originalImageCount} images` : ""}\n${replacementSummary(block.summary, block.fileActivity)}`
     ).join("\n\n");
   }
 
@@ -981,6 +981,7 @@ function mergeDraftIntoState(
       id: `c${String(next).padStart(4, "0")}`,
       topic: range.topic,
       summary: range.summary,
+      fileActivity: range.fileActivity,
       entryIds: [...range.entryIds],
       messageKeys: [...range.messageKeys],
       createdAt: new Date().toISOString(),
