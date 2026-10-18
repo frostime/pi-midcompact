@@ -37,6 +37,7 @@ function history() {
       { name: "write", arguments: { path: "artifact.json", content: "not-an-appendix" } },
       { name: "custom", arguments: { path: "unsupported.md" } },
       { name: "read", arguments: { path: 42 } },
+      { name: "write" }, // Hosts can omit oversized nested-call arguments.
     ] } }),
     user("Current work.", 10),
   ];

@@ -27,5 +27,7 @@ No new tool action or parameter; no persistence version bump. Support only tools
 - Implemented steps 1–4 and synchronized `src/SPEC.md`, the tool reference and both READMEs.
 - `npm run typecheck` and `npm run typecheck:contract`: passed.
 - `npm test`: 84/84 node tests passed; WebUI DOM checks passed. Initial new test incorrectly checked endpoint previews for absent tool output; narrowed it to the replacement body, since plan reads intentionally show source endpoints.
-- Independent review and pack dry run pending.
+- `npm run pack:check`: passed (31 files; includes `src/file-activity.ts`).
+- Independent code review completed. Verified local dependency Pi 0.84.4 does not record nested calls, while installed Pi 1.1.0 does; clarified host-provided-record dependency in docs rather than raising the minimum version. Omitted nested arguments are ignored, not reconstructed.
+- Review also noted `recall_list` has no overall character budget. This pre-existing behavior is unchanged; adding general recall pagination/truncation is outside this change.
 - Real small-model summary quality has not been benchmarked; the template is guidance, not a semantic correctness guarantee.

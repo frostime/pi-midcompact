@@ -58,7 +58,10 @@ package.json → `pi.extensions`).
   atoms, separately from editable summary. Only structured `read`/`write`/`edit`
   calls with string paths and Pi-recorded nested calls are indexed. Paths are
   exact, deduplicated and sorted per category; no current filesystem reads,
-  shell inference, cross-range accumulation or success claim.
+  shell inference, cross-range accumulation or success claim. Nested calls are
+  available only when recorded by the host with path arguments; older Pi hosts
+  without those records provide top-level calls only. Omitted records or
+  arguments are never reconstructed.
 - Review (plan reads, TUI and WebUI) and projection share the same appendix;
   replacement metrics include it, including live WebUI edits. An appendix does
   not make an empty authored summary commit-ready. Summary/topic edits retain
