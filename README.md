@@ -138,6 +138,8 @@ Reclaim roughly 30% of the stale context, but preserve semantic distinctions rat
 
 The Agent locates relevant parts of the frozen conversation, proposes one or more ranges, and writes a summary for each range. You can ask it to preserve a specific message, split a range, or revise a summary.
 
+The skill requires four summary sections: Goal / Topic; Actions / Findings / Outcome; Important references; Constraints / Context. It calls for factual descriptions, evidence, and clear distinctions between proposals, attempts, changes, and verified results. Important user instructions stay in original atoms by default; if you explicitly authorize their compression, the summary must quote them exactly with attribution and scope.
+
 ### 3. Review the proposal
 
 Run `/midcompact:review` and choose the recommended Web UI or the built-in TUI. You can also open either surface directly:

@@ -5,99 +5,98 @@ description: "Use when runtime starts or hands off midcompact planning, or curre
 
 # Midcompact
 
-The frozen **anchor** contains **atoms**, the smallest selectable units (ref `a0001`); tool calls and their results stay together. Agent and user share one **plan** of contiguous **ranges** with replacement summaries (id `d1`). **Measure** compares candidates without changing the plan. Human commit turns each range into a **block** (`c0001`), replacing its originals in future context. **Recall** retrieves those originals.
+The frozen **anchor** contains **atoms** (`a0001`), the smallest selectable units; tool calls and their results stay together. Agent and user share one **plan** of contiguous **ranges** (`d1`) and replacement summaries. Human commit turns ranges into **blocks** (`c0001`) that replace their originals in future context. **Recall** retrieves the originals.
+
+Read `references/tool-interface.md` when composing calls or handling protection, truncation, or a stuck WebUI. Use the schema for fields and defaults.
 
 ## Route the activation
 
-| Signal | Immediate action |
+Runtime instructions take precedence.
+
+| Signal | Action |
 |---|---|
-| Runtime says `FINAL STATE: USER MANUAL` | Reply exactly `OK`; call no midcompact tool. |
-| Runtime says `FINAL STATE: AGENT DIRECT` | Call `request={action:"inspect"}`. |
-| Handoff reports a persisted plan and user asks to continue | Call `request={action:"plan_show"}` before other midcompact actions. |
-| Current work needs originals from a committed block | Follow **Recall**; do not enter planning. |
+| Runtime says `FINAL STATE: USER MANUAL` | Reply exactly `OK` and stop. Ask nothing and call no midcompact tool; wait for the user's later request. |
+| Runtime says `FINAL STATE: AGENT DIRECT` | Call `request={action:"inspect"}` first, then establish the direction. |
+| A persisted plan exists and the user asks to continue | Call `request={action:"plan_show"}` first, then establish the direction. |
+| Current work needs originals from a committed block | Go to **Recall**. Do not establish a direction or plan. |
 
-Runtime instructions are authoritative. User-manual acknowledgement also forbids questions. Otherwise, complete the required first action before establishing direction.
+## Establish the direction
 
-Read `references/tool-interface.md` when composing calls or handling protection/truncation. Use the schema for fields and defaults.
-
-## Establish the compression direction
-
-If the user has not expressed a compression preference, ask before selecting ranges or investigating deeply:
+Follow the user's stated direction or delegation. Otherwise, ask before selecting ranges or investigating deeply:
 
 > Do you want light cleanup or substantial room for what comes next? What should I focus on, and what must stay verbatim? You can give a target usage or delegate the choice.
 
-Honor existing preferences; otherwise accept qualitative goals or delegation. Clarify ambiguous handoffs: refine the selection or work only within it? Respect explicit scope limits.
+For an existing plan, infer whether to refine, extend, or only fill summaries; ask if the scope is materially ambiguous. Once direction is set, edit the plan directly. Re-align before changing direction or scope, or sacrificing important information to meet a target. Compare factual character/image measurements; do not promise exact post-commit token savings.
 
-Match compression and investigation effort to that direction. Compare factual character/image measurements; do not promise exact post-commit token savings. If meeting a target requires sacrificing important information, explain the tradeoff.
+## Select ranges
 
-## Select worthwhile ranges
+Replace only content whose compression serves the direction. Stop when the goal is reasonably met or further compression is not worth the information lost; covering all eligible history is not a goal.
 
-Keep originals unless replacement serves the agreed goal; full-history coverage is not success.
+Ground candidates in visible conversation or `locate_ref`/`locate_search`, not `inspect` landmarks alone. Use targeted lookups for missing content or unclear boundaries only when they could change selection. Drop uncertain candidates or ask if investigation would exceed the agreed effort. Use `measure` when relative size affects selection.
 
-Use `inspect` for structure and volume, not to infer unseen content. Ground candidates in visible conversation or targeted `locate_ref`/`locate_search` calls. Investigate only what could change selection; omit uncertain candidates or ask if investigation exceeds the agreed effort. Use `measure` when relative sizes affect the choice.
+- Replace repetitive execution when results suffice. Retain useful request/conclusion text; summarize necessary findings absent from it.
+- Replace superseded discussion and detours. Retain rejection reasons that explain decisions or prevent repeated mistakes.
 
-Weigh bulk removed against original detail lost and what retained context already carries. Technical eligibility alone does not justify compression.
+Choose boundaries by content, not turn count. Split around important originals or where parts need different detail. Check that separate ranges neither duplicate information nor break causal links.
 
-### Common patterns
+### Keep important user expression
 
-These are examples, not fixed rules about message roles or age.
+Keep whole atoms containing important user goals, constraints, preferences, corrections, authorizations, or refusals outside ranges by default. This includes answers inside Ask Question or similar tool exchanges: judge by speaker, not entry type. Routine acknowledgements can be compressed; completed work does not make its instructions unimportant.
 
-- **Long execution between user messages.** Replace repetitive search, reading, editing, and testing when only results matter. Retain useful request/conclusion text and summarize key findings absent from it; tool output is not automatically noise.
-- **Multi-turn discussion.** Summarize superseded proposals, repeated clarification, and detours. Keep failure reasons that explain decisions or prevent repeated mistakes; age alone does not make discussion obsolete.
+Compress important user expression only with explicit consent for that expression, not general permission for aggressive compression. Then quote important instructions exactly, with speaker, conditions, negations, exceptions, and scope intact. Copy from fully visible source text; look up truncated originals, never reconstruct quotes from memory. Do not repeat instructions retained outside the range.
 
-One range reduces repetition in coherent discussion but may flatten distinctions. Semantic ranges allow different detail levels and KEEP holes, but risk duplication or broken causal links. Choose by content, not turn count; split around important originals.
+## Write the replacement
 
-### Preserve important user expression
+Write a local historical replacement, not a standalone handoff or new instructions for future work. Use all four headings, in order, for every replacement:
 
-Keep important user goals, constraints, preferences, corrections, authorizations, and refusals verbatim by default. Summaries can alter their scope or force. Ask for explicit agreement before summarizing them; general permission for aggressive compression is insufficient.
+```markdown
+### Goal / Topic
+State the concrete goal, question, or information topic and necessary source-grounded background.
+### Actions / Findings / Outcome
+State consequential actions, findings, reasons, and observed results with evidence.
+### Important references
+- User instructions: Include authorized exact quotes with the speaker, or note that relevant instructions remain outside the range; otherwise N/A.
+- Files / Symbols / Commands / Artifacts: Name the references that matter, each with its role or observed result.
+### Constraints / Context
+State applicable limits, dependencies, and historical context needed by retained surroundings.
+```
 
-Ask Question, questionnaire, and similar tool results may contain user expression. Judge by the speaker, not entry type. Retain the whole indivisible tool-exchange atom containing an important answer; split around it.
+- Use `N/A` for inapplicable sections/items, never unknown facts. Look up necessary unknowns; narrow the candidate or ask if they exceed the agreed effort.
+- State facts, not your evaluations ("excellent solution", "successfully fixed"). Preserve consequential source judgments with attribution.
+- Distinguish proposed, attempted, changed, and verified; label assumptions.
+- Prefer accurate excerpts when wording affects decisions or behavior. Length follows information needs, not a fixed ratio.
 
-Routine acknowledgements can be candidates; task completion alone does not invalidate important statements.
-
-### Propose and stop
-
-Use conversation landmarks to explain replacements, originals kept, and summary contents. Offer alternatives for meaningful tradeoffs, not every delegated choice.
-
-Stop when the goal is reasonably served or further compression is not worth the loss, not when all eligible content is covered. Re-align if findings materially change the treatment.
-
-## Write a local replacement
-
-Summaries belong between retained earlier and later context, not as compression instructions or standalone handoffs.
-
-Preserve necessary causes, consequential actions and findings, and resulting knowledge. Name important files, symbols, commands, or artifacts with their roles. Distinguish proposals from changes and assumptions from observed results. Length follows information needs, not a fixed ratio.
-
-Preserve consequential process, not activity logs. Replace vague “files changed, tests passed” with specific evidence: “Compared caller and parser, found ignored boundary arguments, added rejection, and verified an invalid-argument test.” Include relevant paths and results from the source.
+Illustrative wording (not a complete replacement):
+- **Bad:** "Improved validation; tests passed. Next: deploy."
+- **Good:** "Because `parseArgs` ignored unknown flags, added rejection in `src/args.ts`. `npm test -- args` reported 3 passing tests. Deployment was proposed, not performed." Use such wording only when the source contains those facts.
 
 ### Fit the retained surroundings
 
-Read enough surrounding context to avoid duplication and preserve what it depends on from this range. Resolve dangling references without inventing facts. Recall is recovery, not a substitute for sufficient summaries.
+Read enough surrounding retained context to avoid duplication, preserve its dependencies, and resolve dangling references. Recall is recovery, not a substitute for sufficient summaries.
 
-A range's end is a historical boundary, not automatically the present state:
+A range's end is historical, not automatically current. Omit unfinished status resolved later, unless it explains later events; then label it as historical. Do not attribute later results to this range. Include current open issues or established next steps only when the range reaches the current working frontier and continuation needs them.
 
-- Do not turn an old unfinished task into a current TODO. Omit it if later retained context resolves it and its earlier status adds nothing.
-- If the earlier status explains later events, describe it as historical. Do not attribute a later result to work within this range.
-- Include current open issues and established next steps only when the range reaches the current working frontier and continuation needs them. Never invent a next action.
-
-If later retained turns test and reject approach A, “Next: validate A” is stale. Preserve why A was proposed if needed to explain the rejection; leave later outcomes where they belong.
+If later retained turns reject approach A, "Next: validate A" is stale. Preserve why A was proposed only if needed to explain the rejection.
 
 ## Build, check, and hand off
 
-Resolve boundaries with targeted lookups; split around protected atoms. Use `plan_add`, `plan_update`, and `plan_remove`. Updates change summary/topic; boundaries require remove + add. Fill pending summaries before handoff.
+Use `plan_add`, `plan_update`, and `plan_remove`; updates change summary/topic, boundary changes require remove + add. Split around protected atoms.
 
-Call `plan_show`; use `plan_read` when a stored summary needs full review. Check both:
+Before handoff:
 
-- **Selection:** Does each range serve the user's direction? Are important originals and intended KEEP holes retained? Has unnecessary full-history coverage crept in?
-- **Replacement:** Mentally remove the originals. Do summaries plus retained context explain the necessary causes, actions, evidence, and outcomes without gaps, vague claims, stale instructions, or state conflicts?
+- Check each quote, load-bearing excerpt, and evidence claim against its source.
+- Confirm all four headings and both reference subitems are present in every replacement; use `N/A` only where inapplicable.
+- Review the projected context—retained content plus all replacements—as if the originals were gone. Check for missing dependencies, duplication, and stale task status.
+- Call `plan_show` to confirm the ranges fit the direction, contain no important user atom without authorization, and have no pending summary. Use `plan_read` where a stored summary needs full review.
 
-Report replacements, retained originals, and stopping rationale. Boundaries: `/midcompact:select [tui|webui]`. Summaries: `/midcompact:review [tui|webui]`. Without an argument, the user chooses a surface; do not choose one for them. Only the user runs `/midcompact:commit`.
+Report replacements, retained originals, and stopping rationale using conversation landmarks. Offer alternatives for meaningful tradeoffs. Boundaries: `/midcompact:select [tui|webui]`; summaries: `/midcompact:review [tui|webui]`. Without an argument, let the user choose the surface. Only the user runs `/midcompact:commit`.
 
-If the Agent remains blocked by a WebUI planning lock after the browser is closed, ask the user to run `/midcompact:close-webui`. It closes Selection/Review WebUI without changing the saved plan or transaction. Unsaved browser edits are not saved. It does not release an Agent-held lock; there is no tool action to bypass the lock.
+If a WebUI planning lock still blocks you after the browser is closed, ask the user to run `/midcompact:close-webui` (see the reference). No tool action bypasses the lock.
 
 ## Recall
 
-Recall reads active committed blocks without changing a plan and needs no transaction. If the id is unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, and summaries, not originals. Projected summaries carry block ids and recall calls.
+Recall needs no transaction and changes no plan. Projected summaries carry block ids. If unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, and summaries, not originals.
 
-Use `request={action:"recall_read",block:"c0001"}`; retry truncation with `detail:"full"`. If still truncated, read `references/tool-interface.md`. Retrieve only needed content.
+Read with `request={action:"recall_read",block:"c0001"}`. If truncated, retry with `detail:"full"`. If still truncated, report that the omitted evidence is unavailable; do not infer it.
 
-`a...` refs are transaction-local; `d...` identifies a plan range; `c...` a committed block. Inventory `g...` labels are display-only; use listed atom refs for calls.
+`a...` refs are transaction-local; `d...` is a range id and `c...` a block id. Inventory `g...` labels are display-only; use the listed `a...` refs in calls.

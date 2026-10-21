@@ -138,6 +138,8 @@ Pi 会在创建事务状态前提供三个选项：**Agent direct**、**User man
 
 Agent 会在冻结的会话快照中定位相关内容，提出一个或多个区段，并为每个区段撰写摘要。可以要求它保留某条消息、拆分区段，或重写摘要。
 
+SKILL 要求摘要使用四栏：Goal / Topic、Actions / Findings / Outcome、Important references、Constraints / Context。摘要应客观记录事实和证据，区分提议、尝试、修改与已验证结果。重要用户指令默认保留在原始 atom 中；只有用户明确允许压缩时，摘要才收录这些指令，并须原文引用，保留归属和适用范围。
+
 ### 3. 审查草案
 
 运行 `/midcompact:review`，选择推荐的 Web UI 或内置 TUI。也可以直接打开指定界面：

@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-22
+
+### Changed
+
+- The model skill now requires four summary sections — goal/topic, actions/findings/outcome, important references, constraints/context — and evidence-backed statements that separate proposals, attempts, changes, and verified results.
+- Important user expression stays in its original atoms by default. Compressing it needs consent for that expression, and the replacement then quotes it exactly with speaker, conditions, and scope intact.
+
 ## [0.7.4] - 2026-10-09
 
 ### Added
@@ -107,7 +114,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made User-manual handoff expose stored summaries and endpoints without assuming the shared selection is provisional.
 - Rejected commits with pending summaries, invalid or overlapping ranges, or protected atoms.
 
-[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/frostime/pi-midcompact/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/frostime/pi-midcompact/compare/v0.7.4...v0.7.5
+[0.7.4]: https://github.com/frostime/pi-midcompact/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/frostime/pi-midcompact/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/frostime/pi-midcompact/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/frostime/pi-midcompact/compare/v0.7.0...v0.7.1
