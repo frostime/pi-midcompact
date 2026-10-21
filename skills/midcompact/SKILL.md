@@ -66,8 +66,6 @@ State applicable limits, dependencies, and historical context needed by retained
 - Distinguish proposed, attempted, changed, and verified; label assumptions.
 - Prefer accurate excerpts when wording affects decisions or behavior. Length follows information needs, not a fixed ratio.
 
-The automatic **file activity** appendix lists structured read/write/edit paths, not verified outcomes; it omits Bash and unrecorded nested calls. Do not reproduce the list. Explain important references and observed results, including those absent from the appendix, without listing every touched file.
-
 Illustrative wording (not a complete replacement):
 - **Bad:** "Improved validation; tests passed. Next: deploy."
 - **Good:** "Because `parseArgs` ignored unknown flags, added rejection in `src/args.ts`. `npm test -- args` reported 3 passing tests. Deployment was proposed, not performed." Use such wording only when the source contains those facts.
@@ -97,7 +95,7 @@ If a WebUI planning lock still blocks you after the browser is closed, ask the u
 
 ## Recall
 
-Recall needs no transaction and changes no plan. Projected summaries carry block ids. If unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, summaries, and file activity, not originals.
+Recall needs no transaction and changes no plan. Projected summaries carry block ids. If unknown, use `request={action:"recall_list",pattern:"..."}` to search ids, topics, and summaries, not originals.
 
 Read with `request={action:"recall_read",block:"c0001"}`. If truncated, retry with `detail:"full"`. If still truncated, report that the omitted evidence is unavailable; do not infer it.
 

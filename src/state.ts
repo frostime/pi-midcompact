@@ -12,8 +12,6 @@ import type {
   TransactionState,
 } from "./types.js";
 
-import { isFileActivity } from "./file-activity.js";
-
 export const STATE_ENTRY = "midcompact-state";
 export const TXN_ENTRY = "midcompact-transaction";
 export const DRAFT_ENTRY = "midcompact-draft";
@@ -69,8 +67,7 @@ export function isCompressionState(value: unknown): value is CompressionState {
   return state.blocks.every((raw) => {
     if (!raw || typeof raw !== "object") return false;
     const block = raw as Record<string, unknown>;
-    return typeof block.id === "string" && typeof block.summary === "string" && Array.isArray(block.entryIds) && Array.isArray(block.messageKeys)
-      && (block.fileActivity === undefined || isFileActivity(block.fileActivity));
+    return typeof block.id === "string" && typeof block.summary === "string" && Array.isArray(block.entryIds) && Array.isArray(block.messageKeys);
   });
 }
 
@@ -83,9 +80,7 @@ function isTransaction(value: unknown): value is TransactionState {
 function isDraft(value: unknown): value is DraftPlan {
   if (!value || typeof value !== "object") return false;
   const plan = value as Record<string, unknown>;
-  return plan.version === 1 && typeof plan.transactionId === "string" && typeof plan.revision === "number" && Array.isArray(plan.ranges)
-    && plan.ranges.every((range) => range && typeof range === "object"
-      && (range.fileActivity === undefined || isFileActivity(range.fileActivity)));
+  return plan.version === 1 && typeof plan.transactionId === "string" && typeof plan.revision === "number" && Array.isArray(plan.ranges);
 }
 
 /**

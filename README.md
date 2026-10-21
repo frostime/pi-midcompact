@@ -151,8 +151,6 @@ Run `/midcompact:review` and choose the recommended Web UI or the built-in TUI. 
 
 Each surface displays the frozen conversation as a linear timeline. Every item is marked either `KEEP` or as belonging to a proposed range. Review the range boundaries and the summary that will replace each range.
 
-New ranges also include a read-only **file activity** appendix, extracted from structured `read`/`write`/`edit` calls and recorded nested calls within that range. It lists exact paths, not file contents, and counts toward replacement size. These are historical calls, including failed attempts, not proof of successful changes or a complete file audit. Bash activity is not inferred. Nested calls are indexed only when the host records their path arguments; older Pi hosts without these records provide top-level calls only. Review displays the appendix before commit; old ranges and blocks without it remain unchanged.
-
 Use Selection to create or change ranges and KEEP holes:
 
 ```text

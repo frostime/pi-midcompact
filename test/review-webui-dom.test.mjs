@@ -48,7 +48,7 @@ const ATOMS = [
   { ref: "a0004", index: 3, groupRef: "g0002", groupLabel: "phase two", kind: "assistant", preview: "more work", contentChars: 2000, imageCount: 0, compressible: true, protocolClosed: true, toolNames: [], roles: [], narrowChars: 2000, wideChars: 0, owningRangeId: "d2" },
 ];
 const RANGES = [
-  { id: "d1", startRef: "a0001", endRef: "a0002", topic: "t1", summary: "s1", fileActivityText: '### File activity (automatic; recorded calls, not verified outcomes)\nRead calls:\n- "docs/<unsafe>.md"', originalContentChars: 30011, originalImageCount: 2, originalImagePayloadBytes: 10, replacementContentChars: 1100, replacementNarrowChars: 1100, replacementWideChars: 0, atomCount: 2 },
+  { id: "d1", startRef: "a0001", endRef: "a0002", topic: "t1", summary: "s1", originalContentChars: 30011, originalImageCount: 2, originalImagePayloadBytes: 10, replacementContentChars: 1100, replacementNarrowChars: 1100, replacementWideChars: 0, atomCount: 2 },
   { id: "d2", startRef: "a0004", endRef: "a0004", topic: "t2", summary: "", originalContentChars: 2000, originalImageCount: 0, originalImagePayloadBytes: 0, replacementContentChars: 900, replacementNarrowChars: 900, replacementWideChars: 0, atomCount: 1 },
 ];
 const STATE = JSON.stringify({
@@ -112,8 +112,6 @@ const strip = els["strip"].innerHTML, tl = els["timeline"].innerHTML;
 assert(strip.includes("after commit") && strip.includes("(est. ±"), "T1 decision strip + pbar rendered");
 assert(strip.includes("≈149.9k tok"), "projection includes serialized replacement wrappers");
 assert(tl.includes('data-group-key="d1"') && tl.includes("KEEP"), "T1 raw timeline has range group + KEEP group");
-assert(els["editor"].innerHTML.includes('data-file-activity="d1"') && els["editor"].innerHTML.includes("docs/&lt;unsafe&gt;.md"), "file activity is visible and escaped in the editor");
-assert(!els["editor"].innerHTML.match(/<textarea[^>]*>[\s\S]*?<\/textarea>/)[0].includes("File activity"), "automatic appendix is outside the editable summary");
 assert(tl.includes("abandoned exchange") && tl.includes("ambiguous tool protocol"), "tool protocol status distinguishes selectable abandoned exchanges from locked ambiguity");
 const hiddenCount = (tl.match(/class="gbody" hidden/g) || []).length;
 assert(hiddenCount === 1 && tl.indexOf('data-group-key="d2"') < tl.indexOf('class="gbody" hidden'), "T5/A4 seed: d2 (unselected) starts collapsed, d1 open");
@@ -152,7 +150,6 @@ assert(els["toggle-all"].textContent === "Expand all", "collapsed timeline offer
 projBtn.dispatch("click", projBtn);
 assert(els["timeline"].innerHTML.includes("pcard") && els["tl-stat"].textContent.includes("projected"), "A2 projected shows summary card");
 assert(els["timeline"].innerHTML.includes("KEEP"), "A2 projected + policy=all keeps KEEP group");
-assert(els["timeline"].innerHTML.includes('data-file-activity="d1"') && els["timeline"].innerHTML.includes("docs/&lt;unsafe&gt;.md"), "projected context includes the same escaped file activity");
 compressedBtn.dispatch("click", compressedBtn);
 assert(!els["timeline"].innerHTML.includes("KEEP") && els["timeline"].innerHTML.includes("pcard"), "A2 projected + policy=range hides KEEP group");
 allBtn.dispatch("click", allBtn);
@@ -208,7 +205,7 @@ summaryTarget.id = "summary";
 els["editor"].dispatch("input", summaryTarget);
 const expectedReplacementChars = 1100 - "s1".length + 600;
 const expectedReplacementDisplay = (expectedReplacementChars / 1000).toFixed(1) + "k";
-assert(els["replacement-chars"].textContent === expectedReplacementDisplay, "live editor replacement chars preserve wrapper and file activity while changing summary");
+assert(els["replacement-chars"].textContent === expectedReplacementDisplay, "live editor replacement chars follow unsaved summary");
 assert(els["range-list"].innerHTML.includes(`30.0k→${expectedReplacementDisplay} chars`), "range metrics follow unsaved summary");
 
 // tool/role tags restored on raw atom rows

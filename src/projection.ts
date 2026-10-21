@@ -3,8 +3,7 @@
 // Owns factual replacement-size calculation based on the actual summary message
 // wrapper text, not a fixed token heuristic.
 
-import type { CompressionBlock, CompressionState, ContentMetrics, FileActivity, MessageLike } from "./types.js";
-import { formatFileActivity } from "./file-activity.js";
+import type { CompressionBlock, CompressionState, ContentMetrics, MessageLike } from "./types.js";
 import { aggregateMetrics, measureMessage } from "./content-metrics.js";
 import { approxTokens, messageKey } from "./messages.js";
 
@@ -15,7 +14,7 @@ export function summaryMessage(block: CompressionBlock, timestamp = Date.now()):
     customType: "midcompact-summary",
     content: [
       `[Midcompact summary ${block.id}${topic}]`,
-      replacementSummary(block.summary, block.fileActivity),
+      block.summary,
       "",
       `Original block: ${block.id}`,
       `Use midcompact(request={action:\"recall\", ref:\"${block.id}\"}) if exact details are needed.`,
@@ -75,12 +74,11 @@ export function replacementMetrics(block: CompressionBlock): ContentMetrics {
  * Factual replacement content chars for a range, given its topic and summary.
  * Computed from the actual summary message wrapper text that projection emits.
  */
-function draftReplacementBlock(summary: string, topic?: string, fileActivity?: FileActivity): CompressionBlock {
+function draftReplacementBlock(summary: string, topic?: string): CompressionBlock {
   return {
     id: "draft",
     summary,
     topic,
-    fileActivity,
     entryIds: [],
     messageKeys: [],
     createdAt: new Date().toISOString(),
@@ -93,25 +91,19 @@ function draftReplacementBlock(summary: string, topic?: string, fileActivity?: F
   };
 }
 
-/** Shared replacement body for review and projection; the appendix is not editable summary. */
-export function replacementSummary(summary: string, fileActivity?: FileActivity): string {
-  const appendix = formatFileActivity(fileActivity);
-  return appendix ? `${summary}\n\n${appendix}` : summary;
-}
-
 /** Render the exact replacement content used for draft display estimates. */
-export function replacementContentText(summary: string, topic?: string, fileActivity?: FileActivity): string {
-  const content = summaryMessage(draftReplacementBlock(summary, topic, fileActivity)).content;
+export function replacementContentText(summary: string, topic?: string): string {
+  const content = summaryMessage(draftReplacementBlock(summary, topic)).content;
   return typeof content === "string" ? content : "";
 }
 
-export function replacementContentChars(summary: string, topic?: string, fileActivity?: FileActivity): number {
-  return replacementMetrics(draftReplacementBlock(summary, topic, fileActivity)).contentChars;
+export function replacementContentChars(summary: string, topic?: string): number {
+  return replacementMetrics(draftReplacementBlock(summary, topic)).contentChars;
 }
 
 /** @deprecated legacy heuristic; kept only for old approximate-token field compat. */
-export function estimateCompressedTokens(summary: string, topic?: string, fileActivity?: FileActivity): number {
-  return approxTokens(`${topic ?? ""}\n${replacementSummary(summary, fileActivity)}`) + 40;
+export function estimateCompressedTokens(summary: string, topic?: string): number {
+  return approxTokens(`${topic ?? ""}\n${summary}`) + 40;
 }
 
 /** Factual metrics for a set of atoms that a range/block would replace. */

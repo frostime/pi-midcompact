@@ -31,15 +31,14 @@
 | | `locate_ref` | 按 ref 直查一个 atom |
 | | `locate_search` | 合取(AND)过滤,至少一个 filter |
 | 改 plan | `plan_show` | 零字段:全部 range 的 brief 总览 |
-| | `plan_read` | 单 range 全文钻取(`range_id` 必填),包含 file activity |
+| | `plan_read` | 单 range 全文钻取(`range_id` 必填) |
 | | `plan_add` / `plan_update` / `plan_remove` | 增改删;update 只动 summary/topic,边界变更走 remove+add |
-| 读既成 | `recall_list` / `recall_read` | 列表(含 file activity 检索) / 原文渲染,免事务 |
+| 读既成 | `recall_list` / `recall_read` | 列表 / 渲染,免事务 |
 
 参数命名随动作走。禁止"一个参数表 + `op`/`detail` 模式位"的形态——那是字段合法性不可见、静默忽略的根源。
 
 ## 机制词
 
-- **file activity**:代码自动附加的 range/block 历史文件调用索引;仅提取结构化 `read`、`write`、`edit` 及已记录嵌套调用的原始 path。显示类别为 `Read calls`、`Write/edit calls`;只证明记录了调用,不证明成功或当前文件状态,也不是完整文件审计。不从 Bash 推断,不读取当前文件,不跨 range 累积。独立于可编辑 summary,在 review 中可见并计入替换体积;旧 range/block 缺失时不补写。
 - `page_size` / `cursor`:通用 cursor 分页,非领域概念,无需同义词管理。
 - `detail`:仅存在于 `locate_ref`(输出深度)与 `recall_read`(渲染上限);不得再承担操作判别或携带跨字段前置条件。
 - `abandoned exchange`:冻结 anchor 中含工具调用、但对应结果在 anchor 任何位置都不存在的 atom;可整体压缩。禁止 `open protocol`、`incomplete exchange`。

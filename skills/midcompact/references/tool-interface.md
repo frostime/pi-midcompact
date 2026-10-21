@@ -51,9 +51,7 @@ Question-tool answers are user expression. Keep the whole tool-exchange atom con
 
 ## Refine an existing plan
 
-Start with `plan_show`. Use `plan_read` with its returned `range_id` when the stored summary, file activity, or endpoints need full review. Change summary/topic with `plan_update`.
-
-New ranges automatically capture **file activity** from their frozen atoms: exact paths in structured read/write/edit calls, including recorded nested calls. This read-only appendix is separate from `summary`, appears in review and committed context, and counts toward replacement size. It records calls, including failed attempts, not verified outcomes or a complete audit; it does not infer Bash activity. Nested calls require host-provided records with path arguments; hosts without those records (including older Pi versions) provide top-level calls only. Missing records or arguments are not reconstructed. Do not copy it into `summary`; still explain important references, purposes, and observed results using the SKILL template. Editing summary/topic preserves the appendix; new boundaries regenerate it. Old ranges/blocks without it remain unchanged.
+Start with `plan_show`. Use `plan_read` with its returned `range_id` when the stored summary or endpoints need full review. Change summary/topic with `plan_update`.
 
 For new boundaries, first read and retain the existing summary/topic and verify the replacement endpoints. Then `plan_remove` the old range and `plan_add` its replacement. Do not assume the new id is unchanged. Check the resulting plan; mutation replies show the changed item and compact totals, not all ranges. Fill pending summaries before handoff; only the user commits.
 
@@ -72,4 +70,4 @@ Only the user runs `/midcompact:close-webui` to close Selection/Review WebUI, in
 {"request":{"action":"recall_read","block":"c0001"}}
 ```
 
-Use the actual block id returned by the list; skip listing when known. Listing searches ids/topics/summaries and file activity, not originals. Recall needs no transaction. If truncated, retry the same block with `detail:"full"`. There is no paging: if still truncated, report that recall cannot expose the omitted evidence. Do not infer it or start another transaction as a recovery workaround. Inspecting the source session requires a separate available means; this tool offers none.
+Use the actual block id returned by the list; skip listing when known. Listing searches ids/topics/summaries, not originals. Recall needs no transaction. If truncated, retry the same block with `detail:"full"`. There is no paging: if still truncated, report that recall cannot expose the omitted evidence. Do not infer it or start another transaction as a recovery workaround. Inspecting the source session requires a separate available means; this tool offers none.

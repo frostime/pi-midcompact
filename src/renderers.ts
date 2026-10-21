@@ -2,7 +2,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
 
 import { STATE_ENTRY } from "./state.js";
-import { replacementSummary } from "./projection.js";
 import { formatPercent, formatTokenCount } from "./telemetry.js";
 import type { CompressionState } from "./types.js";
 
@@ -45,7 +44,7 @@ export function registerStateRenderer(pi: ExtensionAPI): void {
       for (const block of blocks) {
         const title = `${block.id}${block.topic ? ` · ${block.topic}` : ""} · ${block.originalContentChars ?? 0} → ${block.replacementContentChars ?? 0} chars${block.originalImageCount ? ` · ${block.originalImageCount} images` : ""}`;
         box.addChild(new Text(theme.fg("accent", title), 0, 0));
-        box.addChild(new Text(theme.fg("dim", replacementSummary(block.summary, block.fileActivity)), 1, 0));
+        box.addChild(new Text(theme.fg("dim", block.summary), 1, 0));
       }
       box.addChild(new Text(theme.fg("dim", "Original history retained; use midcompact recall when exact details are needed."), 0, 0));
     }

@@ -7,8 +7,6 @@ export interface MessageLike {
   timestamp?: number;
   toolCallId?: string;
   toolName?: string;
-  /** Structured calls recorded by Pi on codemode tool results. */
-  nestedCalls?: { calls?: Array<{ name: string; arguments?: unknown }> };
   customType?: string;
   details?: unknown;
   command?: string;
@@ -94,18 +92,10 @@ export interface ContextUsageSnapshot {
   capturedAt: string;
 }
 
-export interface FileActivity {
-  readPaths: string[];
-  /** Paths in write/edit calls, including failed or abandoned attempts. */
-  writePaths: string[];
-}
-
 export interface CompressionBlock {
   id: string;
   topic?: string;
   summary: string;
-  /** Code-owned historical call index; absent on older blocks. */
-  fileActivity?: FileActivity;
   entryIds: string[];
   messageKeys: string[];
   createdAt: string;
@@ -115,7 +105,7 @@ export interface CompressionBlock {
   originalImageCount: number;
   /** Factual decoded image payload bytes in the original range. */
   originalImagePayloadBytes: number;
-  /** Factual replacement message content chars (midcompact wrapper + summary + file activity). */
+  /** Factual replacement message content chars (midcompact wrapper + summary). */
   replacementContentChars: number;
   /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   originalApproxTokens: number;
@@ -159,15 +149,13 @@ export interface DraftRange {
   topic?: string;
   /** Empty until a summary is written; a range with empty summary is "pending". */
   summary: string;
-  /** Derived from this range's frozen atoms; never edited with the summary. */
-  fileActivity?: FileActivity;
   entryIds: string[];
   messageKeys: string[];
   /** Factual original content chars in this range. */
   originalContentChars: number;
   originalImageCount: number;
   originalImagePayloadBytes: number;
-  /** Factual replacement message content chars (wrapper + summary + file activity). */
+  /** Factual replacement message content chars (wrapper + summary). */
   replacementContentChars: number;
   /** @deprecated legacy approximate token estimate; kept for old readers, not authoritative. */
   originalApproxTokens: number;
